@@ -17,21 +17,18 @@ ark-ff = { version = "^0.5.0", default-features = false }
 ark-ec = { version = "^0.5.0", default-features = false }
 ark-std = { version = "^0.5.0", default-features = false }
 ark-poly = { version = "^0.5.0", default-features = false }
-num-bigint = "0.4.4"
+ark-crypto-primitives = { version = "0.5.0", default-features = false, features = ["snark", "crh"] }
+ark-relations = { path = "../snark/relations" , default-features = false}
+merlin = { version = "3.0.0", default-features = false }
+displaydoc = { version = "0.2.3", default-features = false }
+tracing = { version = "0.1", default-features = false, features = [ "attributes" ], optional = true }
 rayon = { version = "1.5.2", optional = true }
-digest = { version = "^0.10.0" }
-derivative = { version = "2", features = ["use_core"] }
+# derivative = { version = "2.0", features = ["use_core"]}
 
-hp-arithmetic = { package = "arithmetic", path = "../arithmetic", default-features = false }
-hp-transcript = { package = "transcript", path = "../transcript", default-features = false }
-hp-subroutines = { package = "subroutines", path = "../subroutines" }
-
-ark-poly-commit = { path = "../poly-commit" , default-features = false}
-ark-relations = { path = "../relations" , default-features = false}
+[dev-dependencies]
+# rescue-gr1cs-custom = { path = "../rescue_gr1cs_custom", default-features = false }
 ark-bls12-381 = { version = "^0.5.0", default-features = false, features = [ "curve" ] }
-ark-gr1cs-std = { path = "../ark-gr1cs-std", default-features = false }
-rescue-gr1cs-custom = { path = "../rescue_gr1cs_custom", default-features = false }
-
+# ark-gr1cs-std = { path = "../ark-gr1cs-std", default-features = false }
 
 [[bench]]
 name = "garuda-benches"

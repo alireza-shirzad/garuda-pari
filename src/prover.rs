@@ -1,362 +1,335 @@
+use std::borrow::Borrow;
 use std::time::{Duration, Instant};
 
-use crate::data_structures::{IndexInfo, ProverKey, VerifierKey};
-use crate::write_bench;
+use crate::arithmetic::{DenseMultilinearExtension, VirtualPolynomial};
+use crate::data_structures::{GroupParams, Index, ProvingKey, VerifyingKey};
+use crate::piop::prelude::{IOPProof, ZeroCheck};
+use crate::piop::PolyIOP;
+use crate::timer::{self, Timer};
+use crate::transcript::IOPTranscript;
+use crate::utils::produce_batched_poly;
+use crate::utils::{epc_constrained_commit, epc_unconstrained_commit};
+use crate::utils::{generate_opening_proof, produce_opening_batch_challs};
 use crate::{data_structures::Proof, Garuda};
+use crate::{to_bytes, write_bench};
+use ark_crypto_primitives::crh::sha256::Sha256;
+use ark_crypto_primitives::crh::CRHScheme;
 use ark_ec::pairing::Pairing;
-use ark_ec::VariableBaseMSM;
+use ark_ec::{CurveGroup, VariableBaseMSM};
 use ark_ff::{BigInt, Field, PrimeField, UniformRand, Zero};
-use ark_poly::Polynomial;
-use ark_poly_commit::multilinear_pc::data_structures::{
-    Commitment, CommitterKey, Proof as PST_proof,
-};
-use ark_poly_commit::multilinear_pc::MultilinearPC;
-use ark_relations::gr1cs::index::{self, Index};
-use ark_relations::gr1cs::predicate::LocalPredicateType;
+use ark_poly::multivariate::{SparsePolynomial, SparseTerm};
+use ark_poly::{polynomial, MultilinearExtension, Polynomial};
+use ark_relations::gr1cs::predicate::PredicateType;
 use ark_relations::gr1cs::{
-    self, predicate, ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisMode,
+    self, mat_vec_mul, predicate, ConstraintSynthesizer, ConstraintSystem, Matrix,
+    OptimizationGoal, SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
 };
-use ark_relations::utils::variable::Matrix;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::iterable::Iterable;
 use ark_std::ops::Add;
 use ark_std::rand::RngCore;
 use ark_std::sync::Arc;
 use ark_std::{end_timer, start_timer};
-use hp_arithmetic::{DenseMultilinearExtension, VirtualPolynomial};
-use hp_subroutines::{IOPProof, PolyIOP, ZeroCheck};
-use hp_transcript::IOPTranscript;
 impl<E> Garuda<E>
 where
     E: Pairing,
 {
-    pub fn prove<C: ConstraintSynthesizer<E::ScalarField>, R: RngCore>(
-        rng: &mut R,
+    pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-        pk: ProverKey<E>,
-    ) -> Proof<E>
+        proving_key: ProvingKey<E>,
+    ) -> Result<Proof<E>, SynthesisError>
     where
         E: Pairing,
         E::ScalarField: Field,
         E::ScalarField: std::convert::From<i32>,
     {
-        let mut prover_circuit_generation: Duration = Duration::new(0, 0);
+        let timer_prove: Timer = Timer::new("SNARK::Prove");
 
-        let start = Instant::now();
-
-        // Synthesize the circuit.
-
-        let cs = ConstraintSystem::new_ref();
+        // Setup the constraint System and synthesize the circuit
+        let timer_circuit_setup = Timer::new("SNARK::Prove::Circuit Setup");
+        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
-        circuit.generate_constraints(cs.clone());
-        // cs.finalize();
+        timer_circuit_setup.stop();
+        let timer_synthesize_circuit = Timer::new("SNARK::Prove::Synthesize Circuit");
+        circuit.generate_constraints(cs.clone())?;
+        timer_synthesize_circuit.stop();
 
+        let timer_inlining = Timer::new("SNARK::Prove::Inlining constraints");
+        cs.finalize(true);
+        timer_inlining.stop();
         let prover = cs.borrow().unwrap();
-        let input_assignment: &[E::ScalarField] = &prover.instance_assignment[1..];
-        let aux_assignment: &Vec<E::ScalarField> = &prover.witness_assignment;
-        let assignment: Vec<E::ScalarField> =
-            [&prover.instance_assignment, &aux_assignment[..]].concat();
 
-        prover_circuit_generation += start.elapsed();
-        // std::println!("Prover circuit generation time = {}", prover_circuit_generation.as_millis());
+        // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
+        let timer_extract_i_x_w = Timer::new("SNARK::Prove::Extract i, x, w");
+        let x_assignment: &[E::ScalarField] = &prover.instance_assignment()?;
+        let w_assignment: &[E::ScalarField] = &prover.witness_assignment()?;
+        let z_assignment: Vec<E::ScalarField> = [x_assignment, w_assignment].concat();
+        let index: Index<E::ScalarField> = Index::new(&cs);
+        timer_extract_i_x_w.stop();
 
-        // println!("Creating proofs...");
-
-        let mut total_proving: Duration = Duration::new(0, 0);
-
-        let start = Instant::now();
-
+        // initilizing the transcript
+        let timer_init_transcript = Timer::new("SNARK::Prove::Initialize Transcript");
         let mut transcript: IOPTranscript<<E as Pairing>::ScalarField> =
             IOPTranscript::<E::ScalarField>::new(b"Garuda-2024");
-        let verifier_key: VerifierKey<E> = pk.vk.clone();
+        let verifier_key: VerifyingKey<E> = proving_key.verifying_key.clone();
         transcript.append_serializable_element("vk".as_bytes(), &verifier_key);
-        transcript.append_serializable_element("input".as_bytes(), &input_assignment.to_vec());
+        transcript.append_serializable_element("input".as_bytes(), &x_assignment[1..].to_vec());
+        timer_init_transcript.stop();
 
-        //////////////////////////////////////////////////////////////////////
-        let witness_polynomials: Vec<DenseMultilinearExtension<E::ScalarField>> =
-            Self::produce_witness_polynomials(&pk.index, &assignment);
+        // Generate the w polynomials, i.e. w_i = M_i * (0||w) and z polynomials, i.e. z_i = M_i * z
+        // Line 3-a figure 7 of https://eprint.iacr.org/2024/1245.pdf
+        let timer_generate_w_z_polys = Timer::new("SNARK::Prove::Generate w, z Polynomials");
+        let (w_polys, z_polys): (
+            Vec<DenseMultilinearExtension<E::ScalarField>>,
+            Vec<DenseMultilinearExtension<E::ScalarField>>,
+        ) = Self::generate_w_z_polys(&index, &z_assignment);
+        timer_generate_w_z_polys.stop();
 
-        //////////////////////////////////////////////////////////////////////
+        // EPC-Commit to the witness polynomials, i.e. generate c_i = EPC.Comm(w_i)
+        // Line 3-b figure 7 of https://eprint.iacr.org/2024/1245.pdf
+        let timer_epc_commit = Timer::new("SNARK::Prove::EPC Commit");
+        let (individual_comms, consistency_comm) = epc_constrained_commit(
+            &proving_key.group_params,
+            &proving_key.consistency_pk,
+            &w_polys,
+            w_assignment,
+        );
+        timer_epc_commit.stop();
 
-        //////////////////////////////////////////////////////////////////////
-        let commitments: Vec<Commitment<E>> =
-            Self::produce_commitments(&pk.pst_ck, &witness_polynomials);
+        // Append the commitments (individual and consistency) to the transcript
+        let timer_append_trans = Timer::new("SNARK::Prove::Append Commitments to Transcript");
+        transcript
+            .append_serializable_element("individual_commitments".as_bytes(), &individual_comms);
+        transcript
+            .append_serializable_element("consistency_commitments".as_bytes(), &consistency_comm);
+        timer_append_trans.stop();
 
-        //////////////////////////////////////////////////////////////////////
-        transcript.append_serializable_element("commitments".as_bytes(), &commitments);
+        // Performing zero-check on the grand polynomial
+        // Note that we use the z_polys here
+        // Line 5 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
+        let timer_buid_grand_poly = Timer::new("SNARK::Prove::Build Grand Polynomial");
+        let grand_poly: VirtualPolynomial<E::ScalarField> =
+            Self::build_grand_poly(&z_polys, &proving_key.selector_pk, &index);
+        timer_buid_grand_poly.stop();
 
-        //////////////////////////////////////////////////////////////////////
-        let linking_proof: E::G1 = Self::produce_linking_proof(pk.linking_pk, &aux_assignment);
+        let timer_zero_check = Timer::new("SNARK::Prove::Zero Check");
+        let zero_check_proof: IOPProof<E::ScalarField> = <PolyIOP<E::ScalarField> as ZeroCheck<
+            E::ScalarField,
+        >>::prove(
+            &grand_poly, &mut transcript
+        )
+        .unwrap();
+        timer_zero_check.stop();
 
-        //////////////////////////////////////////////////////////////////////
+        // Evaluate the selector and witness polynomials on the challenge point outputed by the zero-check
+        // Line 7 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
 
-        transcript.append_serializable_element("linking_proof".as_bytes(), &linking_proof);
-
-        //////////////////////////////////////////////////////////////////////
-        let target_virtual_polynomial: VirtualPolynomial<E::ScalarField> =
-            Self::build_target_virtual_polynomial(&witness_polynomials, &pk.selector_pk, &pk.index);
-        let zero_check_proof: IOPProof<E::ScalarField> =
-            <PolyIOP<E::ScalarField> as ZeroCheck<E::ScalarField>>::prove(
-                &target_virtual_polynomial,
-                &mut transcript,
-            )
-            .unwrap();
-        //////////////////////////////////////////////////////////////////////
-
-        //////////////////////////////////////////////////////////////////////
-        let mut selector_poly_openings: Vec<E::ScalarField> = Vec::new();
-
-        if cs.num_local_predicates() > 1 {
-            selector_poly_openings = pk
-                .selector_pk
-                .iter()
-                .map(|selector| selector.evaluate(&zero_check_proof.point))
-                .collect();
-        }
-
-        let witness_poly_openings: Vec<E::ScalarField> = witness_polynomials
+        let timer_eval_polys = Timer::new("SNARK::Prove::Evaluate Polynomials");
+        let mut sel_poly_evals: Vec<E::ScalarField> = match index.num_predicates {
+            1 => Vec::new(),
+            _ => {
+                let sel_poly_evals: Vec<E::ScalarField> = proving_key
+                    .selector_pk
+                    .iter()
+                    .map(|selector| selector.evaluate(&zero_check_proof.point))
+                    .collect();
+                sel_poly_evals
+            }
+        };
+        let w_poly_evals: Vec<E::ScalarField> = w_polys
             .iter()
             .map(|witness| witness.evaluate(&zero_check_proof.point))
             .collect();
-        let mut all_commitments: Vec<Commitment<E>> = commitments.clone();
-        let mut all_polynomials: Vec<DenseMultilinearExtension<<E as Pairing>::ScalarField>> =
-            witness_polynomials.clone();
-        if cs.num_local_predicates() > 1 {
-            all_commitments.extend_from_slice(pk.vk.selector_vk.as_slice());
-            all_polynomials.extend_from_slice(&pk.selector_pk);
-        }
+        timer_eval_polys.stop();
 
-        let opening_proof: PST_proof<E> = Self::produce_opening_proof(
-            &pk.pst_ck,
-            &all_polynomials,
-            all_commitments.as_slice(),
+        // Construct the set of all polynomials the corresponding commitments to be opened
+        // We will batch-open these commitments
+        // Note that selector polynomials are only present when there are more than one predicate
+        let comms_to_be_opened: Vec<E::G1Affine> = individual_comms
+            .clone()
+            .into_iter()
+            .chain(proving_key.verifying_key.selector_vk)
+            .collect();
+
+        let polys_to_be_opened: Vec<DenseMultilinearExtension<<E>::ScalarField>> = w_polys
+            .clone()
+            .into_iter()
+            .chain(proving_key.selector_pk.clone())
+            .collect();
+
+        // open the commitments
+        // Line 8 and 9 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
+
+        let timer_open_commitments = Timer::new("SNARK::Prove::Open Commitments");
+        let opening_proof: Vec<E::G1Affine> = generate_opening_proof(
+            &proving_key.group_params,
+            &polys_to_be_opened,
+            &comms_to_be_opened,
             &zero_check_proof.point,
         );
-        // println!("{}",zero_check_proof.point.len());
-        // println!("commitments= {}",commitments.serialized_size(ark_serialize::Compress::Yes));
-        // println!("linking_proof = {}",linking_proof.serialized_size(ark_serialize::Compress::Yes));
-        // println!("zero_check_proof = {}",zero_check_proof.serialized_size(ark_serialize::Compress::Yes));
-        // println!("selector_poly_openings = {}",selector_poly_openings.serialized_size(ark_serialize::Compress::Yes));
-        // println!("witness_poly_openings = {}",witness_poly_openings.serialized_size(ark_serialize::Compress::Yes));
-        // println!("opening_proof = {}",opening_proof.serialized_size(ark_serialize::Compress::Yes));
-        // println!("point= {}",zero_check_proof.point.serialized_size(ark_serialize::Compress::Yes));
-        // println!("proofs= {}",zero_check_proof.proofs.serialized_size(ark_serialize::Compress::Yes));
+        timer_open_commitments.stop();
 
-        total_proving += start.elapsed();
-        write_bench!("{} ", total_proving.as_millis());
-        // std::println!("Proving time = {}", total_proving.as_millis());
-        //////////////////////////////////////////////////////////////////////
-        Proof {
-            commitments,
-            linking_proof,
+        // Construct the proof
+        // Line 10 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
+        let result = Ok(Proof {
+            individual_comms,
+            consistency_comm,
             zero_check_proof,
-            selector_poly_openings,
-            witness_poly_openings,
+            sel_poly_evals,
+            w_poly_evals,
             opening_proof,
-        }
+            w_polys,
+            sel_polys: proving_key.selector_pk,
+        });
+
+        timer_prove.stop();
+
+        result
     }
 
-    fn sanity_check(target_virtual_polynomial: &VirtualPolynomial<E::ScalarField>, v_total: usize)
-    where
-        E::ScalarField: std::convert::From<i32>,
-    {
-        for i in 0..(1 << v_total) {
-            let mut vector = Vec::new();
-
-            // Extract individual bits from the number i and push them to the vector
-            for j in (0..v_total).rev() {
-                vector.push(E::ScalarField::from((i >> j) & 1));
-            }
-            assert_eq!(
-                target_virtual_polynomial.evaluate(&vector).unwrap(),
-                E::ScalarField::zero()
-            );
-        }
-    }
-
-    fn produce_commitments(
-        ck: &CommitterKey<E>,
-        witness_polynomials: &Vec<DenseMultilinearExtension<E::ScalarField>>,
-    ) -> Vec<Commitment<E>>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-    {
-        let mut commitments: Vec<Commitment<E>> = Vec::new();
-        for polynomial in witness_polynomials {
-            let commitment: Commitment<E> = MultilinearPC::<E>::commit(&ck, polynomial);
-
-            commitments.push(commitment);
-        }
-        commitments
-    }
-
-    fn produce_opening_proof(
-        ck: &CommitterKey<E>,
-        all_polynomials: &Vec<DenseMultilinearExtension<E::ScalarField>>,
-        commitments: &[Commitment<E>],
-        point: &Vec<E::ScalarField>,
-    ) -> PST_proof<E>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-    {
-        let proof: PST_proof<E> =
-            MultilinearPC::<E>::batch_open(&ck, &all_polynomials, commitments, &point);
-        proof
-    }
-
-    fn produce_linking_proof(
-        linking_pk: Vec<E::G1Affine>,
-        input_assignment: &[E::ScalarField],
-    ) -> E::G1
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::G1: VariableBaseMSM,
-    {
-        E::G1::msm(&linking_pk[..], input_assignment).unwrap()
-    }
-
-    fn produce_witness_polynomials(
+    fn generate_w_z_polys(
         index: &Index<E::ScalarField>,
-        assignment: &[E::ScalarField],
-    ) -> Vec<DenseMultilinearExtension<E::ScalarField>>
+        z_assignment: &[E::ScalarField],
+    ) -> (
+        Vec<DenseMultilinearExtension<E::ScalarField>>,
+        Vec<DenseMultilinearExtension<E::ScalarField>>,
+    )
     where
         E: Pairing,
         E::ScalarField: Field,
     {
-        let t_max: usize = index.get_t_max();
-        let v_total: usize = index.get_v_total();
         let mut stacked_matrices: Vec<Matrix<E::ScalarField>> =
-            vec![vec![Vec::new(); (2 as usize).pow(v_total as u32)]; t_max];
+            vec![
+                vec![Vec::new(); (2 as usize).pow(index.log_num_constraints as u32)];
+                index.max_arity
+            ];
         let mut num_of_previous_rows = 0;
-        for (i, predicate) in index.predicates.iter().enumerate() {
-            for (t, matrix_i_t) in predicate.matrices.iter().enumerate() {
-                for (row_num, row) in matrix_i_t.iter().enumerate() {
-                    for (value, col) in row {
-                        stacked_matrices[t][row_num + num_of_previous_rows].push((*value, *col));
-                    }
+        let label = R1CS_PREDICATE_LABEL;
+        let matrices = index.predicate_matrices.get(label).unwrap();
+        for (t, matrix_i_t) in matrices.iter().enumerate() {
+            for (row_num, row) in matrix_i_t.iter().enumerate() {
+                for (value, col) in row {
+                    stacked_matrices[t][row_num + num_of_previous_rows].push((*value, *col));
                 }
             }
-            num_of_previous_rows += predicate.m;
         }
+        num_of_previous_rows += index.predicate_num_constraints[label];
 
-        let mut output: Vec<DenseMultilinearExtension<E::ScalarField>> = Vec::new();
-        for matrix in stacked_matrices {
-            let mz: Vec<E::ScalarField> = Self::matrix_vector_multiplication(&matrix, &assignment);
-            output.push(DenseMultilinearExtension::from_evaluations_vec(v_total, mz));
-        }
-        output
-    }
-
-    //TODO: Put this function in the matrix module (First build a matrix module)
-    fn matrix_vector_multiplication(
-        matrix: &Matrix<E::ScalarField>,
-        vector: &[E::ScalarField],
-    ) -> Vec<E::ScalarField> {
-        let mut output: Vec<E::ScalarField> = Vec::new();
-        for row in matrix {
-            let mut sum: E::ScalarField = E::ScalarField::zero();
-            for (value, col) in row {
-                sum += vector[*col] * value;
+        for (_, (label, matrices)) in index.predicate_matrices.iter().enumerate() {
+            if label != R1CS_PREDICATE_LABEL {
+                for (t, matrix_i_t) in matrices.iter().enumerate() {
+                    for (row_num, row) in matrix_i_t.iter().enumerate() {
+                        for (value, col) in row {
+                            stacked_matrices[t][row_num + num_of_previous_rows]
+                                .push((*value, *col));
+                        }
+                    }
+                }
+                num_of_previous_rows += index.predicate_num_constraints[label];
             }
-            output.push(sum);
         }
-        output
+        let mut pz: Vec<DenseMultilinearExtension<E::ScalarField>> = Vec::new();
+        let mut pw: Vec<DenseMultilinearExtension<E::ScalarField>> = Vec::new();
+        let mut i = 0;
+        for matrix in stacked_matrices {
+            let mz: Vec<E::ScalarField> = mat_vec_mul(&matrix, z_assignment);
+            //TODO: Check this might be wrong
+            let mut w_assignment: Vec<E::ScalarField> =
+                vec![E::ScalarField::zero(); z_assignment.len()];
+            w_assignment[index.instance_len..].copy_from_slice(&z_assignment[index.instance_len..]);
+            let mw: Vec<E::ScalarField> = mat_vec_mul(&matrix, &w_assignment);
+            pw.push(DenseMultilinearExtension::from_evaluations_vec(
+                index.log_num_constraints,
+                mw,
+            ));
+            pz.push(DenseMultilinearExtension::from_evaluations_vec(
+                index.log_num_constraints,
+                mz,
+            ));
+        }
+        (pw, pz)
     }
 
-    fn build_target_virtual_polynomial(
-        witness_polynomials: &Vec<DenseMultilinearExtension<E::ScalarField>>,
-        selector_polynomials: &Vec<DenseMultilinearExtension<E::ScalarField>>,
+    // A helper function to build the grand polynomial
+    // On witness polys, selector polys, and the predicate poly (inside the index), output the grand polynomial
+    fn build_grand_poly(
+        z_polys: &Vec<DenseMultilinearExtension<E::ScalarField>>,
+        sel_polys: &Vec<DenseMultilinearExtension<E::ScalarField>>,
         index: &Index<E::ScalarField>,
     ) -> VirtualPolynomial<E::ScalarField>
     where
         E: Pairing,
         E::ScalarField: Field,
     {
-        let witness_arcs: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = witness_polynomials
-            .iter()
-            .map(|item| Arc::new(item.clone()))
-            .collect();
-        let mut selector_arcs: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = Vec::new();
+        let z_arcs: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> =
+            z_polys.iter().map(|item| Arc::new(item.clone())).collect();
+        let mut target_virtual_poly: VirtualPolynomial<E::ScalarField> =
+            VirtualPolynomial::new(index.log_num_constraints);
 
-        let v_total: usize = index.get_v_total();
-        let mut target_virtual_polynomial: VirtualPolynomial<E::ScalarField> =
-            VirtualPolynomial::new(v_total);
-
-        if index.c == 1 {
-            let predicate_polynomial: gr1cs::polynomial::Polynomial<E::ScalarField> =
-                match index.predicates[0].predicate_type.clone() {
-                    LocalPredicateType::Polynomial(p) => p,
-                    _ => todo!(),
-                };
-            &Self::add_predicate_polynomial(
-                v_total,
-                predicate_polynomial,
-                &witness_arcs,
-                &mut target_virtual_polynomial,
-            );
-            return target_virtual_polynomial;
+        // If there is only one predicate, The virtual poly is just L(mle(M_1z), mle(M_2z), ..., mle(M_tz)) without any selector
+        if index.num_predicates == 1 {
+            let predicate_poly = match index.predicate_types.values().next().unwrap().clone() {
+                PredicateType::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
+                _ => unimplemented!("Only polynomial predicates are supported"),
+            };
+            &Self::build_grand_poly_single_pred(predicate_poly, &z_arcs, &mut target_virtual_poly);
+            return target_virtual_poly;
         }
 
-        selector_arcs = selector_polynomials
+        // If there are multiple predicates, The virtual poly is the grand poly in line 5 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
+        let sel_arcs: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = sel_polys
             .iter()
             .map(|item| Arc::new(item.clone()))
             .collect();
 
-        for (c, predicate) in index.predicates.iter().enumerate() {
-            let predicate_polynomial: gr1cs::polynomial::Polynomial<E::ScalarField> =
-                match predicate.predicate_type.clone() {
-                    LocalPredicateType::Polynomial(p) => p,
-                    _ => todo!(),
-                };
-            &Self::add_predicate_polynomials(
-                v_total,
-                predicate_polynomial,
-                &selector_arcs[c],
-                &witness_arcs,
-                &mut target_virtual_polynomial,
+        for (c, (_, predicate_type)) in index.predicate_types.iter().enumerate() {
+            let predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm> = match predicate_type
+                .clone()
+            {
+                PredicateType::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
+                _ => unimplemented!("Only polynomial predicates are supported"),
+            };
+            &Self::build_grand_poly_multi_pred(
+                predicate_poly,
+                &sel_arcs[c],
+                &z_arcs,
+                &mut target_virtual_poly,
             );
         }
-        target_virtual_polynomial
+        target_virtual_poly
     }
 
-    fn add_predicate_polynomial(
-        num_variables: usize,
-        predicate_polynomial: gr1cs::polynomial::Polynomial<E::ScalarField>,
-        witness_polynomial_arcs: &Vec<Arc<DenseMultilinearExtension<E::ScalarField>>>,
-        virtual_polynomial: &mut VirtualPolynomial<E::ScalarField>,
+    fn build_grand_poly_single_pred(
+        predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm>,
+        witness_poly_arcs: &Vec<Arc<DenseMultilinearExtension<E::ScalarField>>>,
+        virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
-        for term in predicate_polynomial.terms {
+        for (coeff, term) in predicate_poly.terms {
             let mut mle_list: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = Vec::new();
-            for (i, exponent) in term.exponents.iter().enumerate() {
+            for (var, exponent) in term.iter() {
                 for _ in 0..*exponent {
-                    mle_list.push(Arc::clone(&witness_polynomial_arcs[i]));
+                    mle_list.push(Arc::clone(&witness_poly_arcs[*var]));
                 }
             }
-            virtual_polynomial.add_mle_list(mle_list, term.coefficient);
+            virtual_poly.add_mle_list(mle_list, coeff);
         }
     }
 
-    fn add_predicate_polynomials(
-        num_variables: usize,
-        predicate_polynomial: gr1cs::polynomial::Polynomial<E::ScalarField>,
-        selector_polynomial: &Arc<DenseMultilinearExtension<E::ScalarField>>,
-        witness_polynomial_arcs: &Vec<Arc<DenseMultilinearExtension<E::ScalarField>>>,
-        virtual_polynomial: &mut VirtualPolynomial<E::ScalarField>,
+    fn build_grand_poly_multi_pred(
+        predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm>,
+        selector_poly: &Arc<DenseMultilinearExtension<E::ScalarField>>,
+        witness_poly_arcs: &Vec<Arc<DenseMultilinearExtension<E::ScalarField>>>,
+        virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
-        for term in predicate_polynomial.terms {
+        for (coeff, term) in predicate_poly.terms {
             let mut mle_list: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = Vec::new();
-            mle_list.push(Arc::clone(&selector_polynomial));
-            for (i, exponent) in term.exponents.iter().enumerate() {
+            mle_list.push(Arc::clone(&selector_poly));
+            for (var, exponent) in term.iter() {
                 for _ in 0..*exponent {
-                    mle_list.push(Arc::clone(&witness_polynomial_arcs[i]));
+                    mle_list.push(Arc::clone(&witness_poly_arcs[*var]));
                 }
             }
-            virtual_polynomial.add_mle_list(mle_list, term.coefficient);
+            virtual_poly.add_mle_list(mle_list, coeff);
         }
     }
 }
-
-// Jellyfish Repo --> Costume gate for the ellyptic curve
