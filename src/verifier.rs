@@ -1,171 +1,172 @@
-use core::time;
-use std::collections::BTreeMap;
-
-use crate::arithmetic::{DenseMultilinearExtension, VPAuxInfo, VirtualPolynomial};
-use crate::data_structures::VerifyingKey;
-use crate::piop::prelude::{IOPProof, ZeroCheck};
-use crate::piop::PolyIOP;
-use crate::timer::{self, Timer};
-use crate::transcript::IOPTranscript;
-use crate::utils::epc_batch_check;
-use crate::{data_structures::Proof, Garuda};
-use ark_ec::pairing::{Pairing, PairingOutput};
-use ark_ec::VariableBaseMSM;
-use ark_ff::{BigInt, Field, PrimeField, UniformRand, Zero};
-use ark_poly::SparseMultilinearExtension;
-use ark_poly::{MultilinearExtension, Polynomial};
-use ark_relations::gr1cs::predicate::PredicateType;
-use ark_relations::gr1cs::{
-    predicate, ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, R1CS_PREDICATE_LABEL,
+use crate::{
+    arithmetic::VPAuxInfo,
+    data_structures::{Proof, VerifyingKey},
+    epc::{data_structures::MLBatchedCommitment, multilinear::MultilinearEPC, EPC},
+    piop::{prelude::ZeroCheck, PolyIOP},
+    transcript::IOPTranscript,
+    Garuda,
 };
-use ark_relations::utils::matrix::Matrix;
-use ark_std::iterable::Iterable;
-use ark_std::marker::PhantomData;
-use ark_std::ops::Add;
-use ark_std::rand::RngCore;
-use ark_std::sync::Arc;
-impl<E> Garuda<E>
+use ark_ec::pairing::Pairing;
+use ark_ff::{Field, Zero};
+use ark_poly::{Polynomial, SparseMultilinearExtension};
+use ark_relations::gr1cs::predicate::{polynomial_constraint::PolynomialPredicate, PredicateType};
+use ark_std::{end_timer, marker::PhantomData, rand::RngCore, start_timer};
+
+impl<E, R> Garuda<E, R>
 where
     E: Pairing,
+    R: RngCore,
 {
     pub fn verify(proof: Proof<E>, vk: VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
     where
         E: Pairing,
         E::ScalarField: Field,
     {
-        assert_eq!(public_input.len(), vk.instance_len - 1);
-        let timer_verify: Timer = Timer::new("SNARK::Verify");
+        let timer_verify = start_timer!(|| "Verify");
+        assert_eq!(public_input.len(), vk.succinct_index.instance_len - 1);
 
         // Prepare the transcript
-        let timer_transcript_init: Timer = Timer::new("SNARK::Verify::Transcript initializtion");
+        let timer_transcript_init = start_timer!(|| "Transcript initializtion");
         let mut transcript: IOPTranscript<<E as Pairing>::ScalarField> =
-            IOPTranscript::<E::ScalarField>::new(b"Garuda-2024");
-        transcript.append_serializable_element("vk".as_bytes(), &vk);
-        transcript.append_serializable_element("input".as_bytes(), &public_input.to_vec());
-        transcript.append_serializable_element(
-            "individual_commitments".as_bytes(),
-            &proof.individual_comms,
-        );
-        transcript.append_serializable_element(
-            "consistency_commitments".as_bytes(),
-            &proof.consistency_comm,
-        );
+            IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
+        let _ = transcript.append_serializable_element("vk".as_bytes(), &vk);
+        let _ = transcript.append_serializable_element("input".as_bytes(), &public_input.to_vec());
+        let _ = transcript
+            .append_serializable_element("batched_commitments".as_bytes(), &proof.w_batched_comm);
 
-        timer_transcript_init.stop();
+        end_timer!(timer_transcript_init);
 
         // Compute the x polynomials
         // Line 4 of figure 7 in https://eprint.iacr.org/2024/1245.pdf
         // This process is only succinct if the constraint system is 'instance outlined'
-        let timer_x_poly: Timer = Timer::new("SNARK::Verify::Compute x polynomial");
-        let mut px_evaluations: Vec<(usize, E::ScalarField)> = Vec::with_capacity(vk.instance_len);
+        let timer_x_poly = start_timer!(|| "Compute x polynomial");
+        let mut px_evaluations: Vec<(usize, E::ScalarField)> =
+            Vec::with_capacity(vk.succinct_index.instance_len);
         px_evaluations.push((0, E::ScalarField::ONE));
-        for i in 1..vk.instance_len {
+        for i in 1..vk.succinct_index.instance_len {
             px_evaluations.push((i, public_input[i - 1]));
         }
-        let px =
-            SparseMultilinearExtension::from_evaluations(vk.log_num_constraints, &px_evaluations);
-        timer_x_poly.stop();
-
-        // Check if the equifficient property of the commitments are satisfied
-        // Line 6 of figure 7 in https://eprint.iacr.org/2024/1245.pdf
-        let timer_consistency_check: Timer = Timer::new("SNARK::Verify::Consistency check");
-        Self::perform_consistency_check(&vk, proof.consistency_comm, &proof.individual_comms);
-        timer_consistency_check.stop();
+        let px = SparseMultilinearExtension::from_evaluations(
+            vk.succinct_index.log_num_constraints,
+            &px_evaluations,
+        );
+        end_timer!(timer_x_poly);
 
         // Performing the zerocheck
         // Line 3 of figure 7 in https://eprint.iacr.org/2024/1245.pdf
+        let timer_zerocheck = start_timer!(|| "Zero Check");
         let zero_check_auxiliary_info = VPAuxInfo {
-            max_degree: vk.predicate_max_deg
-                + match vk.num_predicates {
+            max_degree: vk.succinct_index.predicate_max_deg
+                + match vk.succinct_index.num_predicates {
                     1 => 0,
                     _ => 1,
                 },
-            num_variables: vk.log_num_constraints,
+            num_variables: vk.succinct_index.log_num_constraints,
             phantom: PhantomData,
         };
-
         let zero_check_subclaim = <PolyIOP<E::ScalarField> as ZeroCheck<E::ScalarField>>::verify(
             &proof.zero_check_proof,
             &zero_check_auxiliary_info,
             &mut transcript,
         )
         .unwrap();
+        end_timer!(timer_zerocheck);
 
-        //TODO: Clone
-        let mut z_poly_evals = proof.w_poly_evals.clone();
-        z_poly_evals[0] += px.evaluate(&zero_check_subclaim.point);
-        // By construction on the prover side, we know that the first stacked predicate is the R1CS predicate
-        let mut provided_grand_eval = E::ScalarField::zero();
-        let mut i = 0;
-        for (_, pred) in vk.predicate_types {
-            match pred {
-                PredicateType::Polynomial(poly) => {
-                    provided_grand_eval += proof.sel_poly_evals[i] * poly.eval(&z_poly_evals);
-                }
-                _ => panic!("Invalid predicate type"),
-            }
-            i += 1;
+        // Performing the last step of the zerocheck
+        // It checks whether the evaluation of the grand polynomial on a random point is equal to the expected evaluation
+        let timer_zerocheck = start_timer!(|| "Grand Poly Evaluation");
+        if !Self::zerocheck_final_eval_check(
+            &zero_check_subclaim.point,
+            &zero_check_subclaim.expected_evaluation,
+            &px,
+            &proof,
+            &vk,
+        ) {
+            panic!("Final Evaluation check in zerocheck failed");
         }
+        end_timer!(timer_zerocheck);
 
-        assert_eq!(provided_grand_eval, zero_check_subclaim.expected_evaluation);
+        // batch Verification of the EPC evaluation proofs
+        // The batch contains the evaluation proofs of the w polynomials and possibly the selector polynomials
+        // If there is only one predicate, then there is no selector polynomial
 
-        let comms_to_be_checked: Vec<E::G1Affine> = proof
-            .individual_comms
-            .clone()
-            .into_iter()
-            .chain(vk.selector_vk.clone())
-            .collect();
+        let timer_epc_batch_ver = start_timer!(|| "Grand Poly Evaluation");
+        let batched_comm = MLBatchedCommitment {
+            individual_comms: proof
+                .w_batched_comm
+                .individual_comms
+                .clone()
+                .into_iter()
+                .chain(match vk.sel_batched_comm {
+                    Some(sel_batched_comm) => sel_batched_comm.individual_comms,
+                    None => Vec::new(),
+                })
+                .collect(),
+            consistency_comm: proof.w_batched_comm.consistency_comm,
+        };
 
         let evals_to_be_checked: Vec<E::ScalarField> = proof
             .w_poly_evals
             .clone()
             .into_iter()
-            .chain(proof.sel_poly_evals.clone())
+            .chain(proof.sel_poly_evals.unwrap_or_default())
             .collect();
 
-        Self::perform_opening_check(
-            &comms_to_be_checked,
+        if !MultilinearEPC::<E, R>::BatchVerify(
+            &vk.epc_vk,
+            &batched_comm,
             &zero_check_subclaim.point,
             &evals_to_be_checked,
-            (&vk.g, &vk.h),
-            &proof.opening_proof,
-            &vk.h_mask_random,
-            vk.log_num_constraints,
-        );
+            &proof.bathced_opening_proof,
+            vk.succinct_index.max_arity,
+        ) {
+            panic!("Batch verification failed");
+        }
+        end_timer!(timer_epc_batch_ver);
 
-        timer_verify.stop();
+        end_timer!(timer_verify);
         true
     }
 
-    fn perform_consistency_check(
+    fn zerocheck_final_eval_check(
+        random_eval_point: &[E::ScalarField],
+        exptected_eval: &E::ScalarField,
+        px: &SparseMultilinearExtension<E::ScalarField>,
+        proof: &Proof<E>,
         vk: &VerifyingKey<E>,
-        consistency_proof: E::G1,
-        commitments: &Vec<E::G1Affine>,
-    ) {
-        assert_eq!(vk.consistency_vk.len(), commitments.len());
-        let left: PairingOutput<E> = E::pairing(consistency_proof, vk.h);
-        let pairing_lefts: Vec<E::G1Prepared> =
-            commitments.iter().map(E::G1Prepared::from).collect();
-        let pairing_rights: Vec<E::G2Prepared> =
-            vk.consistency_vk.iter().map(E::G2Prepared::from).collect();
-        let right: PairingOutput<E> = E::multi_pairing(pairing_lefts, pairing_rights);
-        if left != right {
-            panic!("consistency check failed");
-        }
-    }
-
-    fn perform_opening_check(
-        all_comms: &Vec<E::G1Affine>,
-        point: &Vec<E::ScalarField>,
-        all_evals: &Vec<E::ScalarField>,
-        (g, h): (&E::G1Affine, &E::G2Affine),
-        pst_proof: &Vec<E::G1Affine>,
-        h_mask_random: &Vec<E::G2Affine>,
-        nv: usize,
-    ) {
-        assert!(all_comms.len() == all_evals.len());
-        if !epc_batch_check::<E>((g, h),h_mask_random, all_comms, point, all_evals, pst_proof, nv) {
-            panic!("Batch check failed");
+    ) -> bool {
+        let mut z_poly_evals = proof.w_poly_evals.clone();
+        z_poly_evals[0] += px.evaluate(&random_eval_point.to_vec());
+        // By construction on the prover side, we know that the first stacked predicate is the R1CS predicate
+        let predicate_polys: Vec<&PolynomialPredicate<E::ScalarField>> = vk
+            .succinct_index
+            .predicate_types
+            .values()
+            .map(|pred| match pred {
+                PredicateType::Polynomial(poly_predicate) => poly_predicate,
+                _ => panic!("Invalid predicate type"),
+            })
+            .collect();
+        let eval = match vk.succinct_index.num_predicates {
+            1 => {
+                assert_eq!(predicate_polys.len(), 1);
+                assert!(proof.sel_poly_evals.is_none());
+                predicate_polys[0].eval(&z_poly_evals)
+            }
+            _ => {
+                assert!(predicate_polys.len() > 1);
+                assert_eq!(
+                    predicate_polys.len(),
+                    proof.sel_poly_evals.as_ref().unwrap().len()
+                );
+                predicate_polys
+                    .iter()
+                    .zip(proof.sel_poly_evals.as_ref().unwrap())
+                    .fold(E::ScalarField::zero(), |acc, (poly, sel_eval)| {
+                        acc + *sel_eval * poly.eval(&z_poly_evals)
+                    })
+            }
         };
+        eval == *exptected_eval
     }
 }

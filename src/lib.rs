@@ -1,33 +1,22 @@
-use ark_crypto_primitives::snark::{CircuitSpecificSetupSNARK, SNARK};
+#![feature(associated_type_defaults)]
+#![allow(unreachable_patterns)]
+
 use ark_ec::pairing::Pairing;
-use ark_ff::{PrimeField, UniformRand};
-use ark_poly::DenseMultilinearExtension;
-use ark_relations::gr1cs::{
-    ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError, SynthesisMode,
-};
 use ark_std::rand::RngCore;
 
 pub use ark_relations::gr1cs::ConstraintSystemRef;
-use ark_std::{
-    collections::BTreeMap,
-    format,
-    marker::PhantomData,
-    string::{String, ToString},
-    vec,
-    vec::Vec,
-};
-use data_structures::{Proof, ProvingKey, VerifyingKey};
+use ark_std::marker::PhantomData;
 
 mod arithmetic;
 mod data_structures;
+mod epc;
 mod generator;
 mod piop;
 mod prover;
-mod timer;
+mod tests;
 mod transcript;
 mod utils;
 mod verifier;
-mod tests;
 
 #[macro_export]
 macro_rules! write_bench {
@@ -39,12 +28,18 @@ macro_rules! write_bench {
 }
 
 /// The SNARK of [[Garuda]](https://eprint.iacr.org/2024/1245.pdf).
-pub struct Garuda<E: Pairing> {
+pub struct Garuda<E: Pairing, R: RngCore> {
     _p: PhantomData<E>,
+    _r: PhantomData<R>,
+}
+
+impl<E: Pairing, R: RngCore> Garuda<E, R> {
+    pub const SNARK_NAME: &'static str = "Garuda";
 }
 
 #[cfg(test)]
 mod temp_tests {
+    use crate::tests::circuit1::Circuit1;
     use crate::{
         data_structures::{Proof, ProvingKey, VerifyingKey},
         Garuda,
@@ -53,12 +48,15 @@ mod temp_tests {
     use ark_ec::pairing::Pairing;
     use ark_ff::Field;
     use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystem, OptimizationGoal};
-    use ark_std::test_rng;
-    use crate::tests::circuit1::Circuit1;
+    use ark_std::{
+        rand::{rngs::StdRng, Rng, RngCore, SeedableRng},
+        test_rng,
+    };
     type Fr = <Bls12_381 as Pairing>::ScalarField;
+
     #[test]
     fn temp() {
-        let mut rng = ark_std::test_rng();
+        let mut rng = StdRng::seed_from_u64(0u64);
         let circuit = Circuit1 {
             x1: Fr::from(1u8),
             x2: Fr::from(2u8),
@@ -75,8 +73,9 @@ mod temp_tests {
             w8: Fr::from(22022u32),
         };
         let (pk, vk): (ProvingKey<Bls12_381>, VerifyingKey<Bls12_381>) =
-            Garuda::<Bls12_381>::keygen(circuit.clone(), &mut rng);
-        let proof: Proof<Bls12_381> = Garuda::<Bls12_381>::prove(circuit.clone(), pk).unwrap();
+            Garuda::<Bls12_381, StdRng>::keygen(circuit.clone(), &mut rng);
+        let proof: Proof<Bls12_381> =
+            Garuda::<Bls12_381, StdRng>::prove(circuit.clone(), pk).unwrap();
 
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
@@ -84,6 +83,10 @@ mod temp_tests {
         debug_assert!(cs.is_satisfied().unwrap());
         let verifier = cs.borrow().unwrap();
         let input_assignment = &verifier.instance_assignment().unwrap()[1..];
-        assert!(Garuda::<Bls12_381>::verify(proof, vk, input_assignment));
+        assert!(Garuda::<Bls12_381, StdRng>::verify(
+            proof,
+            vk,
+            input_assignment
+        ));
     }
 }

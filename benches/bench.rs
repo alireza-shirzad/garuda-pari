@@ -143,7 +143,7 @@ impl<F: PrimeField + ark_ff::PrimeField + rescue_gr1cs_custom::sponge::Absorb>
 }
 
 fn main() {
-    let path = Path::new("../../garuda_bench.txt");
+    let path = Path::new("garuda_bench.txt");
     let num_thread = env::var("NUM_THREAD").unwrap_or_else(|_| "default".to_string()).parse::<usize>().unwrap();
     let mut file = File::create(&path).unwrap();
     println!("----------------------Garuda Benchmarking with {} threads, result stored in garuda_bench.txt ----------------------", num_thread);
