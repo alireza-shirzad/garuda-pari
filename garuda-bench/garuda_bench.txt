@@ -1,0 +1,2 @@
+# Invokations Constraints Setup-Time(ms) PK-Size(b) VK-Size(b) Prover-Time(ms) Proof-Size(b) Verifier-Time(us)
+72 20449 

@@ -1,0 +1,19 @@
+[workspace]
+members = ["garuda", "garuda-bench"]
+
+resolver = "2"  # Recommended for workspaces to avoid dependency resolution issues
+
+
+
+[workspace.dependencies]
+ark-serialize = { version = "^0.5.0", default-features = false, features = [ "derive" ] }
+ark-ff = { version = "^0.5.0", default-features = false }
+ark-ec = { version = "^0.5.0", default-features = false }
+ark-std = { version = "^0.5.0", default-features = false }
+ark-poly = { version = "^0.5.0", default-features = false }
+ark-relations = {  path = "../snark/relations", default-features = true }
+merlin = { version = "3.0.0", default-features = false }
+displaydoc = { version = "0.2.3", default-features = false }
+tracing = { version = "0.1", default-features = false, features = [ "attributes" ] }
+rayon = { version = "1.5.2" }
+

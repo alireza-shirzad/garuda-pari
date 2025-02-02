@@ -18,7 +18,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::{
     multivariate::{SparsePolynomial, SparseTerm},
-    Polynomial,
+    MultilinearExtension, Polynomial,
 };
 use ark_relations::gr1cs::{
     self, mat_vec_mul, predicate::PredicateType, ConstraintSynthesizer, ConstraintSystem, Matrix,
@@ -45,12 +45,14 @@ where
         let timer_cs_startup = start_timer!(|| "Constraint System Startup");
         let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
+        cs.outline_instances();
         let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
         circuit.generate_constraints(cs.clone())?;
         end_timer!(timer_synthesize_circuit);
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
-        cs.finalize(true);
+        cs.finalize();
+
         end_timer!(timer_inlining);
         let prover = cs.borrow().unwrap();
         end_timer!(timer_cs_startup);
@@ -83,7 +85,6 @@ where
             Vec<DenseMultilinearExtension<E::ScalarField>>,
         ) = Self::generate_w_z_polys(&index, &z_assignment);
         end_timer!(timer_generate_w_z_polys);
-
         // EPC-Commit to the witness polynomials, i.e. generate c_i = EPC.Comm(w_i)
         // Line 3-b figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_epc_commit = start_timer!(|| "EPC Commit");
@@ -118,6 +119,11 @@ where
         let w_poly_evals: Vec<E::ScalarField> = mw_polys
             .iter()
             .map(|witness| witness.evaluate(&zero_check_proof.point))
+            .collect();
+        // TODO: Should be deleted
+        let z_poly_evals: Vec<E::ScalarField> = z_polys
+            .iter()
+            .map(|z| z.evaluate(&zero_check_proof.point))
             .collect();
         end_timer!(timer_eval_mw_polys);
 
@@ -230,7 +236,6 @@ where
             z_polys.iter().map(|item| Arc::new(item.clone())).collect();
         let mut target_virtual_poly: VirtualPolynomial<E::ScalarField> =
             VirtualPolynomial::new(index.log_num_constraints);
-
         // If there is only one predicate, The virtual poly is just L(mle(M_1z), mle(M_2z), ..., mle(M_tz)) without any selector
         if index.num_predicates == 1 {
             let predicate_poly = match index.predicate_types.values().next().unwrap().clone() {

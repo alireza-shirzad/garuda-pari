@@ -4,3 +4,50 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+garuda = { path = "../garuda" }
+ark-serialize = { workspace = true }
+ark-ff = { workspace = true }
+ark-ec = { workspace = true }
+ark-std = { workspace = true }
+ark-poly = { workspace = true }
+ark-crypto-primitives = { path = "../../crypto-primitives/crypto-primitives", default-features = false, features = [
+    "snark",
+    "crh",
+    "gr1cs",
+] }
+ark-r1cs-std = { path = "../../r1cs-std", default-features = false }
+ark-relations = { workspace = true }
+merlin = { workspace = true }
+displaydoc = { workspace = true }
+tracing = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+ark-test-curves = { version = "0.5.0", default-features = false, features = [
+    "bls12_381_curve",
+] }
+num-bigint = "0.4.4"
+
+[[bench]]
+name = "rescue-benches"
+path = "./rescue-benches.rs"
+harness = false
+
+
+[features]
+default = ["std", "parallel"]
+std = [
+    "garuda/std",
+    "ark-ff/std",
+    "ark-poly/std",
+    "ark-relations/std",
+    "ark-std/std",
+    "ark-serialize/std",
+]
+print-trace = ["ark-std/print-trace"]
+parallel = [
+    "std",
+    "ark-ff/parallel",
+    "garuda/parallel",
+    "ark-poly/parallel",
+    "ark-std/parallel",
+    "rayon",
+]

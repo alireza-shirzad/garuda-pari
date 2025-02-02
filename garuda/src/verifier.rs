@@ -8,8 +8,8 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
-use ark_poly::{Polynomial, SparseMultilinearExtension};
-use ark_relations::gr1cs::predicate::{polynomial_constraint::PolynomialPredicate, PredicateType};
+use ark_poly::{MultilinearExtension, Polynomial, SparseMultilinearExtension};
+use ark_relations::gr1cs::{predicate::{polynomial_constraint::PolynomialPredicate, PredicateType}, R1CS_PREDICATE_LABEL};
 use ark_std::{end_timer, marker::PhantomData, rand::RngCore, start_timer};
 
 impl<E, R> Garuda<E, R>
@@ -42,9 +42,10 @@ where
         let timer_x_poly = start_timer!(|| "Compute x polynomial");
         let mut px_evaluations: Vec<(usize, E::ScalarField)> =
             Vec::with_capacity(vk.succinct_index.instance_len);
-        px_evaluations.push((0, E::ScalarField::ONE));
+        let r1cs_orig_num_cnstrs = vk.succinct_index.r1cs_num_constraints-vk.succinct_index.instance_len;
+        px_evaluations.push((r1cs_orig_num_cnstrs, E::ScalarField::ONE));
         for i in 1..vk.succinct_index.instance_len {
-            px_evaluations.push((i, public_input[i - 1]));
+            px_evaluations.push((r1cs_orig_num_cnstrs+i, public_input[i - 1]));
         }
         let px = SparseMultilinearExtension::from_evaluations(
             vk.succinct_index.log_num_constraints,
@@ -136,7 +137,7 @@ where
         vk: &VerifyingKey<E>,
     ) -> bool {
         let mut z_poly_evals = proof.w_poly_evals.clone();
-        z_poly_evals[0] += px.evaluate(&random_eval_point.to_vec());
+        z_poly_evals[2] += px.evaluate(&random_eval_point.to_vec());
         // By construction on the prover side, we know that the first stacked predicate is the R1CS predicate
         let predicate_polys: Vec<&PolynomialPredicate<E::ScalarField>> = vk
             .succinct_index
@@ -167,6 +168,7 @@ where
                     })
             }
         };
+
         eval == *exptected_eval
     }
 }

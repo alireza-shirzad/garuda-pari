@@ -8,12 +8,12 @@
 
 use std::fmt::Debug;
 
-use crate::piop::{errors::PolyIOPErrors, sum_check::SumCheck, PolyIOP};
 use crate::arithmetic::eq_eval;
+use crate::piop::{errors::PolyIOPErrors, sum_check::SumCheck, PolyIOP};
+use crate::transcript::IOPTranscript;
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use ark_std::{end_timer, start_timer};
-use crate::transcript::IOPTranscript;
 
 /// A zero check IOP subclaim for `f(x)` consists of the following:
 ///   - the initial challenge vector r which is used to build eq(x, r) in
@@ -72,7 +72,6 @@ impl<F: PrimeField> ZeroCheck<F> for PolyIOP<F> {
         transcript: &mut Self::Transcript,
     ) -> Result<Self::ZeroCheckProof, PolyIOPErrors> {
         let start = start_timer!(|| "zero check prove");
-
         let length = poly.aux_info.num_variables;
         let r = transcript.get_and_append_challenge_vectors(b"0check r", length)?;
         let f_hat = poly.build_f_hat(r.as_ref())?;
@@ -125,8 +124,8 @@ impl<F: PrimeField> ZeroCheck<F> for PolyIOP<F> {
 mod test {
 
     use super::ZeroCheck;
-    use crate::piop::{errors::PolyIOPErrors, PolyIOP};
     use crate::arithmetic::VirtualPolynomial;
+    use crate::piop::{errors::PolyIOPErrors, PolyIOP};
     use ark_bls12_381::Fr;
     use ark_std::test_rng;
 

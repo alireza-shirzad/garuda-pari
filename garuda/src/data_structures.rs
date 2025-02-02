@@ -53,6 +53,8 @@ pub struct SuccinctIndex<E: Pairing> {
     pub instance_len: usize,
     /// The predicate types
     pub predicate_types: BTreeMap<Label, PredicateType<E::ScalarField>>,
+    /// The number of r1cs constraints
+    pub r1cs_num_constraints: usize,
 }
 
 #[derive(CanonicalSerialize, Clone)]
@@ -71,6 +73,7 @@ pub struct Proof<E: Pairing> {
     pub mw_polys: Vec<DenseMultilinearExtension<E::ScalarField>>,
 }
 
+#[derive(Debug, Clone)]
 /// A datastructure representing the index of the Generalized rank1 constraint system (GR1CS)
 pub(crate) struct Index<F: Field> {
     /// The number of instance variables
@@ -95,7 +98,7 @@ pub(crate) struct Index<F: Field> {
 
 impl<F: Field> Index<F> {
     pub fn new(constraint_system_ref: &ConstraintSystemRef<F>) -> Self {
-        let predicate_types = constraint_system_ref.get_predicate_types();
+        let predicate_types = constraint_system_ref.get_all_predicate_types();
         let predicate_max_deg = Self::get_max_degree(&predicate_types);
         Self {
             instance_len: constraint_system_ref.num_instance_variables(),
@@ -104,11 +107,11 @@ impl<F: Field> Index<F> {
                 + constraint_system_ref.num_witness_variables(),
             num_predicates: constraint_system_ref.num_predicates(),
             max_arity: *constraint_system_ref
-                .get_predicate_arities()
+                .get_all_predicate_arities()
                 .values()
                 .max()
                 .unwrap(),
-            predicate_num_constraints: constraint_system_ref.get_predicate_num_constraints(),
+            predicate_num_constraints: constraint_system_ref.get_all_predicates_num_constraints(),
             predicate_types,
             predicate_max_deg,
             predicate_matrices: constraint_system_ref.to_matrices().unwrap(),

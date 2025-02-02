@@ -319,9 +319,9 @@ impl<F: PrimeField> VirtualPolynomial<F> {
 
     /// Print out the evaluation map for testing. Panic if the num_vars > 5.
     pub fn print_evals(&self) {
-        if self.aux_info.num_variables > 5 {
-            panic!("this function is used for testing only. cannot print more than 5 num_vars")
-        }
+        // if self.aux_info.num_variables > 5 {
+        //     panic!("this function is used for testing only. cannot print more than 5 num_vars")
+        // }
         for i in 0..1 << self.aux_info.num_variables {
             let point = bit_decompose(i, self.aux_info.num_variables);
             let point_fr: Vec<F> = point.iter().map(|&x| F::from(x)).collect();

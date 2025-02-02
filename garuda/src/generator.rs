@@ -16,7 +16,7 @@ use crate::{
     Garuda,
 };
 use ark_relations::gr1cs::{
-    trans, ConstraintSynthesizer, ConstraintSystem, Label, Matrix, OptimizationGoal, SynthesisMode,
+    transpose, ConstraintSynthesizer, ConstraintSystem, Label, Matrix, OptimizationGoal, SynthesisMode, R1CS_PREDICATE_LABEL,
 };
 use ark_std::{
     collections::BTreeMap, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand,
@@ -42,16 +42,13 @@ where
         let constraint_system_ref = ConstraintSystem::new_ref();
         constraint_system_ref.set_optimization_goal(OptimizationGoal::Constraints);
         constraint_system_ref.set_mode(SynthesisMode::Setup);
+        constraint_system_ref.outline_instances();
 
         let timer_synthesis = start_timer!(|| "Circuit Synthesis");
         let _ = c.generate_constraints(constraint_system_ref.clone());
         end_timer!(timer_synthesis);
-        constraint_system_ref.finalize(true);
-
+        constraint_system_ref.finalize();
         let index = Index::new(&constraint_system_ref);
-        let timer_inlining = start_timer!(|| "Inlining");
-        constraint_system_ref.finalize(true);
-        end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
 
         // Generate the public parameters for the multilinear EPC
@@ -91,6 +88,7 @@ where
             num_predicates: index.num_predicates,
             instance_len: index.instance_len,
             predicate_types: index.predicate_types.clone(),
+            r1cs_num_constraints: index.predicate_num_constraints[R1CS_PREDICATE_LABEL],
         };
         let vk: VerifyingKey<E> = VerifyingKey {
             sel_batched_comm,
@@ -133,6 +131,8 @@ where
             sel_polynomials.push(sel_poly);
             m_count += m;
         }
+
+
         sel_polynomials
     }
 
@@ -148,7 +148,7 @@ where
         let stacked_matrices: Vec<Matrix<E::ScalarField>> = stack_matrices(index);
         let transposed_stacked_matrices: Vec<Matrix<E::ScalarField>> = stacked_matrices
             .iter()
-            .map(|matrix| trans(matrix, index.total_variables_len))
+            .map(|matrix| transpose(matrix, index.total_variables_len))
             .map(|matrix| matrix[index.instance_len..].to_vec())
             .collect();
         for matrix in transposed_stacked_matrices {

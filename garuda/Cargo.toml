@@ -2,7 +2,13 @@
 name = "garuda"
 version = "0.1.0"
 description = "An implementation of the Garuda SNARK"
-keywords = ["zero-knowledge", "cryptography", "zkSNARK", "SNARK", "constraint-systems"]
+keywords = [
+    "zero-knowledge",
+    "cryptography",
+    "zkSNARK",
+    "SNARK",
+    "constraint-systems",
+]
 categories = ["cryptography"]
 include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 license = "MIT/Apache-2.0"
@@ -12,36 +18,43 @@ edition = "2021"
 ################################# Dependencies ################################
 
 [dependencies]
-ark-serialize = { version = "^0.5.0", default-features = false, features = [ "derive" ] }
-ark-ff = { version = "^0.5.0", default-features = false }
-ark-ec = { version = "^0.5.0", default-features = false }
-ark-std = { version = "^0.5.0", default-features = false }
-ark-poly = { version = "^0.5.0", default-features = false }
-ark-crypto-primitives = { version = "0.5.0", default-features = false, features = ["snark", "crh"] }
-ark-relations = { path = "../../snark/relations" , default-features = false}
-merlin = { version = "3.0.0", default-features = false }
-displaydoc = { version = "0.2.3", default-features = false }
-tracing = { version = "0.1", default-features = false, features = [ "attributes" ], optional = true }
-rayon = { version = "1.5.2", optional = true }
-# derivative = { version = "2.0", features = ["use_core"]}
+ark-serialize = { workspace = true }
+ark-ff = { workspace = true }
+ark-ec = { workspace = true }
+ark-std = { workspace = true }
+ark-poly = { workspace = true }
+ark-crypto-primitives = { path = "../../crypto-primitives/crypto-primitives", default-features = false, features = [
+    "snark",
+    "crh",
+] }
+ark-relations = { workspace = true }
+merlin = { workspace = true }
+displaydoc = { workspace = true }
+tracing = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
-# rescue-gr1cs-custom = { path = "../rescue_gr1cs_custom", default-features = false }
-ark-bls12-381 = { version = "^0.5.0", default-features = false, features = [ "curve" ] }
-# ark-gr1cs-std = { path = "../ark-gr1cs-std", default-features = false }
-
-[[bench]]
-name = "garuda-benches"
-path = "benches/bench.rs"
-harness = false
-
+ark-bls12-381 = { version = "^0.5.0", default-features = false, features = [
+    "curve",
+] }
 
 [features]
 default = ["std", "parallel"]
-std = [ "ark-ff/std", "ark-poly/std", "ark-relations/std", "ark-std/std", "ark-serialize/std"]
-print-trace = [ "ark-std/print-trace" ]
-parallel = [ "std", "ark-ff/parallel", "ark-poly/parallel", "ark-std/parallel", "rayon" ]
-
+std = [
+    "ark-ff/std",
+    "ark-poly/std",
+    "ark-relations/std",
+    "ark-std/std",
+    "ark-serialize/std",
+]
+print-trace = ["ark-std/print-trace"]
+parallel = [
+    "std",
+    "ark-ff/parallel",
+    "ark-poly/parallel",
+    "ark-std/parallel",
+    "rayon",
+]
 
 
 [profile.release]
