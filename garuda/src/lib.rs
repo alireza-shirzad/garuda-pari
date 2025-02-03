@@ -10,7 +10,7 @@ pub use ark_relations::gr1cs::ConstraintSystemRef;
 use ark_std::marker::PhantomData;
 
 mod arithmetic;
-mod data_structures;
+pub mod data_structures;
 mod epc;
 mod generator;
 mod piop;

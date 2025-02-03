@@ -16,4 +16,4 @@ merlin = { version = "3.0.0", default-features = false }
 displaydoc = { version = "0.2.3", default-features = false }
 tracing = { version = "0.1", default-features = false, features = [ "attributes" ] }
 rayon = { version = "1.5.2" }
-
+lazy_static = "1.4"

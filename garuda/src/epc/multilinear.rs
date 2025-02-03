@@ -18,8 +18,8 @@ use ark_ff::PrimeField;
 use ark_poly::{
     DenseMultilinearExtension, MultilinearExtension, Polynomial, SparseMultilinearExtension,
 };
-use ark_std::collections::LinkedList;
 use ark_std::UniformRand;
+use ark_std::{collections::LinkedList, end_timer, start_timer};
 use ark_std::{rand::RngCore, One, Zero};
 
 use std::ops::Mul;
@@ -157,14 +157,18 @@ impl<E: Pairing, R: RngCore> EPC<R> for MultilinearEPC<E, R> {
         polys: &[Self::Polynomial],
         equifficients: Option<&[Self::Equifficient]>,
     ) -> Self::BatchedCommitment {
+        let timer_indiv_comm = start_timer!(|| "Individual commits");
         let mut individual_comms = Vec::new();
         for poly in polys {
             individual_comms.push(Self::commit(ck, poly));
         }
+        end_timer!(timer_indiv_comm);
         match equifficients {
             Some(equifficients) => {
+                let timer_consistency_comm = start_timer!(|| "Consistency commitment");
                 let consistency_comm: <E as Pairing>::G1 =
                     E::G1::msm(&ck.consistency_pk, equifficients).unwrap();
+                end_timer!(timer_consistency_comm);
                 Self::BatchedCommitment {
                     individual_comms,
                     consistency_comm: Some(consistency_comm),
@@ -222,9 +226,14 @@ impl<E: Pairing, R: RngCore> EPC<R> for MultilinearEPC<E, R> {
         point: &Self::EvaluationPoint,
         comms: &Self::BatchedCommitment,
     ) -> Self::BatchedOpeningProof {
+        let timer_batch_polys = start_timer!(|| "Batching Polys");
         let batched_poly: DenseMultilinearExtension<E::ScalarField> =
             Self::produce_batched_poly(polys, comms);
-        Self::open(ck, &batched_poly, point, &comms.individual_comms[0])
+        end_timer!(timer_batch_polys);
+        let timer_open_batched_polys = start_timer!(|| "Open batched polys");
+        let result = Self::open(ck, &batched_poly, point, &comms.individual_comms[0]);
+        end_timer!(timer_open_batched_polys);
+        result
     }
 
     fn verify(

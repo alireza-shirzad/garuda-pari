@@ -8,8 +8,9 @@ use ark_r1cs_std::eq::EqGadget;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
 use ark_std::rand::rngs::StdRng;
-use ark_test_curves::bls12_381::{Bls12_381, Fr};
+use ark_test_curves::bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
 use garuda::{Garuda, write_bench};
+use garuda_bench::BenchResult;
 
 use num_bigint::BigUint;
 use rayon::ThreadPoolBuilder;
@@ -37,7 +38,7 @@ struct RescueDemo<F: PrimeField> {
     input: Option<Vec<F>>,
     image: Option<F>,
     config: RescueConfig<F>,
-    N: usize,
+    num_invocations: usize,
 }
 
 pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
@@ -74,7 +75,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
             "XXX",
             PredicateConstraintSystem::new_polynomial_predicate(2, vec![
                 (F::from(1i8), vec![(0, 5)]),
-                (F::from(-1i8) , vec![(1, 1)]),
+                (F::from(-1i8), vec![(1, 1)]),
             ]),
         );
 
@@ -92,7 +93,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
         let mut crh_a_g: Option<FpVar<F>> =
             Some(CRHGadget::<F>::evaluate(&params_g, &input_g).unwrap());
 
-        for _ in 0..(self.N - 1) {
+        for _ in 0..(self.num_invocations - 1) {
             crh_a_g =
                 Some(CRHGadget::<F>::evaluate(&params_g, &vec![crh_a_g.unwrap(); 9]).unwrap());
         }
@@ -101,23 +102,21 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
             Ok(self.image.ok_or(SynthesisError::AssignmentMissing).unwrap())
         })
         .unwrap();
+
         if let Some(crh_a_g) = crh_a_g {
             let _ = crh_a_g.enforce_equal(&image_instance);
-        }
-        if cs.is_in_setup_mode() {
-            write_bench!("{} ", cs.num_constraints());
         }
 
         Ok(())
     }
 }
 
-fn benchmark(N: usize) {
+fn benchmark(num_invocations: usize) {
     println!(
         "Benchmarking Garuda for number of Rescue Invocation = {}",
-        N
+        num_invocations
     );
-    write_bench!("{} ", N);
+    write_bench!("{} ", num_invocations);
     // This may not be cryptographically safe, use
     // `OsRng` (for example) in production software.
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
@@ -126,20 +125,20 @@ fn benchmark(N: usize) {
     // Generate a random preimage and compute the image
     let mut input = Vec::new();
     for _ in 0..9 {
-        input.push(Fr::rand(&mut rng));
+        input.push(BlsFr12_381_Fr::rand(&mut rng));
     }
-    let mut expected_image = CRH::<Fr>::evaluate(&config, input.clone()).unwrap();
+    let mut expected_image = CRH::<BlsFr12_381_Fr>::evaluate(&config, input.clone()).unwrap();
 
-    for i in 0..(N - 1) {
+    for i in 0..(num_invocations - 1) {
         let output = vec![expected_image; 9];
-        expected_image = CRH::<Fr>::evaluate(&config, output.clone()).unwrap();
+        expected_image = CRH::<BlsFr12_381_Fr>::evaluate(&config, output.clone()).unwrap();
     }
 
-    let c = RescueDemo::<Fr> {
+    let c = RescueDemo::<BlsFr12_381_Fr> {
         input: Some(input.clone()),
         image: Some(expected_image),
         config: config.clone(),
-        N,
+        num_invocations,
     };
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -177,28 +176,93 @@ fn benchmark(N: usize) {
     total_verifying += start.elapsed();
     write_bench!("{}\n", total_verifying.as_micros());
 }
+
+macro_rules! garuda_bench {
+    ($bench_name:ident, $num_invocations:expr, $num_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
+        let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
+        let config = create_test_rescue_parameter(&mut rng);
+        let mut input = Vec::new();
+        for _ in 0..9 {
+            input.push(BlsFr12_381_Fr::rand(&mut rng));
+        }
+        let mut expected_image = CRH::<BlsFr12_381_Fr>::evaluate(&config, input.clone()).unwrap();
+
+        for _i in 0..($num_invocations - 1) {
+            let output = vec![expected_image; 9];
+            expected_image = CRH::<BlsFr12_381_Fr>::evaluate(&config, output.clone()).unwrap();
+        }
+
+        let mut prover_time = Duration::new(0, 0);
+        let mut setup_time = Duration::new(0, 0);
+        let mut verifier_time = Duration::new(0, 0);
+        let mut pk_size: usize = 0;
+        let mut vk_size: usize = 0;
+        let mut proof_size: usize = 0;
+        let circuit = RescueDemo::<$bench_field> {
+            input: Some(input.clone()),
+            image: Some(expected_image),
+            config: config.clone(),
+            num_invocations: $num_invocations,
+        };
+        for _ in 0..$num_iterations {
+            let start = ark_std::time::Instant::now();
+            let setup_circuit = circuit.clone();
+            let (pk, vk) = Garuda::<$bench_pairing_engine, StdRng>::keygen(setup_circuit, &mut rng);
+            setup_time += start.elapsed();
+            pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
+            vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
+            let start = ark_std::time::Instant::now();
+            let prover_circuit = circuit.clone();
+            let proof = Garuda::<Bls12_381, StdRng>::prove(prover_circuit, pk).unwrap();
+            prover_time += start.elapsed();
+            proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
+            let start = ark_std::time::Instant::now();
+            assert!(Garuda::<Bls12_381, StdRng>::verify(proof, vk, &[
+                expected_image
+            ],));
+            verifier_time += start.elapsed();
+        }
+        let cs: gr1cs::ConstraintSystemRef<$bench_field> = gr1cs::ConstraintSystem::new_ref();
+        cs.outline_instances();
+        let _ = circuit.clone().generate_constraints(cs.clone());
+        cs.finalize();
+
+        let bench_result = BenchResult {
+            curve: "Bls12_381".to_string(),
+            num_constraints: cs.num_constraints(),
+            predicate_constraints: cs.get_all_predicates_num_constraints(),
+            num_invocations: $num_invocations,
+            num_thread: $num_thread,
+            num_iterations: $num_iterations,
+            pk_size,
+            vk_size,
+            proof_size,
+            prover_time: (prover_time / $num_iterations),
+            verifier_time: (verifier_time / $num_iterations),
+            setup_time: (setup_time / $num_iterations),
+        };
+        bench_result
+    }};
+}
+
 fn main() {
-    let path = Path::new("garuda_bench.txt");
     let num_thread = env::var("NUM_THREAD")
         .unwrap_or_else(|_| "default".to_string())
         .parse::<usize>()
         .unwrap();
-    let mut file = File::create(&path).unwrap();
-    println!(
-        "----------------------Garuda Benchmarking with {} threads, result stored in garuda_bench.txt ----------------------",
-        num_thread
-    );
+
     ThreadPoolBuilder::new()
         .num_threads(num_thread)
         .build_global()
         .unwrap();
-    write_bench!(
-        "# Invokations Constraints Setup-Time(ms) PK-Size(b) VK-Size(b) Prover-Time(ms) Proof-Size(b) Verifier-Time(us)\n",
-    );
-    let num_invokations = vec![72, 144, 288, 577, 1154, 2309, 4619, 9238, 18477];
-    for N in num_invokations.iter() {
-        benchmark(*N);
-    }
-    // benchmark(100);
-    println!("Hello");
+
+    garuda_bench!(garuda_bench, 72, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
+    garuda_bench!(garuda_bench, 144, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    garuda_bench!(garuda_bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    garuda_bench!(garuda_bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    garuda_bench!(garuda_bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    garuda_bench!(garuda_bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    garuda_bench!(garuda_bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    garuda_bench!(garuda_bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    garuda_bench!(garuda_bench, 18477, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
 }

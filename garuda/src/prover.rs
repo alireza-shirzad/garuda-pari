@@ -120,11 +120,6 @@ where
             .iter()
             .map(|witness| witness.evaluate(&zero_check_proof.point))
             .collect();
-        // TODO: Should be deleted
-        let z_poly_evals: Vec<E::ScalarField> = z_polys
-            .iter()
-            .map(|z| z.evaluate(&zero_check_proof.point))
-            .collect();
         end_timer!(timer_eval_mw_polys);
 
         let timer_eval_sel_polys = start_timer!(|| "Evaluate Selector Polynomials");
