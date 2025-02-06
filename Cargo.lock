@@ -41,7 +41,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-r1cs-std",
- "ark-relations 0.5.0",
+ "ark-relations 0.5.1",
  "ark-serialize",
  "ark-snark",
  "ark-std",
@@ -151,7 +151,7 @@ version = "0.5.0"
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-relations 0.5.0",
+ "ark-relations 0.5.1",
  "ark-std",
  "educe",
  "num-bigint",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "ark-relations"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ark-ff",
  "ark-poly",
@@ -215,7 +215,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d368e2848c2d4c129ce7679a7d0d2d612b6a274d3ea6a13bad4445d61b381b88"
 dependencies = [
  "ark-ff",
- "ark-relations 0.5.1",
+ "ark-relations 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ark-serialize",
  "ark-std",
 ]
@@ -446,7 +446,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-poly",
- "ark-relations 0.5.0",
+ "ark-relations 0.5.1",
  "ark-serialize",
  "ark-std",
  "displaydoc",
@@ -464,7 +464,7 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "ark-r1cs-std",
- "ark-relations 0.5.0",
+ "ark-relations 0.5.1",
  "ark-serialize",
  "ark-std",
  "ark-test-curves",
@@ -607,6 +607,28 @@ name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
+
+[[package]]
+name = "pari"
+version = "0.1.0"
+dependencies = [
+ "ark-bls12-381",
+ "ark-crypto-primitives",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-relations 0.5.1",
+ "ark-serialize",
+ "ark-std",
+ "displaydoc",
+ "merlin",
+ "rayon",
+ "tracing",
+]
+
+[[package]]
+name = "pari-bench"
+version = "0.1.0"
 
 [[package]]
 name = "paste"

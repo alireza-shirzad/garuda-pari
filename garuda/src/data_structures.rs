@@ -7,7 +7,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_relations::gr1cs::{predicate::PredicateType, ConstraintSystemRef, Label, Matrix};
+use ark_relations::gr1cs::{predicate::PredicateType, ConstraintSystem, ConstraintSystemRef, Label, Matrix};
 use ark_serialize::CanonicalSerialize;
 use ark_std::log2;
 
@@ -69,8 +69,6 @@ pub struct Proof<E: Pairing> {
     pub w_poly_evals: Vec<E::ScalarField>,
     /// A bathced opening proof for the w polynomials and the selector polynomials on the random point outputed by the zerocheck
     pub bathced_opening_proof: Vec<E::G1Affine>,
-    /// polynomials ML-extending M1.w, M2.w, ..., Mt.w where t:max_arity and M1, M2, ..., Mt are the stacked matrices
-    pub mw_polys: Vec<DenseMultilinearExtension<E::ScalarField>>,
 }
 
 #[derive(Debug, Clone)]
@@ -97,7 +95,7 @@ pub(crate) struct Index<F: Field> {
 }
 
 impl<F: Field> Index<F> {
-    pub fn new(constraint_system_ref: &ConstraintSystemRef<F>) -> Self {
+    pub fn new(constraint_system_ref: &ConstraintSystem<F>) -> Self {
         let predicate_types = constraint_system_ref.get_all_predicate_types();
         let predicate_max_deg = Self::get_max_degree(&predicate_types);
         Self {

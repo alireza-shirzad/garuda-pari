@@ -20,15 +20,6 @@ mod transcript;
 mod utils;
 mod verifier;
 
-#[macro_export]
-macro_rules! write_bench {
-    ($fmt:expr, $($arg:tt)*) => {{
-        use std::io::Write;
-        let mut file = std::fs::File::options().append(true).create(false).open("./garuda_bench.txt").unwrap();
-        write!(file, $fmt, $($arg)*).unwrap();
-    }};
-}
-
 /// The SNARK of [[Garuda]](https://eprint.iacr.org/2024/1245.pdf).
 pub struct Garuda<E: Pairing, R: RngCore> {
     _p: PhantomData<E>,

@@ -1,3 +1,5 @@
+use std::{cell::Ref, rc::Rc};
+
 use crate::{
     arithmetic::{DenseMultilinearExtension, VirtualPolynomial},
     data_structures::{Index, Proof, ProvingKey, VerifyingKey},
@@ -21,8 +23,12 @@ use ark_poly::{
     MultilinearExtension, Polynomial,
 };
 use ark_relations::gr1cs::{
-    self, mat_vec_mul, predicate::PredicateType, ConstraintSynthesizer, ConstraintSystem, Matrix,
-    OptimizationGoal, SynthesisError,
+    self,
+    instance_outliner::{outline_r1cs, InstanceOutliner},
+    mat_vec_mul,
+    predicate::PredicateType,
+    ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Matrix, OptimizationGoal,
+    SynthesisError, R1CS_PREDICATE_LABEL,
 };
 use ark_std::{end_timer, iterable::Iterable, rand::RngCore, start_timer, sync::Arc};
 impl<E, R> Garuda<E, R>
@@ -30,8 +36,36 @@ where
     E: Pairing,
     R: RngCore,
 {
-    pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
+    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    where
+        E: Pairing,
+        E::ScalarField: Field,
+        E::ScalarField: std::convert::From<i32>,
+    {
+        // Start up the constraint System and synthesize the circuit
+        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
+        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+        cs.set_optimization_goal(OptimizationGoal::Constraints);
+        cs.set_instance_outliner(InstanceOutliner {
+            pred_label: R1CS_PREDICATE_LABEL.to_string(),
+            func: Rc::new(outline_r1cs),
+        });
+        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
+        circuit.generate_constraints(cs.clone())?;
+        end_timer!(timer_synthesize_circuit);
+
+        let timer_inlining = start_timer!(|| "Inlining constraints");
+        cs.finalize();
+
+        end_timer!(timer_inlining);
+        end_timer!(timer_cs_startup);
+        Ok(cs.into_inner().unwrap())
+    }
+
+    pub fn prove(
+        cs: ConstraintSystem<E::ScalarField>,
         pk: ProvingKey<E>,
     ) -> Result<Proof<E>, SynthesisError>
     where
@@ -41,27 +75,11 @@ where
     {
         let timer_prove = start_timer!(|| "Prove");
 
-        // Start up the constraint System and synthesize the circuit
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
-        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        cs.outline_instances();
-        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
-        circuit.generate_constraints(cs.clone())?;
-        end_timer!(timer_synthesize_circuit);
-
-        let timer_inlining = start_timer!(|| "Inlining constraints");
-        cs.finalize();
-
-        end_timer!(timer_inlining);
-        let prover = cs.borrow().unwrap();
-        end_timer!(timer_cs_startup);
-
         // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
         let timer_extract_i_x_w =
             start_timer!(|| "Extract NP index, intance, witness and extended witness");
-        let x_assignment: &[E::ScalarField] = prover.instance_assignment()?;
-        let w_assignment: &[E::ScalarField] = prover.witness_assignment()?;
+        let x_assignment: &[E::ScalarField] = &cs.instance_assignment;
+        let w_assignment: &[E::ScalarField] = &cs.witness_assignment;
         let z_assignment: Vec<E::ScalarField> = [x_assignment, w_assignment].concat();
         let index: Index<E::ScalarField> = Index::new(&cs);
         end_timer!(timer_extract_i_x_w);
@@ -174,7 +192,6 @@ where
             sel_poly_evals,
             w_poly_evals,
             bathced_opening_proof: opening_proof,
-            mw_polys,
         });
 
         end_timer!(timer_prove);

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::SparseMultilinearExtension;
@@ -16,19 +18,53 @@ use crate::{
     Garuda,
 };
 use ark_relations::gr1cs::{
-    transpose, ConstraintSynthesizer, ConstraintSystem, Label, Matrix, OptimizationGoal, SynthesisMode, R1CS_PREDICATE_LABEL,
+    self, instance_outliner::{outline_r1cs, InstanceOutliner}, transpose, Constraint, ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Label, Matrix, OptimizationGoal, SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL
 };
 use ark_std::{
     collections::BTreeMap, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand,
 };
+
+
+
+
+
 
 impl<E, R> Garuda<E, R>
 where
     E: Pairing,
     R: RngCore,
 {
-    pub fn keygen<C: ConstraintSynthesizer<E::ScalarField>>(
-        c: C,
+    pub fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+        circuit: C,
+    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    where
+        E: Pairing,
+        E::ScalarField: Field,
+        E::ScalarField: std::convert::From<i32>,
+    {
+        // Start up the constraint System and synthesize the circuit
+        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
+        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+        cs.set_optimization_goal(OptimizationGoal::Constraints);
+        cs.set_mode(SynthesisMode::Setup);
+        cs.set_instance_outliner(InstanceOutliner {
+            pred_label: R1CS_PREDICATE_LABEL.to_string(),
+            func: Rc::new(outline_r1cs),
+        });
+        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
+        circuit.generate_constraints(cs.clone())?;
+        end_timer!(timer_synthesize_circuit);
+    
+        let timer_inlining = start_timer!(|| "Inlining constraints");
+        cs.finalize();
+    
+        end_timer!(timer_inlining);
+        end_timer!(timer_cs_startup);
+        Ok(cs.into_inner().unwrap())
+    }
+
+    pub fn keygen(
+        cs: ConstraintSystem<E::ScalarField>,
         rng: &mut R,
     ) -> (ProvingKey<E>, VerifyingKey<E>)
     where
@@ -36,20 +72,9 @@ where
         E::ScalarField: Field,
     {
         let timer_generator = start_timer!(|| "Generator");
-
-        // Synthesize the circuit and create a constraint system, Then finally extract the informations needed to the index
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
-        let constraint_system_ref = ConstraintSystem::new_ref();
-        constraint_system_ref.set_optimization_goal(OptimizationGoal::Constraints);
-        constraint_system_ref.set_mode(SynthesisMode::Setup);
-        constraint_system_ref.outline_instances();
-
-        let timer_synthesis = start_timer!(|| "Circuit Synthesis");
-        let _ = c.generate_constraints(constraint_system_ref.clone());
-        end_timer!(timer_synthesis);
-        constraint_system_ref.finalize();
-        let index = Index::new(&constraint_system_ref);
-        end_timer!(timer_cs_startup);
+        let timer_indexer = start_timer!(|| "Constraint System Startup");
+        let index = Index::new(&cs);
+        end_timer!(timer_indexer);
 
         // Generate the public parameters for the multilinear EPC
         let timer_epc_startup = start_timer!(|| "EPC Startup");

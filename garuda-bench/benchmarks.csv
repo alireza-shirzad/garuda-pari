@@ -1,2 +1,3 @@
 Curve,Num Threads,Num Iterations,Num Invocations,Num Constraints,Predicate Constraints,Setup Time (ms),PK Size,VK Size,Prover Time (ms),Proof Size,Verifier Time (ms)
-Bls12_381,4,1,1154,327739,"{""R1CS"":3,""XXX"":327736}",32,99842522,2753,15,50338666,14
+Bls12_381,2,1,2309,655759,"{""R1CS"":3,""XXX"":655756}",65.975262166,199695426,2849,25.656786666,7306,13.818208
+Bls12_381,2,1,4619,1311799,"{""R1CS"":3,""XXX"":1311796}",133.603101834,399401130,2945,47.419046542,7650,13.603875
