@@ -50,9 +50,7 @@ where
         end_timer!(timer_synthesize_circuit);
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
-        dbg!(sr1cs_cs.num_constraints());
         sr1cs_cs.finalize();
-        dbg!(sr1cs_cs.num_constraints());
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
         Ok(sr1cs_cs.into_inner().unwrap())
