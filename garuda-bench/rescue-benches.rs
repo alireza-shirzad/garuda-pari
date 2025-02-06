@@ -1,31 +1,31 @@
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::rescue::gr1cs_constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
+use ark_crypto_primitives::sponge::rescue::RescueConfig;
 use ark_ff::{Field, PrimeField};
 use ark_r1cs_std::GR1CSVar;
 use ark_r1cs_std::alloc::AllocVar;
 use ark_r1cs_std::eq::EqGadget;
 use ark_r1cs_std::fields::fp::FpVar;
-use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
-use ark_std::rand::rngs::StdRng;
-use ark_test_curves::bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
-use garuda::Garuda;
-use garuda_bench::BenchResult;
-use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
-use num_bigint::BigUint;
-use rayon::ThreadPoolBuilder;
 use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
-use ark_crypto_primitives::sponge::rescue::RescueConfig;
+use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
+use ark_relations::gr1cs::instance_outliner::outline_r1cs;
+use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
 use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_relations::{gr1cs, ns};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::UniformRand;
+use ark_std::rand::rngs::StdRng;
+use ark_std::rc::Rc;
 use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
-use ark_std::rc::Rc;
-use ark_relations::gr1cs::instance_outliner::outline_r1cs;
+use ark_test_curves::bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
+use garuda::Garuda;
+use garuda_bench::BenchResult;
+use num_bigint::BigUint;
+use rayon::ThreadPoolBuilder;
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -200,7 +200,7 @@ fn main() {
         .num_threads(num_thread)
         .build_global()
         .unwrap();
-    // ppol.install 
+    // ppol.install
 
     // garuda_bench!(garuda_bench, 72, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
     // garuda_bench!(garuda_bench, 144, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);

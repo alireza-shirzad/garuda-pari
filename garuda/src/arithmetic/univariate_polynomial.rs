@@ -72,7 +72,7 @@ pub fn get_uni_domain<F: PrimeField>(
             return Err(ArithErrors::InvalidParameters(
                 "failed to build radix 2 domain".to_string(),
             ))
-        },
+        }
     };
     Ok(domain)
 }

@@ -6,8 +6,6 @@
 
 //! useful macros.
 
-
-
 #[cfg(test)]
 mod test {
     use ark_bls12_381::Fr;

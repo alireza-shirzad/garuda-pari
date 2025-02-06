@@ -1,10 +1,12 @@
+use ark_ff::Field;
 use ark_relations::{
-    gr1cs::{predicate::PredicateConstraintSystem, ConstraintSynthesizer, ConstraintSystemRef, Label, Matrix},
+    gr1cs::{
+        predicate::PredicateConstraintSystem, ConstraintSynthesizer, ConstraintSystemRef, Label,
+        Matrix,
+    },
     lc, ns,
 };
-use ark_ff::Field;
 use ark_std::{collections::BTreeMap, string::ToString, vec::Vec};
-
 
 #[derive(Debug, Clone)]
 pub struct Circuit1<F: Field> {

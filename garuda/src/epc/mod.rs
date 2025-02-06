@@ -1,4 +1,3 @@
-
 use ark_std::rand::RngCore;
 
 pub mod data_structures;

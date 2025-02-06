@@ -12,11 +12,11 @@
 mod errors;
 pub use errors::TranscriptError;
 
+use crate::to_bytes;
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use merlin::Transcript;
 use std::marker::PhantomData;
-use crate::to_bytes;
 /// An IOP transcript consists of a Merlin transcript and a flag `is_empty` to
 /// indicate that if the transcript is empty.
 ///
@@ -118,4 +118,3 @@ impl<F: PrimeField> IOPTranscript<F> {
         Ok(res)
     }
 }
-

@@ -7,11 +7,11 @@
 //! Prover subroutines for a SumCheck protocol.
 
 use super::SumCheckProver;
+use crate::arithmetic::{fix_variables, VirtualPolynomial};
 use crate::piop::{
     errors::PolyIOPErrors,
     structs::{IOPProverMessage, IOPProverState},
 };
-use crate::arithmetic::{fix_variables, VirtualPolynomial};
 use ark_ff::{batch_inversion, PrimeField};
 use ark_poly::DenseMultilinearExtension;
 use ark_std::{cfg_into_iter, end_timer, start_timer, vec::Vec};

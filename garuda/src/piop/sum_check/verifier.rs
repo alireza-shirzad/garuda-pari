@@ -7,14 +7,14 @@
 //! Verifier subroutines for a SumCheck protocol.
 
 use super::{SumCheckSubClaim, SumCheckVerifier};
+use crate::arithmetic::VPAuxInfo;
 use crate::piop::{
     errors::PolyIOPErrors,
     structs::{IOPProverMessage, IOPVerifierState},
 };
-use crate::arithmetic::VPAuxInfo;
+use crate::transcript::IOPTranscript;
 use ark_ff::PrimeField;
 use ark_std::{end_timer, start_timer};
-use crate::transcript::IOPTranscript;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};

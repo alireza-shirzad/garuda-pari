@@ -1,28 +1,24 @@
-use std::{borrow::Borrow, rc::Rc};
+use std::rc::Rc;
 
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
-use ark_ff::{Field, PrimeField, Zero};
+use ark_ff::{Field, Zero};
 use ark_poly::{
-    multivariate::{SparsePolynomial, SparseTerm},
-    univariate::DensePolynomial,
-    DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain,
-    MultilinearExtension, Polynomial,
+    univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Evaluations,
+    GeneralEvaluationDomain, Polynomial,
 };
 use ark_relations::{
     gr1cs::{
         self,
-        instance_outliner::{outline_r1cs, outline_sr1cs, InstanceOutliner},
-        mat_vec_mul,
-        predicate::{polynomial_constraint::SR1CS_PREDICATE_LABEL, PredicateType},
-        ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Matrix, OptimizationGoal,
-        SynthesisError, R1CS_PREDICATE_LABEL,
+        instance_outliner::{outline_sr1cs, InstanceOutliner},
+        predicate::polynomial_constraint::SR1CS_PREDICATE_LABEL,
+        ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
     },
     sr1cs::Sr1csAdapter,
 };
-use ark_std::{cfg_iter_mut, end_timer, iterable::Iterable, rand::RngCore, start_timer, sync::Arc};
+use ark_std::{cfg_iter_mut, end_timer, rand::RngCore, start_timer};
 
 use crate::{
-    data_structures::{Index, Proof, ProvingKey, VerifyingKey},
+    data_structures::{Proof, ProvingKey, VerifyingKey},
     transcript::IOPTranscript,
     Pari,
 };
@@ -149,9 +145,9 @@ where
         end_timer!(timer_batch_commit);
 
         /////////////////////// Random Evaluation of the polynomials ///////////////////////
-
         // This box corresponds to the steps 9-10 in figure 6 of the paper: https://eprint.iacr.org/2024/1245.pdf
-        let timer_eval = start_timer!(|| "MSM");
+
+        let timer_eval = start_timer!(|| "Evaluating v_a, v_b, v_q");
         let _ = transcript.append_serializable_element("batched_commitments".as_bytes(), &t);
 
         let challenge = transcript.get_and_append_challenge("r".as_bytes()).unwrap();
@@ -160,16 +156,14 @@ where
         let v_a = w_a_hat.evaluate(&challenge);
         let v_b = w_b_hat.evaluate(&challenge);
         let v_q = q.evaluate(&challenge);
-        dbg!(z_a_hat.evaluate(&challenge));
-        dbg!(z_b_hat.evaluate(&challenge));
-        dbg!(v_q);
 
         end_timer!(timer_eval);
+
         /////////////////////// Proof of correct opening ///////////////////////
         // This box corresponds to the steps 11-13 in figure 6 of the paper: https://eprint.iacr.org/2024/1245.pdf
 
-        let timer_open = start_timer!(|| "MSM");
-        let timer_open_poly = start_timer!(|| "Opening polynomial computation");
+        let timer_opening = start_timer!(|| "Batch Opening");
+        let timer_open_poly = start_timer!(|| "Computing the opening polynomials");
         let w_a_r = DensePolynomial::from_coefficients_vec(vec![v_a]);
         let w_b_r = DensePolynomial::from_coefficients_vec(vec![v_b]);
         let q_r = DensePolynomial::from_coefficients_vec(vec![v_q]);
@@ -178,14 +172,14 @@ where
         let witness_b = (&w_b_hat - &w_b_r) / &chall_vanishing_poly;
         let witness_q = (&q - &q_r) / &chall_vanishing_poly;
         end_timer!(timer_open_poly);
-        let timer_msms = start_timer!(|| "Opening MSMs");
+
+        let timer_msms = start_timer!(|| "Computing the opening MSMs");
         let w_a_proof = E::G1::msm_unchecked(&pk.sigma_a, &witness_a.coeffs);
         let w_b_proof = E::G1::msm_unchecked(&pk.sigma_b, &witness_b.coeffs);
         let q_proof = E::G1::msm_unchecked(&pk.sigma_q_opening, &witness_q.coeffs);
         let u = w_a_proof + w_b_proof + q_proof;
         end_timer!(timer_msms);
-        end_timer!(timer_open);
-
+        end_timer!(timer_opening);
         Ok(Proof {
             t_g: t,
             u_g: u.into(),

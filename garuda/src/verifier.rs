@@ -9,7 +9,10 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::{MultilinearExtension, Polynomial, SparseMultilinearExtension};
-use ark_relations::gr1cs::{predicate::{polynomial_constraint::PolynomialPredicate, PredicateType}, R1CS_PREDICATE_LABEL};
+use ark_relations::gr1cs::{
+    predicate::{polynomial_constraint::PolynomialPredicate, PredicateType},
+    R1CS_PREDICATE_LABEL,
+};
 use ark_std::{end_timer, marker::PhantomData, rand::RngCore, start_timer};
 
 impl<E, R> Garuda<E, R>
@@ -42,10 +45,11 @@ where
         let timer_x_poly = start_timer!(|| "Compute x polynomial");
         let mut px_evaluations: Vec<(usize, E::ScalarField)> =
             Vec::with_capacity(vk.succinct_index.instance_len);
-        let r1cs_orig_num_cnstrs = vk.succinct_index.r1cs_num_constraints-vk.succinct_index.instance_len;
+        let r1cs_orig_num_cnstrs =
+            vk.succinct_index.r1cs_num_constraints - vk.succinct_index.instance_len;
         px_evaluations.push((r1cs_orig_num_cnstrs, E::ScalarField::ONE));
         for i in 1..vk.succinct_index.instance_len {
-            px_evaluations.push((r1cs_orig_num_cnstrs+i, public_input[i - 1]));
+            px_evaluations.push((r1cs_orig_num_cnstrs + i, public_input[i - 1]));
         }
         let px = SparseMultilinearExtension::from_evaluations(
             vk.succinct_index.log_num_constraints,

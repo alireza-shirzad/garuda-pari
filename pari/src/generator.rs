@@ -1,27 +1,24 @@
 use std::rc::Rc;
 
-use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing, CurveGroup};
-use ark_ff::{BigInteger, Field, Zero};
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain, SparseMultilinearExtension};
+use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
+use ark_ff::{Field, Zero};
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    data_structures::{Index, ProvingKey, SuccinctIndex, VerifyingKey},
+    data_structures::{ProvingKey, SuccinctIndex, VerifyingKey},
     Pari,
 };
 use ark_relations::{
     gr1cs::{
         self,
-        instance_outliner::{outline_r1cs, outline_sr1cs, InstanceOutliner},
+        instance_outliner::{outline_sr1cs, InstanceOutliner},
         predicate::polynomial_constraint::SR1CS_PREDICATE_LABEL,
-        transpose, Constraint, ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Label,
-        Matrix, OptimizationGoal, SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
+        ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError, SynthesisMode,
     },
     sr1cs::Sr1csAdapter,
 };
-use ark_std::{
-    collections::BTreeMap, end_timer, log2, rand::RngCore, start_timer, vec::Vec, UniformRand,
-};
+use ark_std::{end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand};
 
 impl<E, R> Pari<E, R>
 where

@@ -199,7 +199,7 @@ impl<F: PrimeField> VirtualPolynomial<F> {
                     .insert(mle_ptr, self.flattened_ml_extensions.len());
                 self.flattened_ml_extensions.push(mle);
                 self.flattened_ml_extensions.len() - 1
-            },
+            }
         };
 
         for (prod_coef, indices) in self.products.iter_mut() {
@@ -233,8 +233,8 @@ impl<F: PrimeField> VirtualPolynomial<F> {
             .iter()
             .map(|x| {
                 x.evaluate(&point.to_vec()) // safe unwrap here since we have
-                                           // already checked that num_var
-                                           // matches
+                                            // already checked that num_var
+                                            // matches
             })
             .collect();
 

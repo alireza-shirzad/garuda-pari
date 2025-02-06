@@ -7,9 +7,9 @@
 //! Error module.
 
 use crate::arithmetic::ArithErrors;
+use crate::transcript::TranscriptError;
 use ark_std::string::String;
 use displaydoc::Display;
-use crate::transcript::TranscriptError;
 
 /// A `enum` specifying the possible failure modes of the PolyIOP.
 #[derive(Display, Debug)]

@@ -5,17 +5,8 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{FftField, Field, Zero};
-use ark_poly::{
-    domain::{self, DomainCoeff},
-    multivariate::SparsePolynomial,
-    EvaluationDomain, Evaluations, GeneralEvaluationDomain, MultilinearExtension, Polynomial,
-    SparseMultilinearExtension,
-};
-use ark_relations::gr1cs::{
-    predicate::{polynomial_constraint::PolynomialPredicate, PredicateType},
-    SynthesisError, R1CS_PREDICATE_LABEL,
-};
-use ark_std::{end_timer, log2, marker::PhantomData, rand::RngCore, start_timer};
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use ark_std::{end_timer, rand::RngCore, start_timer};
 
 impl<E, R> Pari<E, R>
 where
@@ -27,11 +18,8 @@ where
         E: Pairing,
         E::ScalarField: Field,
     {
-        type D<F> = GeneralEvaluationDomain<F>;
-        let timer_verify = start_timer!(|| "Verify");
-        assert_eq!(public_input.len(), vk.succinct_index.instance_len - 1);
+        debug_assert_eq!(public_input.len(), vk.succinct_index.instance_len - 1);
         let Proof { t_g, u_g, v_a, v_b } = proof;
-        // Prepare the transcript
 
         /////////////////////// initilizing the transcript ///////////////////////
         let timer_transcript_init = start_timer!(|| "Transcript initializtion");
@@ -43,47 +31,40 @@ where
         let challenge = transcript.get_and_append_challenge("r".as_bytes()).unwrap();
         end_timer!(timer_transcript_init);
 
-        /////////////////////// Computing polynomials x_A, x_B ///////////////////////
+        /////////////////////// Computing polynomials x_A ///////////////////////
 
-        let timer_x_poly = start_timer!(|| "Compute x polynomial");
+        let timer_x_poly = start_timer!(|| "Compute x_a polynomial");
+        let domain: GeneralEvaluationDomain<E::ScalarField> =
+            GeneralEvaluationDomain::new(vk.succinct_index.num_constraints).unwrap();
         let mut px_evaluations: Vec<E::ScalarField> =
             Vec::with_capacity(vk.succinct_index.instance_len);
         let r1cs_orig_num_cnstrs =
-            vk.succinct_index.num_constraints - 2*vk.succinct_index.instance_len;
+            vk.succinct_index.num_constraints - 2 * vk.succinct_index.instance_len;
         px_evaluations.push(E::ScalarField::ONE);
-        // for i in 1..vk.succinct_index.instance_len {
-        //     px_evaluations.push((r1cs_orig_num_cnstrs + i, public_input[i - 1]));
-        // }
         for i in 1..vk.succinct_index.instance_len {
             px_evaluations.push(public_input[i - 1]);
         }
-        let domain: GeneralEvaluationDomain<E::ScalarField> =
-            D::new(vk.succinct_index.num_constraints).unwrap();
         let lagrange_ceoffs = Self::eval_last_lagrange_coeffs::<E::ScalarField>(
             &domain,
             challenge,
             r1cs_orig_num_cnstrs,
             vk.succinct_index.instance_len,
         );
-        dbg!(r1cs_orig_num_cnstrs);
-        dbg!(lagrange_ceoffs.len());
-        dbg!(px_evaluations.len());
         let x_a = lagrange_ceoffs
             .iter()
             .zip(px_evaluations.iter())
             .fold(E::ScalarField::zero(), |acc, (x, d)| acc + (*x) * (*d));
-        let z_a =x_a+v_a ;
-        dbg!(x_a+v_a);
-        dbg!(v_b);
+        let z_a = x_a + v_a;
+
         end_timer!(timer_x_poly);
 
         /////////////////////// Computing the quotient evaluation///////////////////////
 
-        let timer_xa_xb = start_timer!(|| "Computing x_A, x_B");
+        let timer_q = start_timer!(|| "Computing the quotient evaluation");
 
-        let v_q: E::ScalarField = (z_a * z_a - v_b)/domain.evaluate_vanishing_polynomial(challenge);
-        dbg!(v_q);
-        end_timer!(timer_xa_xb);
+        let v_q: E::ScalarField =
+            (z_a * z_a - v_b) / domain.evaluate_vanishing_polynomial(challenge);
+        end_timer!(timer_q);
 
         /////////////////////// Final Pairing///////////////////////
 
@@ -92,11 +73,9 @@ where
         end_timer!(timer_pairing);
         let right_first_right = vk.delta_one_tau_h - vk.delta_one_h * challenge;
         let right_second_left = vk.alpha_g * v_a + vk.beta_g * v_b + vk.g * v_q;
-        //TODO: Check the into here
         let right = E::multi_pairing([u_g, right_second_left.into()], [right_first_right, vk.h]);
         let left = E::pairing(t_g, vk.delta_two_h);
         assert_eq!(left, right);
-        end_timer!(timer_verify);
         true
     }
 
@@ -107,7 +86,7 @@ where
         domain: &GeneralEvaluationDomain<F>,
         tau: F,
         start_ind: usize,
-        count : usize,
+        count: usize,
     ) -> Vec<F> {
         let size: usize = domain.size();
         // if output_len < 0 {

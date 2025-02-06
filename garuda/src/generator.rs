@@ -18,16 +18,14 @@ use crate::{
     Garuda,
 };
 use ark_relations::gr1cs::{
-    self, instance_outliner::{outline_r1cs, InstanceOutliner}, transpose, Constraint, ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Label, Matrix, OptimizationGoal, SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL
+    self,
+    instance_outliner::{outline_r1cs, InstanceOutliner},
+    transpose, Constraint, ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Label,
+    Matrix, OptimizationGoal, SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
 };
 use ark_std::{
     collections::BTreeMap, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand,
 };
-
-
-
-
-
 
 impl<E, R> Garuda<E, R>
 where
@@ -54,10 +52,10 @@ where
         let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
         circuit.generate_constraints(cs.clone())?;
         end_timer!(timer_synthesize_circuit);
-    
+
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
-    
+
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
         Ok(cs.into_inner().unwrap())
@@ -156,7 +154,6 @@ where
             sel_polynomials.push(sel_poly);
             m_count += m;
         }
-
 
         sel_polynomials
     }

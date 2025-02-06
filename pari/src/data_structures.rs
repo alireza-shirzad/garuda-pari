@@ -78,6 +78,3 @@ pub struct Proof<E: Pairing> {
     pub v_a: E::ScalarField,
     pub v_b: E::ScalarField,
 }
-
-
-

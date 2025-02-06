@@ -7,7 +7,9 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_relations::gr1cs::{predicate::PredicateType, ConstraintSystem, ConstraintSystemRef, Label, Matrix};
+use ark_relations::gr1cs::{
+    predicate::PredicateType, ConstraintSystem, ConstraintSystemRef, Label, Matrix,
+};
 use ark_serialize::CanonicalSerialize;
 use ark_std::log2;
 
