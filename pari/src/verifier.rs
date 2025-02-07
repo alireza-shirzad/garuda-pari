@@ -56,6 +56,8 @@ where
             .fold(E::ScalarField::zero(), |acc, (x, d)| acc + (*x) * (*d));
         let z_a = x_a + v_a;
 
+        dbg!(z_a);
+
         end_timer!(timer_x_poly);
 
         /////////////////////// Computing the quotient evaluation///////////////////////
@@ -64,6 +66,7 @@ where
 
         let v_q: E::ScalarField =
             (z_a * z_a - v_b) / domain.evaluate_vanishing_polynomial(challenge);
+        dbg!(v_q);
         end_timer!(timer_q);
 
         /////////////////////// Final Pairing///////////////////////
@@ -73,6 +76,7 @@ where
         end_timer!(timer_pairing);
         let right_first_right = vk.delta_one_tau_h - vk.delta_one_h * challenge;
         let right_second_left = vk.alpha_g * v_a + vk.beta_g * v_b + vk.g * v_q;
+        // let right_second_left = vk.alpha_g * v_a + vk.g * v_q + vk.beta_g * v_b;
         let right = E::multi_pairing([u_g, right_second_left.into()], [right_first_right, vk.h]);
         let left = E::pairing(t_g, vk.delta_two_h);
         assert_eq!(left, right);

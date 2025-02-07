@@ -126,7 +126,6 @@ where
                 .unwrap();
         end_timer!(timer_compute_a_b);
         /////////////////////// Succinct Index ///////////////////////
-        //TODO: This might be wrong
         let timer_succinct_index = start_timer!(|| "Generating Succinct Index");
         let num_public_inputs = cs.num_instance_variables();
         let succinct_index = SuccinctIndex {
@@ -135,7 +134,7 @@ where
         };
         end_timer!(timer_succinct_index);
         /////////////////////// interpolation Domain and powers of tau ///////////////////////
-
+        //TODO: Find the correct len of powers of tau
         let timer_powers_of_tau = start_timer!(|| "Computing powers of tau");
         let mut powers_of_tau = vec![E::ScalarField::ONE];
         let mut cur = tau;
@@ -196,8 +195,9 @@ where
         let timer_sigma = start_timer!(|| "Computing sigma");
         let sigma_powers = a[num_public_inputs..]
             .par_iter()
-            .zip(&b)
+            .zip(&b[num_public_inputs..])
             .map(|(a_i, b_i)| *a_i * alpha_over_delta_two + *b_i * beta_over_delta_two)
+            // .map(|(a_i, b_i)|  *a_i * alpha_over_delta_two + *b_i * beta_over_delta_two)    
             .collect::<Vec<_>>();
         let sigma = table.batch_mul(&sigma_powers);
         end_timer!(timer_sigma);
@@ -205,7 +205,7 @@ where
         // Construct sigma_q_comm, It's denoted by sigma_q in the paper: step 6, fig 6, https://eprint.iacr.org/2024/1245.pdf
         // sigma_q = [(tau^i/delta_2)G]_{i=1}^m
         let timer_q_comm = start_timer!(|| "Computing sigma_q_comm");
-        let sigma_q_comm_powers = powers_of_tau[0..max_degree + 1]
+        let sigma_q_comm_powers = powers_of_tau[0..max_degree]
             .par_iter()
             .map(|tau| *tau * delta_two_inverse)
             .collect::<Vec<_>>();
@@ -253,8 +253,8 @@ where
         let num_constraints = new_cs.num_constraints();
         let matrices = &new_cs.to_matrices().unwrap()[SR1CS_PREDICATE_LABEL];
 
-        let mut a = vec![E::ScalarField::zero(); num_variables + 1];
-        let mut b = vec![E::ScalarField::zero(); num_variables + 1];
+        let mut a = vec![E::ScalarField::zero(); num_variables];
+        let mut b = vec![E::ScalarField::zero(); num_variables];
 
         let timer_compute_a_b = start_timer!(|| "Compute a_i(tau)'s and z_i(tau)'s");
         for (i, u_i) in lagrange_polys_at_tau
@@ -269,6 +269,7 @@ where
                 b[index] += &(*u_i * coeff);
             }
         }
+        // write a sanity check, make up a z, check if MV product is correct
         end_timer!(timer_compute_a_b);
         Ok((a, b))
     }

@@ -55,6 +55,9 @@ where
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
         sr1cs_cs.finalize();
+        dbg!(sr1cs_cs.num_constraints());
+        dbg!(sr1cs_cs.num_witness_variables());
+        dbg!(sr1cs_cs.num_instance_variables());
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
         Ok(sr1cs_cs.into_inner().unwrap())
@@ -128,6 +131,10 @@ where
         let w_b_hat = Evaluations::from_vec_and_domain(w_b, domain).interpolate();
         end_timer!(timer_interp);
 
+        dbg!(z_a_hat.degree());
+        dbg!(z_b_hat.degree());
+        dbg!(w_a_hat.degree());
+        dbg!(w_b_hat.degree());
         /////////////////////// Computing the quotient polynomial ///////////////////////
         let timer_quotient = start_timer!(|| "Computing the quotient polynomial");
         let (q, _) = (&z_a_hat * &z_a_hat - &z_b_hat).divide_by_vanishing_poly(domain);
@@ -137,10 +144,12 @@ where
         // This box corresponds to steps 6-8 in figure 6 of the paper: https://eprint.iacr.org/2024/1245.pdf
 
         let timer_batch_commit = start_timer!(|| "Batch commitment");
-
+        // debug_assert_eq!(pk.sigma.len(), witness_assignment.len());
         let t_ab = <E::G1 as VariableBaseMSM>::msm_unchecked(&pk.sigma, witness_assignment);
+        // debug_assert_eq!(pk.sigma_q_comm.len(), q.len());
         let t_q = <E::G1 as VariableBaseMSM>::msm_unchecked(&pk.sigma_q_comm, &q);
         let t = t_ab + t_q;
+        // let t = t_ab+t_q;
         let t: E::G1Affine = t.into();
         end_timer!(timer_batch_commit);
 
@@ -156,6 +165,12 @@ where
         let v_a = w_a_hat.evaluate(&challenge);
         let v_b = w_b_hat.evaluate(&challenge);
         let v_q = q.evaluate(&challenge);
+
+        dbg!(z_a_hat.evaluate(&challenge));
+        dbg!(z_b_hat.evaluate(&challenge));
+        dbg!(v_a);
+        dbg!(v_b);
+        dbg!(v_q);
 
         end_timer!(timer_eval);
 
@@ -174,10 +189,15 @@ where
         end_timer!(timer_open_poly);
 
         let timer_msms = start_timer!(|| "Computing the opening MSMs");
+
+        // debug_assert_eq!(pk.sigma_a.len(), witness_a.len());
         let w_a_proof = E::G1::msm_unchecked(&pk.sigma_a, &witness_a.coeffs);
+        // debug_assert_eq!(pk.sigma_b.len(), witness_b.len());
         let w_b_proof = E::G1::msm_unchecked(&pk.sigma_b, &witness_b.coeffs);
+        // debug_assert_eq!(pk.sigma_q_opening.len(), witness_q.len());
         let q_proof = E::G1::msm_unchecked(&pk.sigma_q_opening, &witness_q.coeffs);
         let u = w_a_proof + w_b_proof + q_proof;
+        // let u =w_a_proof + w_b_proof+ q_proof;
         end_timer!(timer_msms);
         end_timer!(timer_opening);
         Ok(Proof {
@@ -222,8 +242,6 @@ where
                 *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(&bt_i, &assignment);
             });
 
-        let mut w = vec![E::ScalarField::zero(); num_instance_variables];
-        w.extend_from_slice(&witness_assignment);
         let mut w_a = vec![E::ScalarField::zero(); domain_size];
         let mut w_b = vec![E::ScalarField::zero(); domain_size];
 
