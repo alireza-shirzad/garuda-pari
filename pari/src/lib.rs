@@ -31,7 +31,7 @@ mod verifier;
 macro_rules! to_bytes {
     ($x:expr) => {{
         let mut buf = ark_std::vec![];
-        ark_serialize::CanonicalSerialize::serialize_compressed($x, &mut buf).map(|_| buf)
+        ark_serialize::CanonicalSerialize::serialize_uncompressed($x, &mut buf).map(|_| buf)
     }};
 }
 
@@ -80,8 +80,8 @@ mod temp_tests {
         debug_assert!(verifier_cs.is_satisfied().unwrap());
         let input_assignment = &verifier_cs.instance_assignment[1..];
         assert!(Pari::<Bls12_381, StdRng>::verify(
-            proof,
-            vk,
+            &proof,
+            &vk,
             input_assignment
         ));
     }

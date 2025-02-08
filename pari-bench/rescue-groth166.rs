@@ -1,8 +1,11 @@
 use ark_crypto_primitives::crh::rescue::CRH;
-use ark_crypto_primitives::crh::rescue::gr1cs_constraints::{CRHGadget, CRHParametersVar};
+use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
+use ark_crypto_primitives::snark::CircuitSpecificSetupSNARK;
+use ark_crypto_primitives::snark::SNARK;
 use ark_crypto_primitives::sponge::rescue::RescueConfig;
 use ark_ff::{Field, PrimeField};
+use ark_groth16::Groth16;
 use ark_r1cs_std::GR1CSVar;
 use ark_r1cs_std::alloc::AllocVar;
 use ark_r1cs_std::eq::EqGadget;
@@ -21,17 +24,16 @@ use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
-use pari_bench::BenchResult;
-use pari::Pari;
+use ark_groth16::prepare_verifying_key;
 use ark_test_curves::bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
 use num_bigint::BigUint;
+use pari_bench::BenchResult;
 use rayon::ThreadPoolBuilder;
 use std::env;
 use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
-
 const RESCUE_ROUNDS: usize = 12;
 
 /// This is our demo circuit for proving knowledge of the
@@ -74,13 +76,6 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
         let params_g =
             CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();
-        let _ = cs.clone().register_predicate(
-            "XXX",
-            PredicateConstraintSystem::new_polynomial_predicate(2, vec![
-                (F::from(1i8), vec![(0, 5)]),
-                (F::from(-1i8), vec![(1, 1)]),
-            ]),
-        );
 
         let mut input_g = Vec::new();
 
@@ -114,7 +109,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     }
 }
 
-macro_rules! garuda_bench {
+macro_rules! bench {
     ($bench_name:ident, $num_invocations:expr, $num_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
         let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
         let config = create_test_rescue_parameter(&mut rng);
@@ -144,25 +139,20 @@ macro_rules! garuda_bench {
         for _ in 0..$num_iterations {
             let start = ark_std::time::Instant::now();
             let setup_circuit = circuit.clone();
-            let setup_cs =
-                Pari::<$bench_pairing_engine, StdRng>::circuit_to_keygen_cs(setup_circuit)
-                    .unwrap();
-            let (pk, vk) = Pari::<$bench_pairing_engine, StdRng>::keygen(&setup_cs, &mut rng);
+            let (pk, vk) = Groth16::<$bench_pairing_engine>::setup(setup_circuit, &mut rng).unwrap();
+            let pvk = prepare_verifying_key::<$bench_pairing_engine>(&vk);
             setup_time += start.elapsed();
             pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
             vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
             let prover_circuit = circuit.clone();
-            let prover_cs =
-            Pari::<$bench_pairing_engine, StdRng>::circuit_to_prover_cs(prover_circuit)
-                    .unwrap();
             let start = ark_std::time::Instant::now();
-            let proof = Pari::<Bls12_381, StdRng>::prove(&prover_cs, pk).unwrap();
+            let proof = Groth16::<Bls12_381>::prove(&pk, prover_circuit, &mut rng).unwrap();
             prover_time += start.elapsed();
             proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
             let start = ark_std::time::Instant::now();
-            assert!(Pari::<Bls12_381, StdRng>::verify(proof, vk, &[
-                expected_image
-            ],));
+            for _ in 0..100 {
+                assert!(Groth16::<Bls12_381>::verify_with_processed_vk(&pvk, &[expected_image], &proof).unwrap());
+            }
             verifier_time += start.elapsed();
         }
         let cs: gr1cs::ConstraintSystemRef<$bench_field> = gr1cs::ConstraintSystem::new_ref();
@@ -184,7 +174,7 @@ macro_rules! garuda_bench {
             vk_size,
             proof_size,
             prover_time: (prover_time / $num_iterations),
-            verifier_time: (verifier_time / $num_iterations),
+            verifier_time: (verifier_time / $num_iterations) / 100,
             setup_time: (setup_time / $num_iterations),
         };
         bench_result
@@ -203,16 +193,16 @@ fn main() {
         .unwrap();
     // ppol.install
 
-    // garuda_bench!(garuda_bench, 72, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
-    // garuda_bench!(garuda_bench, 144, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
-    // garuda_bench!(garuda_bench, 288, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
-    // garuda_bench!(garuda_bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
-    // garuda_bench!(garuda_bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
-    // garuda_bench!(garuda_bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
-    garuda_bench!(garuda_bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // garuda_bench!(garuda_bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // garuda_bench!(
-    //     garuda_bench,
+    bench!(bench, 72, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(false);
+    // bench!(bench, 144, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(
+    //     bench,
     //     18477,
     //     1,
     //     num_thread,

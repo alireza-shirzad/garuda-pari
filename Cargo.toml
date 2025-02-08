@@ -1,5 +1,5 @@
 [workspace]
-members = ["garuda", "garuda-bench", "pari", "pari-bench"]
+members = [ "bench-utils","garuda", "garuda-bench", "pari", "pari-bench"]
 
 resolver = "2"  # Recommended for workspaces to avoid dependency resolution issues
 

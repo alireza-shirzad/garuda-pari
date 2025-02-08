@@ -87,7 +87,7 @@ impl<F: PrimeField> IOPTranscript<F> {
             ));
         }
 
-        let mut buf = [0u8; 64];
+        let mut buf = [0u8; 16];
         self.transcript.challenge_bytes(label, &mut buf);
         let challenge = F::from_le_bytes_mod_order(&buf);
         self.append_serializable_element(label, &challenge)?;

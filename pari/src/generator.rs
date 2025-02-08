@@ -3,6 +3,7 @@ use std::rc::Rc;
 use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
 use ark_ff::{Field, Zero};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use ark_serialize::CanonicalDeserialize;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -25,45 +26,15 @@ where
     E: Pairing,
     R: RngCore,
 {
-    pub fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn keygen<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::ScalarField: std::convert::From<i32>,
-    {
-        // Start up the constraint System and synthesize the circuit
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
-        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
-        cs.set_mode(SynthesisMode::Setup);
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        cs.finalize();
-        circuit.generate_constraints(cs.clone())?;
-        dbg!(cs.num_constraints());
-        let sr1cs_cs = Sr1csAdapter::r1cs_to_sr1cs(&cs).unwrap();
-        sr1cs_cs.set_instance_outliner(InstanceOutliner {
-            pred_label: SR1CS_PREDICATE_LABEL.to_string(),
-            func: Rc::new(outline_sr1cs),
-        });
-        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
-        end_timer!(timer_synthesize_circuit);
-
-        let timer_inlining = start_timer!(|| "Inlining constraints");
-        sr1cs_cs.finalize();
-        end_timer!(timer_inlining);
-        end_timer!(timer_cs_startup);
-        Ok(sr1cs_cs.into_inner().unwrap())
-    }
-
-    pub fn keygen(
-        cs: &mut ConstraintSystem<E::ScalarField>,
         rng: &mut R,
     ) -> (ProvingKey<E>, VerifyingKey<E>)
     where
         E: Pairing,
         E::ScalarField: Field,
     {
+        let cs = Self::circuit_to_keygen_cs(circuit).unwrap();
         // Check if the constraint system has only one predicate which is Sqaured R1CS
         #[cfg(debug_assertions)]
         {
@@ -89,23 +60,17 @@ where
         let timer_trapdoor_gen = start_timer!(|| "Trapdoor generation and exponentiations");
         let alpha = E::ScalarField::rand(rng);
         let beta = E::ScalarField::rand(rng);
-        let delta_one = E::ScalarField::rand(rng);
         let delta_two = E::ScalarField::rand(rng);
         let tau = E::ScalarField::rand(rng);
 
         let alpha_g = g * alpha;
         let beta_g = g * beta;
-        let delta_one_h = h * delta_one;
         let delta_two_h = h * delta_two;
         let tau_h = h * tau;
-        let delta_one_tau_h = h * (delta_one * tau);
 
-        let delta_one_inverse = delta_one.inverse().unwrap();
         let delta_two_inverse = delta_two.inverse().unwrap();
 
-        let alpha_over_delta_one = alpha * delta_one_inverse;
         let alpha_over_delta_two = alpha * delta_two_inverse;
-        let beta_over_delta_one = beta * delta_one_inverse;
         let beta_over_delta_two = beta * delta_two_inverse;
         end_timer!(timer_trapdoor_gen);
 
@@ -122,7 +87,7 @@ where
         /////////////////////// Computing {a_i(tau)}_{i=n+1}^{k}, {b_i(tau)}_{i=n+1}^{k} ////////////////////////
         let timer_compute_a_b = start_timer!(|| "Computing a_i(tau)'s and b_i(tau)'s");
         let (a, b) =
-            Self::compute_ai_bi_at_tau::<GeneralEvaluationDomain<E::ScalarField>>(tau, cs, domain)
+            Self::compute_ai_bi_at_tau::<GeneralEvaluationDomain<E::ScalarField>>(tau, &cs, domain)
                 .unwrap();
         end_timer!(timer_compute_a_b);
         /////////////////////// Succinct Index ///////////////////////
@@ -159,7 +124,7 @@ where
         let timer_sigma_a = start_timer!(|| "Computing sigma_a");
         let sigma_a_powers = powers_of_tau[0..max_degree + 1]
             .par_iter()
-            .map(|tau_to_i| *tau_to_i * alpha_over_delta_one)
+            .map(|tau_to_i| *tau_to_i * alpha)
             .collect::<Vec<_>>();
         let sigma_a = table.batch_mul(&sigma_a_powers);
         end_timer!(timer_sigma_a);
@@ -170,7 +135,7 @@ where
         let timer_sigma_b = start_timer!(|| "Computing sigma_b");
         let sigma_b_powers = powers_of_tau[0..max_degree + 1]
             .par_iter()
-            .map(|tau_to_i| *tau_to_i * beta_over_delta_one)
+            .map(|tau_to_i| *tau_to_i * beta)
             .collect::<Vec<_>>();
         let sigma_b = table.batch_mul(&sigma_b_powers);
         end_timer!(timer_sigma_b);
@@ -179,9 +144,10 @@ where
         // Construct sigma_q_opening, It's denoted by sigma_q' in the paper: step 7, fig 6, https://eprint.iacr.org/2024/1245.pdf
         // sigma_q_opening = [(tau^i/delta_1)G]_{i=1}^k
         let timer_sigma_q_opening = start_timer!(|| "Computing sigma_q_opening");
+        //TODO: Remove the bellow line
         let sigma_q_opening_powers = powers_of_tau[0..max_degree + 1]
             .par_iter()
-            .map(|tau| *tau * delta_one_inverse)
+            .map(|tau| *tau)
             .collect::<Vec<_>>();
         let sigma_q_opening = table.batch_mul(&sigma_q_opening_powers);
         end_timer!(timer_sigma_q_opening);
@@ -197,7 +163,7 @@ where
             .par_iter()
             .zip(&b[num_public_inputs..])
             .map(|(a_i, b_i)| *a_i * alpha_over_delta_two + *b_i * beta_over_delta_two)
-            // .map(|(a_i, b_i)|  *a_i * alpha_over_delta_two + *b_i * beta_over_delta_two)    
+            // .map(|(a_i, b_i)|  *a_i * alpha_over_delta_two + *b_i * beta_over_delta_two)
             .collect::<Vec<_>>();
         let sigma = table.batch_mul(&sigma_powers);
         end_timer!(timer_sigma);
@@ -218,11 +184,11 @@ where
             succinct_index,
             alpha_g,
             beta_g,
-            delta_one_h,
+            delta_two_h_prep: delta_two_h.into().into(),
             delta_two_h,
             tau_h,
-            delta_one_tau_h,
             g,
+            h_prep: h.into().into(),
             h,
         };
 
@@ -239,9 +205,39 @@ where
         (pk, vk)
     }
 
+    fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+        circuit: C,
+    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    where
+        E: Pairing,
+        E::ScalarField: Field,
+        E::ScalarField: std::convert::From<i32>,
+    {
+        // Start up the constraint System and synthesize the circuit
+        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
+        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+        cs.set_mode(SynthesisMode::Setup);
+        cs.set_optimization_goal(OptimizationGoal::Constraints);
+        circuit.generate_constraints(cs.clone())?;
+        cs.finalize();
+        let sr1cs_cs = Sr1csAdapter::r1cs_to_sr1cs(&cs).unwrap();
+        sr1cs_cs.set_instance_outliner(InstanceOutliner {
+            pred_label: SR1CS_PREDICATE_LABEL.to_string(),
+            func: Rc::new(outline_sr1cs),
+        });
+        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
+        end_timer!(timer_synthesize_circuit);
+
+        let timer_inlining = start_timer!(|| "Inlining constraints");
+        sr1cs_cs.finalize();
+        end_timer!(timer_inlining);
+        end_timer!(timer_cs_startup);
+        Ok(sr1cs_cs.into_inner().unwrap())
+    }
+
     fn compute_ai_bi_at_tau<D: EvaluationDomain<E::ScalarField>>(
         tau: E::ScalarField,
-        new_cs: &mut ConstraintSystem<E::ScalarField>,
+        new_cs: &ConstraintSystem<E::ScalarField>,
         domain: GeneralEvaluationDomain<E::ScalarField>,
     ) -> Result<(Vec<E::ScalarField>, Vec<E::ScalarField>), SynthesisError> {
         // Compute all the lagrange polynomials

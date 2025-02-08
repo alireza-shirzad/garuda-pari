@@ -41,7 +41,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-r1cs-std",
- "ark-relations 0.5.1",
+ "ark-relations",
  "ark-serialize",
  "ark-snark",
  "ark-std",
@@ -130,6 +130,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ark-groth16"
+version = "0.5.0"
+dependencies = [
+ "ark-crypto-primitives",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-relations",
+ "ark-serialize",
+ "ark-std",
+]
+
+[[package]]
 name = "ark-poly"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -151,7 +164,7 @@ version = "0.5.0"
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-relations 0.5.1",
+ "ark-relations",
  "ark-std",
  "educe",
  "num-bigint",
@@ -170,17 +183,6 @@ dependencies = [
  "ark-std",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "ark-relations"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec46ddc93e7af44bcab5230937635b06fb5744464dd6a7e7b083e80ebd274384"
-dependencies = [
- "ark-ff",
- "ark-std",
- "tracing",
 ]
 
 [[package]]
@@ -211,11 +213,9 @@ dependencies = [
 [[package]]
 name = "ark-snark"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d368e2848c2d4c129ce7679a7d0d2d612b6a274d3ea6a13bad4445d61b381b88"
 dependencies = [
  "ark-ff",
- "ark-relations 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-relations",
  "ark-serialize",
  "ark-std",
 ]
@@ -254,6 +254,10 @@ name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
+
+[[package]]
+name = "bench-utils"
+version = "0.1.0"
 
 [[package]]
 name = "blake2"
@@ -446,7 +450,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-poly",
- "ark-relations 0.5.1",
+ "ark-relations",
  "ark-serialize",
  "ark-std",
  "displaydoc",
@@ -464,7 +468,7 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "ark-r1cs-std",
- "ark-relations 0.5.1",
+ "ark-relations",
  "ark-serialize",
  "ark-std",
  "ark-test-curves",
@@ -617,7 +621,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-poly",
- "ark-relations 0.5.1",
+ "ark-relations",
  "ark-serialize",
  "ark-std",
  "displaydoc",
@@ -629,6 +633,27 @@ dependencies = [
 [[package]]
 name = "pari-bench"
 version = "0.1.0"
+dependencies = [
+ "ark-crypto-primitives",
+ "ark-ec",
+ "ark-ff",
+ "ark-groth16",
+ "ark-poly",
+ "ark-r1cs-std",
+ "ark-relations",
+ "ark-serialize",
+ "ark-std",
+ "ark-test-curves",
+ "csv",
+ "displaydoc",
+ "merlin",
+ "num-bigint",
+ "pari",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tracing",
+]
 
 [[package]]
 name = "paste"

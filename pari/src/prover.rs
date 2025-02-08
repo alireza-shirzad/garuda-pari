@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{ops::Neg, rc::Rc};
 
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::{Field, Zero};
@@ -30,48 +30,18 @@ where
     E: Pairing,
     R: RngCore,
 {
-    pub fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::ScalarField: std::convert::From<i32>,
-    {
-        // Start up the constraint System and synthesize the circuit
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
-        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        cs.finalize();
-        circuit.generate_constraints(cs.clone())?;
-        let sr1cs_cs =
-            Sr1csAdapter::r1cs_to_sr1cs_with_assgnmnt(&mut cs.into_inner().unwrap()).unwrap();
-        sr1cs_cs.set_instance_outliner(InstanceOutliner {
-            pred_label: SR1CS_PREDICATE_LABEL.to_string(),
-            func: Rc::new(outline_sr1cs),
-        });
-        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
-        end_timer!(timer_synthesize_circuit);
-
-        let timer_inlining = start_timer!(|| "Inlining constraints");
-        sr1cs_cs.finalize();
-        dbg!(sr1cs_cs.num_constraints());
-        dbg!(sr1cs_cs.num_witness_variables());
-        dbg!(sr1cs_cs.num_instance_variables());
-        end_timer!(timer_inlining);
-        end_timer!(timer_cs_startup);
-        Ok(sr1cs_cs.into_inner().unwrap())
-    }
-
-    pub fn prove(
-        cs: &mut ConstraintSystem<E::ScalarField>,
-        pk: ProvingKey<E>,
+        pk: &ProvingKey<E>,
     ) -> Result<Proof<E>, SynthesisError>
     where
+        E::G1Affine: Neg<Output = E::G1Affine>,
         E: Pairing,
         E::ScalarField: Field,
         E::ScalarField: std::convert::From<i32>,
     {
+        let timer_p = start_timer!(|| "Total Proving time");
+        let cs = Self::circuit_to_prover_cs(circuit)?;
         // Check if the constraint system has only one predicate which is Squared R1CS
         #[cfg(debug_assertions)]
         {
@@ -131,10 +101,6 @@ where
         let w_b_hat = Evaluations::from_vec_and_domain(w_b, domain).interpolate();
         end_timer!(timer_interp);
 
-        dbg!(z_a_hat.degree());
-        dbg!(z_b_hat.degree());
-        dbg!(w_a_hat.degree());
-        dbg!(w_b_hat.degree());
         /////////////////////// Computing the quotient polynomial ///////////////////////
         let timer_quotient = start_timer!(|| "Computing the quotient polynomial");
         let (q, _) = (&z_a_hat * &z_a_hat - &z_b_hat).divide_by_vanishing_poly(domain);
@@ -150,7 +116,7 @@ where
         let t_q = <E::G1 as VariableBaseMSM>::msm_unchecked(&pk.sigma_q_comm, &q);
         let t = t_ab + t_q;
         // let t = t_ab+t_q;
-        let t: E::G1Affine = t.into();
+        let t: E::G1Affine = -t.into();
         end_timer!(timer_batch_commit);
 
         /////////////////////// Random Evaluation of the polynomials ///////////////////////
@@ -165,12 +131,6 @@ where
         let v_a = w_a_hat.evaluate(&challenge);
         let v_b = w_b_hat.evaluate(&challenge);
         let v_q = q.evaluate(&challenge);
-
-        dbg!(z_a_hat.evaluate(&challenge));
-        dbg!(z_b_hat.evaluate(&challenge));
-        dbg!(v_a);
-        dbg!(v_b);
-        dbg!(v_q);
 
         end_timer!(timer_eval);
 
@@ -200,12 +160,44 @@ where
         // let u =w_a_proof + w_b_proof+ q_proof;
         end_timer!(timer_msms);
         end_timer!(timer_opening);
-        Ok(Proof {
+        let output = Ok(Proof {
             t_g: t,
             u_g: u.into(),
             v_a,
             v_b,
-        })
+        });
+        end_timer!(timer_p);
+        output
+    }
+
+    fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+        circuit: C,
+    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    where
+        E: Pairing,
+        E::ScalarField: Field,
+        E::ScalarField: std::convert::From<i32>,
+    {
+        // Start up the constraint System and synthesize the circuit
+        let timer_cs_startup = start_timer!(|| "Prover constraint System Startup");
+        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+        cs.set_optimization_goal(OptimizationGoal::Constraints);
+        circuit.generate_constraints(cs.clone())?;
+        cs.finalize();
+        let sr1cs_cs =
+            Sr1csAdapter::r1cs_to_sr1cs_with_assgnmnt(&mut cs.into_inner().unwrap()).unwrap();
+        sr1cs_cs.set_instance_outliner(InstanceOutliner {
+            pred_label: SR1CS_PREDICATE_LABEL.to_string(),
+            func: Rc::new(outline_sr1cs),
+        });
+        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
+        end_timer!(timer_synthesize_circuit);
+
+        let timer_inlining = start_timer!(|| "Inlining constraints");
+        sr1cs_cs.finalize();
+        end_timer!(timer_inlining);
+        end_timer!(timer_cs_startup);
+        Ok(sr1cs_cs.into_inner().unwrap())
     }
 
     fn compute_wa_wb_za_zb(

@@ -11,7 +11,6 @@ ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
 ark-crypto-primitives = { path = "../../crypto-primitives/crypto-primitives", default-features = false, features = [
-    "snark",
     "crh",
     "gr1cs",
 ] }

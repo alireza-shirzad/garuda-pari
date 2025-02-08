@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 pari = { path = "../pari" }
-ark-groth16 = { version = "0.5.0", default-features = false }
+ark-groth16 = { path = "../../groth16", default-features = false }
 ark-serialize = { workspace = true }
 ark-ff = { workspace = true }
 ark-ec = { workspace = true }
@@ -35,10 +35,10 @@ name = "rescue-pari"
 path = "./rescue-pari.rs"
 harness = false
 
-# [[bench]]
-# name = "rescue-groth16"
-# path = "./rescue-groth16.rs"
-# harness = false
+[[bench]]
+name = "rescue-groth16"
+path = "./rescue-groth16.rs"
+harness = false
 
 [features]
 default = ["std", "parallel"]
