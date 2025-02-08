@@ -32,37 +32,8 @@ where
     E: Pairing,
     R: RngCore,
 {
-    pub fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn keygen<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::ScalarField: std::convert::From<i32>,
-    {
-        // Start up the constraint System and synthesize the circuit
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
-        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        cs.set_mode(SynthesisMode::Setup);
-        cs.set_instance_outliner(InstanceOutliner {
-            pred_label: R1CS_PREDICATE_LABEL.to_string(),
-            func: Rc::new(outline_r1cs),
-        });
-        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
-        circuit.generate_constraints(cs.clone())?;
-        end_timer!(timer_synthesize_circuit);
-
-        let timer_inlining = start_timer!(|| "Inlining constraints");
-        cs.finalize();
-
-        end_timer!(timer_inlining);
-        end_timer!(timer_cs_startup);
-        Ok(cs.into_inner().unwrap())
-    }
-
-    pub fn keygen(
-        cs: ConstraintSystem<E::ScalarField>,
         rng: &mut R,
     ) -> (ProvingKey<E>, VerifyingKey<E>)
     where
@@ -70,6 +41,7 @@ where
         E::ScalarField: Field,
     {
         let timer_generator = start_timer!(|| "Generator");
+        let cs = Self::circuit_to_keygen_cs(circuit).unwrap();
         let timer_indexer = start_timer!(|| "Constraint System Startup");
         let index = Index::new(&cs);
         end_timer!(timer_indexer);
@@ -129,6 +101,35 @@ where
         end_timer!(timer_generator);
 
         (pk, vk)
+    }
+
+    fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+        circuit: C,
+    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    where
+        E: Pairing,
+        E::ScalarField: Field,
+        E::ScalarField: std::convert::From<i32>,
+    {
+        // Start up the constraint System and synthesize the circuit
+        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
+        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+        cs.set_optimization_goal(OptimizationGoal::Constraints);
+        cs.set_mode(SynthesisMode::Setup);
+        cs.set_instance_outliner(InstanceOutliner {
+            pred_label: R1CS_PREDICATE_LABEL.to_string(),
+            func: Rc::new(outline_r1cs),
+        });
+        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
+        circuit.generate_constraints(cs.clone())?;
+        end_timer!(timer_synthesize_circuit);
+
+        let timer_inlining = start_timer!(|| "Inlining constraints");
+        cs.finalize();
+
+        end_timer!(timer_inlining);
+        end_timer!(timer_cs_startup);
+        Ok(cs.into_inner().unwrap())
     }
 
     fn create_sel_polynomials(

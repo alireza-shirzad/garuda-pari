@@ -10,10 +10,10 @@ use std::fmt::Debug;
 
 use crate::arithmetic::eq_eval;
 use crate::piop::{errors::PolyIOPErrors, sum_check::SumCheck, PolyIOP};
-use crate::transcript::IOPTranscript;
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use ark_std::{end_timer, start_timer};
+use shared_utils::transcript::IOPTranscript;
 
 /// A zero check IOP subclaim for `f(x)` consists of the following:
 ///   - the initial challenge vector r which is used to build eq(x, r) in

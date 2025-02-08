@@ -16,7 +16,6 @@ mod generator;
 mod piop;
 mod prover;
 mod tests;
-mod transcript;
 mod utils;
 mod verifier;
 

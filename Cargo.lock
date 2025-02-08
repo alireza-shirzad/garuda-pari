@@ -233,17 +233,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ark-test-curves"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cc137bb3271671a597ae79157030f88affe9fa7975207c3b781a01cb9ed0372"
-dependencies = [
- "ark-ec",
- "ark-ff",
- "ark-std",
-]
-
-[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -254,10 +243,6 @@ name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
-
-[[package]]
-name = "bench-utils"
-version = "0.1.0"
 
 [[package]]
 name = "blake2"
@@ -456,6 +441,7 @@ dependencies = [
  "displaydoc",
  "merlin",
  "rayon",
+ "shared-utils",
  "tracing",
 ]
 
@@ -463,6 +449,7 @@ dependencies = [
 name = "garuda-bench"
 version = "0.1.0"
 dependencies = [
+ "ark-bls12-381",
  "ark-crypto-primitives",
  "ark-ec",
  "ark-ff",
@@ -471,15 +458,12 @@ dependencies = [
  "ark-relations",
  "ark-serialize",
  "ark-std",
- "ark-test-curves",
- "csv",
  "displaydoc",
  "garuda",
  "merlin",
  "num-bigint",
  "rayon",
- "serde",
- "serde_json",
+ "shared-utils",
  "tracing",
 ]
 
@@ -627,6 +611,7 @@ dependencies = [
  "displaydoc",
  "merlin",
  "rayon",
+ "shared-utils",
  "tracing",
 ]
 
@@ -634,6 +619,7 @@ dependencies = [
 name = "pari-bench"
 version = "0.1.0"
 dependencies = [
+ "ark-bls12-381",
  "ark-crypto-primitives",
  "ark-ec",
  "ark-ff",
@@ -643,15 +629,12 @@ dependencies = [
  "ark-relations",
  "ark-serialize",
  "ark-std",
- "ark-test-curves",
- "csv",
  "displaydoc",
  "merlin",
  "num-bigint",
  "pari",
  "rayon",
- "serde",
- "serde_json",
+ "shared-utils",
  "tracing",
 ]
 
@@ -796,6 +779,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shared-utils"
+version = "0.1.0"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "csv",
+ "displaydoc",
+ "merlin",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

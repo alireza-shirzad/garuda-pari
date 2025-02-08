@@ -1,11 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_relations::gr1cs::{
-    predicate::PredicateType, ConstraintSystem, ConstraintSystemRef, Label, Matrix,
-};
 use ark_serialize::CanonicalSerialize;
-use ark_std::log2;
-use std::collections::BTreeMap;
 
 /// The proving key for Pari
 /// The naming matches the one in the figure 6, item 8 of the paper: https://eprint.iacr.org/2024/1245.pdf
@@ -44,14 +39,16 @@ impl<E: Pairing> CanonicalSerialize for VerifyingKey<E> {
         compress: ark_serialize::Compress,
     ) -> Result<(), ark_serialize::SerializationError> {
         // Serialize each field in order
-        self.succinct_index.serialize_with_mode(&mut writer, compress)?;
+        self.succinct_index
+            .serialize_with_mode(&mut writer, compress)?;
         self.alpha_g.serialize_with_mode(&mut writer, compress)?;
         self.beta_g.serialize_with_mode(&mut writer, compress)?;
-        self.delta_two_h.serialize_with_mode(&mut writer, compress)?;
+        self.delta_two_h
+            .serialize_with_mode(&mut writer, compress)?;
         self.tau_h.serialize_with_mode(&mut writer, compress)?;
         self.g.serialize_with_mode(&mut writer, compress)?;
         self.h.serialize_with_mode(&mut writer, compress)?;
-        
+
         Ok(())
     }
 
@@ -76,30 +73,6 @@ pub struct SuccinctIndex {
     pub num_constraints: usize,
     /// The length of the instance variables
     pub instance_len: usize,
-}
-
-#[derive(Debug, Clone)]
-/// A datastructure representing the index of the Square Rank 1 Constraint System (SR1CS)
-pub(crate) struct Index<F: Field> {
-    pub instance_len: usize,
-    pub log_num_constraints: usize,
-    pub total_variables_len: usize,
-    pub a_matrice: Matrix<F>,
-    pub b_matrice: Matrix<F>,
-}
-
-impl<F: Field> Index<F> {
-    pub fn new(constraint_system_ref: &ConstraintSystem<F>) -> Self {
-        //TODO: Get the SR1CS matrices from the constraint system
-        Self {
-            instance_len: constraint_system_ref.num_instance_variables(),
-            log_num_constraints: log2(constraint_system_ref.num_constraints()) as usize,
-            total_variables_len: constraint_system_ref.num_instance_variables()
-                + constraint_system_ref.num_witness_variables(),
-            a_matrice: todo!(),
-            b_matrice: todo!(),
-        }
-    }
 }
 
 #[derive(CanonicalSerialize, Clone)]

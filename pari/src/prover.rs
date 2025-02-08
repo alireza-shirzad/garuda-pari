@@ -19,12 +19,11 @@ use ark_std::{cfg_iter_mut, end_timer, rand::RngCore, start_timer};
 
 use crate::{
     data_structures::{Proof, ProvingKey, VerifyingKey},
-    transcript::IOPTranscript,
     Pari,
 };
-
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
+use shared_utils::transcript::IOPTranscript;
 impl<E, R> Pari<E, R>
 where
     E: Pairing,
@@ -57,7 +56,6 @@ where
         /////////////////////// Extract the constraint system  information ///////////////////////
         let timer_extract_info = start_timer!(|| "Extract constraint system information");
         let num_constraints = cs.num_constraints();
-        let num_instance_variables = cs.num_instance_variables();
         let instance_assignment = &cs.instance_assignment;
         let witness_assignment = &cs.witness_assignment;
         let matrices = &cs.to_matrices().unwrap()[SR1CS_PREDICATE_LABEL];
@@ -87,7 +85,6 @@ where
             &matrices[1],
             instance_assignment,
             witness_assignment,
-            num_instance_variables,
             num_constraints,
         )
         .unwrap();
@@ -200,13 +197,13 @@ where
         Ok(sr1cs_cs.into_inner().unwrap())
     }
 
+    #[allow(clippy::type_complexity)]
     fn compute_wa_wb_za_zb(
         domain: GeneralEvaluationDomain<E::ScalarField>,
         a_mat: &Matrix<E::ScalarField>,
         b_mat: &Matrix<E::ScalarField>,
         instance_assignment: &[E::ScalarField],
         witness_assignment: &[E::ScalarField],
-        num_instance_variables: usize,
         num_constraints: usize,
     ) -> Result<
         (
@@ -218,7 +215,7 @@ where
         let mut assignment: Vec<E::ScalarField> = instance_assignment.to_vec();
         let mut punctured_assignment: Vec<E::ScalarField> =
             vec![E::ScalarField::zero(); assignment.len()];
-        assignment.extend_from_slice(&witness_assignment);
+        assignment.extend_from_slice(witness_assignment);
         punctured_assignment.extend_from_slice(witness_assignment);
 
         let domain_size = domain.size();
@@ -230,8 +227,8 @@ where
             .zip(a_mat)
             .zip(b_mat)
             .for_each(|(((a, b), at_i), bt_i)| {
-                *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(&at_i, &assignment);
-                *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(&bt_i, &assignment);
+                *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(at_i, &assignment);
+                *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(bt_i, &assignment);
             });
 
         let mut w_a = vec![E::ScalarField::zero(); domain_size];
@@ -243,11 +240,11 @@ where
             .zip(b_mat)
             .for_each(|(((a, b), at_i), bt_i)| {
                 *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
-                    &at_i,
+                    at_i,
                     &punctured_assignment,
                 );
                 *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
-                    &bt_i,
+                    bt_i,
                     &punctured_assignment,
                 );
             });

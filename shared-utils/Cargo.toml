@@ -1,0 +1,14 @@
+[package]
+name = "shared-utils"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+csv = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ark-serialize = { workspace = true }
+ark-std = { workspace = true }
+ark-ff = { workspace = true }
+merlin = { workspace = true }
+displaydoc = { workspace = true }

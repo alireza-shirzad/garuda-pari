@@ -3,7 +3,6 @@ use std::rc::Rc;
 use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
 use ark_ff::{Field, Zero};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_serialize::CanonicalDeserialize;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -86,9 +85,7 @@ where
         let max_degree = domain_size - 1;
         /////////////////////// Computing {a_i(tau)}_{i=n+1}^{k}, {b_i(tau)}_{i=n+1}^{k} ////////////////////////
         let timer_compute_a_b = start_timer!(|| "Computing a_i(tau)'s and b_i(tau)'s");
-        let (a, b) =
-            Self::compute_ai_bi_at_tau::<GeneralEvaluationDomain<E::ScalarField>>(tau, &cs, domain)
-                .unwrap();
+        let (a, b) = Self::compute_ai_bi_at_tau(tau, &cs, domain).unwrap();
         end_timer!(timer_compute_a_b);
         /////////////////////// Succinct Index ///////////////////////
         let timer_succinct_index = start_timer!(|| "Generating Succinct Index");
@@ -235,7 +232,8 @@ where
         Ok(sr1cs_cs.into_inner().unwrap())
     }
 
-    fn compute_ai_bi_at_tau<D: EvaluationDomain<E::ScalarField>>(
+    #[allow(clippy::type_complexity)]
+    fn compute_ai_bi_at_tau(
         tau: E::ScalarField,
         new_cs: &ConstraintSystem<E::ScalarField>,
         domain: GeneralEvaluationDomain<E::ScalarField>,

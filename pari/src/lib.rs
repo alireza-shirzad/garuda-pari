@@ -18,22 +18,7 @@ use ark_std::marker::PhantomData;
 pub mod data_structures;
 mod generator;
 mod prover;
-// Repeated Module from garuda
-mod transcript;
-// mod utils;
 mod verifier;
-
-//TODO: Repeated code from garuda
-/// Takes as input a struct, and converts them to a series of bytes. All traits
-/// that implement `CanonicalSerialize` can be automatically converted to bytes
-/// in this manner.
-#[macro_export]
-macro_rules! to_bytes {
-    ($x:expr) => {{
-        let mut buf = ark_std::vec![];
-        ark_serialize::CanonicalSerialize::serialize_uncompressed($x, &mut buf).map(|_| buf)
-    }};
-}
 
 /// The SNARK of [[Pari]](https://eprint.iacr.org/2024/1245.pdf).
 pub struct Pari<E: Pairing, R: RngCore> {
@@ -64,25 +49,21 @@ mod temp_tests {
     #[test]
     fn temp() {
         let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
+        let a_val = Fr::rand(&mut rng);
+        let b_val = Fr::rand(&mut rng);
         let circuit = MySillyCircuit {
-            a: Some(Fr::rand(&mut rng)),
-            b: Some(Fr::rand(&mut rng)),
+            a: Some(a_val),
+            b: Some(b_val),
         };
-        let mut setup_cs =
-            Pari::<Bls12_381, StdRng>::circuit_to_keygen_cs(circuit.clone()).unwrap();
         let (pk, vk): (ProvingKey<Bls12_381>, VerifyingKey<Bls12_381>) =
-            Pari::<Bls12_381, StdRng>::keygen(&mut setup_cs, &mut rng);
-        let mut prover_cs =
-            Pari::<Bls12_381, StdRng>::circuit_to_prover_cs(circuit.clone()).unwrap();
-        let proof: Proof<Bls12_381> = Pari::<Bls12_381, StdRng>::prove(&mut prover_cs, pk).unwrap();
-
-        let mut verifier_cs = Pari::<Bls12_381, StdRng>::circuit_to_prover_cs(circuit).unwrap();
-        debug_assert!(verifier_cs.is_satisfied().unwrap());
-        let input_assignment = &verifier_cs.instance_assignment[1..];
+            Pari::<Bls12_381, StdRng>::keygen(circuit.clone(), &mut rng);
+        let proof: Proof<Bls12_381> =
+            Pari::<Bls12_381, StdRng>::prove(circuit.clone(), &pk).unwrap();
+        let input_assignment = [a_val * b_val];
         assert!(Pari::<Bls12_381, StdRng>::verify(
             &proof,
             &vk,
-            input_assignment
+            &input_assignment
         ));
     }
 }

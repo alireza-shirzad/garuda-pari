@@ -1,2 +1,2 @@
 Curve,Num Threads,Num Invocations,Num Constraints,Predicate Constraints,Num KeyGen Iterations,Setup Time (s),PK Size,VK Size,Num Prover Iterations,Prover Time (s),Proof Size,Num Verifier Iterations,Verifier Time (ms)
-ark_ec::models::bls12::Bls12<ark_bls12_381::curves::Config>,4,1154,1163235,"{""R1CS"":1163235}",1,151.860863959,916977704,448,1,114.118059583,160,1,1.385458
+ark_ec::models::bls12::Bls12<ark_test_curves::bls12_381::pairing::Config>,1,72,20451,"{""R1CS"":3,""XXX"":20448}",1,1.960752125,6241338,2369,2,0.601737958,5586,100,9.400599

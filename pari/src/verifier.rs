@@ -1,18 +1,14 @@
-use std::ops::Neg;
-
 use crate::{
     data_structures::{Proof, VerifyingKey},
-    transcript::IOPTranscript,
     Pari,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{FftField, Field, Zero};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_std::{end_timer, rand::RngCore, start_timer};
-
+use shared_utils::transcript::IOPTranscript;
 impl<E, R> Pari<E, R>
 where
-    // E::G1Affine: Neg<Output = E::G1Affine>,
     E: Pairing,
     R: RngCore,
 {
@@ -73,11 +69,15 @@ where
 
         let timer_pairing = start_timer!(|| "Final Pairing");
 
-        let right_first_right = vk.tau_h ;
+        let right_first_right = vk.tau_h;
         let right_second_left = vk.alpha_g * v_a + vk.beta_g * v_b + vk.g * v_q - *u_g * challenge;
         let right = E::multi_pairing(
             [t_g, u_g, &right_second_left.into()],
-            [vk.delta_two_h_prep.clone(), right_first_right.into().into(), vk.h_prep.clone()],
+            [
+                vk.delta_two_h_prep.clone(),
+                right_first_right.into().into(),
+                vk.h_prep.clone(),
+            ],
         );
         assert!(right.is_zero());
         end_timer!(timer_pairing);

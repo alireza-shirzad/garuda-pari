@@ -12,7 +12,6 @@ use crate::{
         prelude::{IOPProof, ZeroCheck},
         PolyIOP,
     },
-    transcript::IOPTranscript,
     utils::stack_matrices,
     Garuda,
 };
@@ -31,42 +30,15 @@ use ark_relations::gr1cs::{
     SynthesisError, R1CS_PREDICATE_LABEL,
 };
 use ark_std::{end_timer, iterable::Iterable, rand::RngCore, start_timer, sync::Arc};
+use shared_utils::transcript::IOPTranscript;
 impl<E, R> Garuda<E, R>
 where
     E: Pairing,
     R: RngCore,
 {
-    pub fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::ScalarField: std::convert::From<i32>,
-    {
-        // Start up the constraint System and synthesize the circuit
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
-        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        cs.set_instance_outliner(InstanceOutliner {
-            pred_label: R1CS_PREDICATE_LABEL.to_string(),
-            func: Rc::new(outline_r1cs),
-        });
-        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
-        circuit.generate_constraints(cs.clone())?;
-        end_timer!(timer_synthesize_circuit);
-
-        let timer_inlining = start_timer!(|| "Inlining constraints");
-        cs.finalize();
-
-        end_timer!(timer_inlining);
-        end_timer!(timer_cs_startup);
-        Ok(cs.into_inner().unwrap())
-    }
-
-    pub fn prove(
-        cs: ConstraintSystem<E::ScalarField>,
-        pk: ProvingKey<E>,
+        pk: &ProvingKey<E>,
     ) -> Result<Proof<E>, SynthesisError>
     where
         E: Pairing,
@@ -74,7 +46,7 @@ where
         E::ScalarField: std::convert::From<i32>,
     {
         let timer_prove = start_timer!(|| "Prove");
-
+        let cs = Self::circuit_to_prover_cs(circuit)?;
         // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
         let timer_extract_i_x_w =
             start_timer!(|| "Extract NP index, intance, witness and extended witness");
@@ -157,7 +129,7 @@ where
             .individual_comms
             .clone()
             .into_iter()
-            .chain(match pk.verifying_key.sel_batched_comm {
+            .chain(match pk.verifying_key.sel_batched_comm.clone() {
                 Some(sel_comms) => sel_comms.individual_comms,
                 None => Vec::with_capacity(0),
             })
@@ -166,7 +138,7 @@ where
         let polys_to_be_opened: Vec<DenseMultilinearExtension<<E>::ScalarField>> = mw_polys
             .clone()
             .into_iter()
-            .chain(pk.sel_polys.unwrap_or(Vec::with_capacity(0)))
+            .chain(pk.sel_polys.clone().unwrap_or(Vec::with_capacity(0)))
             .collect();
 
         // open the commitments
@@ -197,6 +169,33 @@ where
         end_timer!(timer_prove);
 
         result
+    }
+    fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+        circuit: C,
+    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    where
+        E: Pairing,
+        E::ScalarField: Field,
+        E::ScalarField: std::convert::From<i32>,
+    {
+        // Start up the constraint System and synthesize the circuit
+        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
+        let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+        cs.set_optimization_goal(OptimizationGoal::Constraints);
+        cs.set_instance_outliner(InstanceOutliner {
+            pred_label: R1CS_PREDICATE_LABEL.to_string(),
+            func: Rc::new(outline_r1cs),
+        });
+        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
+        circuit.generate_constraints(cs.clone())?;
+        end_timer!(timer_synthesize_circuit);
+
+        let timer_inlining = start_timer!(|| "Inlining constraints");
+        cs.finalize();
+
+        end_timer!(timer_inlining);
+        end_timer!(timer_cs_startup);
+        Ok(cs.into_inner().unwrap())
     }
 
     #[allow(clippy::type_complexity)]

@@ -1,3 +1,4 @@
+use ark_bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
@@ -19,17 +20,14 @@ use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
-use ark_test_curves::bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
 use num_bigint::BigUint;
 use pari::Pari;
-use pari_bench::BenchResult;
 use rayon::ThreadPoolBuilder;
+use shared_utils::BenchResult;
 use std::any::type_name;
 use std::env;
-use std::fs::File;
-use std::path::Path;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const RESCUE_ROUNDS: usize = 12;
 
@@ -47,24 +45,24 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
     rng: &mut impl Rng,
 ) -> RescueConfig<F> {
     let mut mds = vec![vec![]; 4];
-    for i in 0..4 {
+    for row in mds.iter_mut() {
         for _ in 0..4 {
-            mds[i].push(F::rand(rng));
+            row.push(F::rand(rng));
         }
     }
 
     let mut ark = vec![vec![]; 25];
-    for i in 0..(2 * RESCUE_ROUNDS + 1) {
+    ark.iter_mut().take(2 * RESCUE_ROUNDS + 1).for_each(|row| {
         for _ in 0..4 {
-            ark[i].push(F::rand(rng));
+            row.push(F::rand(rng));
         }
-    }
+    });
     let alpha_inv: BigUint = BigUint::from_str(
         "20974350070050476191779096203274386335076221000211055129041463479975432473805",
     )
     .unwrap();
-    let params = RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1);
-    params
+
+    RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1)
 }
 
 impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
@@ -124,9 +122,6 @@ macro_rules! bench {
         let mut prover_time = Duration::new(0, 0);
         let mut keygen_time = Duration::new(0, 0);
         let mut verifier_time = Duration::new(0, 0);
-        let mut pk_size: usize = 0;
-        let mut vk_size: usize = 0;
-        let mut proof_size: usize = 0;
         let circuit = RescueDemo::<$bench_field> {
             input: Some(input.clone()),
             image: Some(expected_image),
@@ -142,8 +137,8 @@ macro_rules! bench {
             (pk, vk) = Pari::<$bench_pairing_engine, StdRng>::keygen(setup_circuit, &mut rng);
             keygen_time += start.elapsed();
         }
-        pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
-        vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
+        let pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
+        let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
         let prover_circuit = circuit.clone();
         let mut proof = Pari::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
         for _ in 0..$num_keygen_iterations {
@@ -152,7 +147,7 @@ macro_rules! bench {
             proof = Pari::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
             prover_time += start.elapsed();
         }
-        proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
+        let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
         let start = ark_std::time::Instant::now();
         for _ in 0..$num_verifier_iterations {
             assert!(Pari::<$bench_pairing_engine, StdRng>::verify(
@@ -201,21 +196,22 @@ fn main() {
         .build_global()
         .unwrap();
 
-    bench!(bench, 72, 1, 2, 100, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv("pari.csv",false);
-    // bench!(bench, 144, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(
-    //     bench,
-    //     18477,
-    //     1,
-    //     num_thread,
-    //     Bls12_381,
-    //     BlsFr12_381_Fr
-    // )
-    // .save_to_csv(true);
+    // let _ = bench!(bench, 72, 1, 10, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", false);
+    // let _ = bench!(bench, 144, 1, 5, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 288, 1, 2, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 577, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    let _ = bench!(bench, 1154, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+        .save_to_csv("pari.csv", false);
+    // let _ = bench!(bench, 2309, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 4619, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 9238, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 18477, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+        // .save_to_csv("pari.csv", true);
 }

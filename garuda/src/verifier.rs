@@ -3,7 +3,6 @@ use crate::{
     data_structures::{Proof, VerifyingKey},
     epc::{data_structures::MLBatchedCommitment, multilinear::MultilinearEPC, EPC},
     piop::{prelude::ZeroCheck, PolyIOP},
-    transcript::IOPTranscript,
     Garuda,
 };
 use ark_ec::pairing::Pairing;
@@ -14,13 +13,14 @@ use ark_relations::gr1cs::{
     R1CS_PREDICATE_LABEL,
 };
 use ark_std::{end_timer, marker::PhantomData, rand::RngCore, start_timer};
+use shared_utils::transcript::IOPTranscript;
 
 impl<E, R> Garuda<E, R>
 where
     E: Pairing,
     R: RngCore,
 {
-    pub fn verify(proof: Proof<E>, vk: VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
+    pub fn verify(proof: &Proof<E>, vk: &VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
     where
         E: Pairing,
         E::ScalarField: Field,
@@ -32,7 +32,7 @@ where
         let timer_transcript_init = start_timer!(|| "Transcript initializtion");
         let mut transcript: IOPTranscript<<E as Pairing>::ScalarField> =
             IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
-        let _ = transcript.append_serializable_element("vk".as_bytes(), &vk);
+        let _ = transcript.append_serializable_element("vk".as_bytes(), vk);
         let _ = transcript.append_serializable_element("input".as_bytes(), &public_input.to_vec());
         let _ = transcript
             .append_serializable_element("batched_commitments".as_bytes(), &proof.w_batched_comm);
@@ -102,7 +102,7 @@ where
                 .individual_comms
                 .clone()
                 .into_iter()
-                .chain(match vk.sel_batched_comm {
+                .chain(match vk.clone().sel_batched_comm {
                     Some(sel_batched_comm) => sel_batched_comm.individual_comms,
                     None => Vec::new(),
                 })
@@ -114,7 +114,7 @@ where
             .w_poly_evals
             .clone()
             .into_iter()
-            .chain(proof.sel_poly_evals.unwrap_or_default())
+            .chain(proof.clone().sel_poly_evals.unwrap_or_default())
             .collect();
 
         if !MultilinearEPC::<E, R>::BatchVerify(
