@@ -196,14 +196,14 @@ fn main() {
         .build_global()
         .unwrap();
 
-    // let _ = bench!(bench, 72, 1, 10, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", false);
-    // let _ = bench!(bench, 144, 1, 5, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 288, 1, 2, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 577, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
+    let _ = bench!(bench, 72, 1, 10, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+        .save_to_csv("pari.csv", false);
+    let _ = bench!(bench, 144, 1, 5, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+        .save_to_csv("pari.csv", true);
+    let _ = bench!(bench, 288, 1, 2, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+        .save_to_csv("pari.csv", true);
+    let _ = bench!(bench, 577, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+        .save_to_csv("pari.csv", true);
     let _ = bench!(bench, 1154, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
         .save_to_csv("pari.csv", false);
     // let _ = bench!(bench, 2309, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)

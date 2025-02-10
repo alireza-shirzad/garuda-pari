@@ -1,3 +1,4 @@
+use crate::utils::compute_chall;
 use crate::{
     data_structures::{Proof, VerifyingKey},
     Pari,
@@ -17,17 +18,21 @@ where
         E: Pairing,
         E::ScalarField: Field,
     {
+        let timer_verify =
+            start_timer!(|| format!("Verification (|x|={})", vk.succinct_index.instance_len));
         debug_assert_eq!(public_input.len(), vk.succinct_index.instance_len - 1);
+        #[cfg(feature = "sol")]
+        {
+            println!("public_input_0: {:?}", E::ScalarField::ONE);
+            public_input.iter().enumerate().for_each(|(i, x)| {
+                println!("public_input_{}: {:?}", i + 1, x);
+            });
+        }
         let Proof { t_g, u_g, v_a, v_b } = proof;
 
-        /////////////////////// initilizing the transcript ///////////////////////
-        let timer_transcript_init = start_timer!(|| "Transcript initializtion");
-        let mut transcript: IOPTranscript<<E as Pairing>::ScalarField> =
-            IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
-        let _ = transcript.append_serializable_element("vk".as_bytes(), vk);
-        let _ = transcript.append_serializable_element("input".as_bytes(), &public_input.to_vec());
-        let _ = transcript.append_serializable_element("batched_commitments".as_bytes(), t_g);
-        let challenge = transcript.get_and_append_challenge("r".as_bytes()).unwrap();
+        /////////////////////// Challenge Computation ///////////////////////
+        let timer_transcript_init = start_timer!(|| "Computing Challenge");
+        let challenge = compute_chall::<E>(vk, public_input, t_g);
         end_timer!(timer_transcript_init);
 
         /////////////////////// Computing polynomials x_A ///////////////////////
@@ -54,7 +59,6 @@ where
             .zip(px_evaluations.iter())
             .fold(E::ScalarField::zero(), |acc, (x, d)| acc + (*x) * (*d));
         let z_a = x_a + v_a;
-
         end_timer!(timer_x_poly);
 
         /////////////////////// Computing the quotient evaluation///////////////////////
@@ -63,6 +67,20 @@ where
 
         let v_q: E::ScalarField =
             (z_a * z_a - v_b) / domain.evaluate_vanishing_polynomial(challenge);
+        use ark_ff::PrimeField;
+        #[cfg(feature = "sol")]
+        {
+            println!("COSET_SIZE: {:?}", domain.size());
+            println!("COSET_OFFSET: {:?}", domain.coset_offset());
+            println!(
+                "MINUS_COSET_OFFSET_TO_COSET_SIZE: {:?}",
+                -(domain.coset_offset().pow([domain.size() as u64]))
+            );
+            println!(
+                "COSET_OFFSET_TO_COSET_SIZE_INVERSE: {:?}",
+                E::ScalarField::ONE / domain.evaluate_vanishing_polynomial(challenge)
+            );
+        }
         end_timer!(timer_q);
 
         /////////////////////// Final Pairing///////////////////////
@@ -81,6 +99,7 @@ where
         );
         assert!(right.is_zero());
         end_timer!(timer_pairing);
+        end_timer!(timer_verify);
         true
     }
 
@@ -118,7 +137,12 @@ where
             let mut l_i = z_h_at_tau.inverse().unwrap() * v_0_inv;
             let mut negative_cur_elem = (-offset) * (start_gen);
             let mut lagrange_coefficients_inverse = vec![F::zero(); count];
-            for coeff in &mut lagrange_coefficients_inverse {
+            for (i, coeff) in &mut lagrange_coefficients_inverse.iter_mut().enumerate() {
+                #[cfg(feature = "sol")]
+                {
+                    println!("NEG_H_Gi_{}: {:?}", i, negative_cur_elem);
+                    println!("NOM_{}: {:?}", i, start_gen*(l_i.inverse().unwrap()));
+                }
                 let r_i = tau + negative_cur_elem;
                 *coeff = l_i * r_i;
                 l_i *= &group_gen_inv;

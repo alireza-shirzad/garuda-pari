@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
+use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing, CurveGroup};
 use ark_ff::{Field, Zero};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -62,7 +62,7 @@ where
         let delta_two = E::ScalarField::rand(rng);
         let tau = E::ScalarField::rand(rng);
 
-        let alpha_g = g * alpha;
+        let alpha_g: <E as Pairing>::G1 = g * alpha;
         let beta_g = g * beta;
         let delta_two_h = h * delta_two;
         let tau_h = h * tau;
@@ -188,6 +188,17 @@ where
             h_prep: h.into().into(),
             h,
         };
+
+        //TODO: Fix for all the code
+        #[cfg(feature="sol")]
+        {
+            use ark_ec::AffineRepr;
+            println!("G: {:?}", g.into_affine());
+            println!("H: {:?}", h.into_affine());
+            println!("ALPHA_G: {:?}", alpha_g.into_affine());
+            println!("BETA_G: {:?}", beta_g.into_affine());
+            println!("TAU_H: {:?}", tau_h.into_affine());
+        }
 
         // Output the proving key: step 8, fig 6, https://eprint.iacr.org/2024/1245.pdf
         let pk: ProvingKey<E> = ProvingKey {

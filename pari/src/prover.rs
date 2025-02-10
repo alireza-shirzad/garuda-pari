@@ -16,7 +16,7 @@ use ark_relations::{
     sr1cs::Sr1csAdapter,
 };
 use ark_std::{cfg_iter_mut, end_timer, rand::RngCore, start_timer};
-
+use crate::utils::compute_chall;
 use crate::{
     data_structures::{Proof, ProvingKey, VerifyingKey},
     Pari,
@@ -67,16 +67,6 @@ where
         let domain = GeneralEvaluationDomain::new(num_constraints).unwrap();
         end_timer!(timer_eval_domain);
 
-        /////////////////////// initilizing the transcript ///////////////////////
-        let timer_init_transcript = start_timer!(|| "Initialize Transcript");
-        let mut transcript: IOPTranscript<<E as Pairing>::ScalarField> =
-            IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
-        let verifier_key: VerifyingKey<E> = pk.verifying_key.clone();
-        let _ = transcript.append_serializable_element("vk".as_bytes(), &verifier_key);
-        let _ = transcript
-            .append_serializable_element("input".as_bytes(), &instance_assignment[1..].to_vec());
-        end_timer!(timer_init_transcript);
-
         /////////////////////// Computing polynomials z_A, z_B, w_A, w_B ///////////////////////
         let timer_compute_za_zb_wa_wb = start_timer!(|| "Computing vectors z_A, z_B, w_A, w_B");
         let ((z_a, z_b), (w_a, w_b)) = Self::compute_wa_wb_za_zb(
@@ -116,15 +106,18 @@ where
         let t: E::G1Affine = -t.into();
         end_timer!(timer_batch_commit);
 
+        /////////////////////// initilizing the transcript ///////////////////////
+        let timer_init_transcript = start_timer!(|| "Computing Challenge");
+        let challenge = compute_chall::<E>(&pk.verifying_key, &instance_assignment[1..].to_vec(), &t);
+        end_timer!(timer_init_transcript);
+
         /////////////////////// Random Evaluation of the polynomials ///////////////////////
         // This box corresponds to the steps 9-10 in figure 6 of the paper: https://eprint.iacr.org/2024/1245.pdf
 
         let timer_eval = start_timer!(|| "Evaluating v_a, v_b, v_q");
-        let _ = transcript.append_serializable_element("batched_commitments".as_bytes(), &t);
-
-        let challenge = transcript.get_and_append_challenge("r".as_bytes()).unwrap();
         let one = E::ScalarField::ONE;
 
+        // TODO: Parallel
         let v_a = w_a_hat.evaluate(&challenge);
         let v_b = w_b_hat.evaluate(&challenge);
         let v_q = q.evaluate(&challenge);
@@ -140,6 +133,8 @@ where
         let w_b_r = DensePolynomial::from_coefficients_vec(vec![v_b]);
         let q_r = DensePolynomial::from_coefficients_vec(vec![v_q]);
         let chall_vanishing_poly = DensePolynomial::from_coefficients_vec(vec![-challenge, one]);
+        //TODO: Check if fft or standard div
+        // IF not fft, pararllelize
         let witness_a = (&w_a_hat - &w_a_r) / &chall_vanishing_poly;
         let witness_b = (&w_b_hat - &w_b_r) / &chall_vanishing_poly;
         let witness_q = (&q - &q_r) / &chall_vanishing_poly;
@@ -157,12 +152,20 @@ where
         // let u =w_a_proof + w_b_proof+ q_proof;
         end_timer!(timer_msms);
         end_timer!(timer_opening);
+        #[cfg(feature="sol")]
+        {
+            println!("proof[0]: {:?}", v_a);
+            println!("proof[1]: {:?}", v_b);
+            println!("proof[2:3]: {:?}", t);
+            println!("proof[4:5]: {:?}", u.into());
+        }
         let output = Ok(Proof {
             t_g: t,
             u_g: u.into(),
             v_a,
             v_b,
         });
+
         end_timer!(timer_p);
         output
     }

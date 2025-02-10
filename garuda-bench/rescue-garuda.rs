@@ -209,12 +209,12 @@ fn main() {
         .build_global()
         .unwrap();
 
-    // bench!(bench, 72, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
-    //     .save_to_csv("garuda.csv", false);
-    bench!(bench, 144, 1, 1, 1, num_thread, Bls12_381, Bls12_381_Fr)
+    bench!(bench, 72, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+        .save_to_csv("garuda.csv", false);
+    bench!(bench, 144, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
         .save_to_csv("garuda.csv", true);
-    // bench!(bench, 288, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
-    //     .save_to_csv("garuda.csv", true);
+    bench!(bench, 288, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+        .save_to_csv("garuda.csv", true);
     // bench!(bench, 577, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
     //     .save_to_csv("garuda.csv", true);
     // bench!(bench, 1154, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
