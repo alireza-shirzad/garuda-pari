@@ -12,7 +12,7 @@ ark-ff = { workspace = true }
 ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
-ark-crypto-primitives = { workspace = true }
+ark-crypto-primitives = { workspace = true , features = ["r1cs"]}
 ark-r1cs-std = { workspace = true }
 ark-relations = { workspace = true }
 merlin = { workspace = true }

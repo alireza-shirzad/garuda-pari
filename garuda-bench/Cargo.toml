@@ -11,7 +11,7 @@ ark-ff = { workspace = true }
 ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
-ark-crypto-primitives = { workspace = true }
+ark-crypto-primitives = { workspace = true , features = ["gr1cs"]}
 ark-r1cs-std = { workspace = true }
 ark-relations = { workspace = true }
 merlin = { workspace = true }
@@ -22,12 +22,26 @@ num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
 
 
+# These are for the hyperplonk benches
+hp-hyperplonk = { package = "hyperplonk", git = "https://github.com/EspressoSystems/hyperplonk.git" }
+hp-subroutines = { package = "subroutines", git = "https://github.com/EspressoSystems/hyperplonk.git" }
+ark-bls12-381-v4 = { package = "ark-bls12-381", version = "0.4.0", default-features = false, features = [
+    "curve",
+] }
+ark-ec-v4 = { package = "ark-ec", version = "0.4.0" }
+ark-serialize-v4 = { package = "ark-serialize", version = "0.4.0" }
 
 
 
 [[bench]]
 name = "rescue-garuda"
 path = "./rescue-garuda.rs"
+harness = false
+
+
+[[bench]]
+name = "rescue-hyperplonk"
+path = "./rescue-hyperplonk.rs"
 harness = false
 
 

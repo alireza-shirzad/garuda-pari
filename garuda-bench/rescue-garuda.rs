@@ -1,4 +1,4 @@
-use ark_bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
+use ark_bls12_381::{Bls12_381, Fr as Bls12_381_Fr};
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
@@ -209,14 +209,20 @@ fn main() {
         .build_global()
         .unwrap();
 
-    bench!(bench, 72, 1, 2, 100, num_thread, Bls12_381, BlsFr12_381_Fr)
-        .save_to_csv("garuda.csv", false);
-    // bench!(bench, 144, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 72, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+    //     .save_to_csv("garuda.csv", false);
+    bench!(bench, 144, 1, 1, 1, num_thread, Bls12_381, Bls12_381_Fr)
+        .save_to_csv("garuda.csv", true);
+    // bench!(bench, 288, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+    //     .save_to_csv("garuda.csv", true);
+    // bench!(bench, 577, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+    //     .save_to_csv("garuda.csv", true);
+    // bench!(bench, 1154, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+    //     .save_to_csv("garuda.csv", true);
+    // bench!(bench, 2309, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+    //     .save_to_csv("garuda.csv", true);
+    // bench!(bench, 4619, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
+    //     .save_to_csv("garuda.csv", true);
     // bench!(bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
     // bench!(
     //     bench,

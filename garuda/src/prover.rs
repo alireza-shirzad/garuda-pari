@@ -179,7 +179,7 @@ where
         E::ScalarField: std::convert::From<i32>,
     {
         // Start up the constraint System and synthesize the circuit
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
+        let timer_cs_startup = start_timer!(|| "Building Constraint System");
         let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
         cs.set_instance_outliner(InstanceOutliner {

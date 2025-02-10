@@ -1,6 +1,0 @@
-Curve,Num Threads,Num Invocations,Num Constraints,Predicate Constraints,Num KeyGen Iterations,Setup Time (s),PK Size,VK Size,Num Prover Iterations,Prover Time (s),Proof Size,Num Verifier Iterations,Verifier Time (ms)
-ark_ec::models::bls12::Bls12<ark_bls12_381::curves::Config>,4,72,72579,"{""R1CS"":72579}",1,10.148285916,57300008,448,10,0.903985912,160,1,1.395958
-ark_ec::models::bls12::Bls12<ark_bls12_381::curves::Config>,4,144,145155,"{""R1CS"":145155}",1,18.423307958,114598952,448,5,3.318293058,160,1,1.809208
-ark_ec::models::bls12::Bls12<ark_bls12_381::curves::Config>,4,288,290307,"{""R1CS"":290307}",1,38.101195875,229196840,448,2,16.688162021,160,1,1.482208
-ark_ec::models::bls12::Bls12<ark_bls12_381::curves::Config>,4,577,581619,"{""R1CS"":581619}",1,78.424127542,458489384,448,1,59.5117875,160,1,1.361625
-ark_ec::models::bls12::Bls12<ark_bls12_381::curves::Config>,4,1154,1163235,"{""R1CS"":1163235}",1,151.335069417,916977704,448,1,117.410690083,160,1,1.403167

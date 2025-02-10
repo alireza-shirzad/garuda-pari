@@ -26,9 +26,7 @@ serde_json = "1.0"
 ark-crypto-primitives = { path = "../crypto-primitives/crypto-primitives", default-features = false, features = [
     "snark",
     "crh",
-    "r1cs",
 ] }
 ark-bls12-381 = { version = "^0.5.0", default-features = false, features = [
     "curve",
 ] }
-
