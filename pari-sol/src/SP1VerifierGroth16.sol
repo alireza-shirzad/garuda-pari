@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {ISP1Verifier, ISP1VerifierWithHash} from "./ISP1Verifier.sol";
 import {Groth16Verifier} from "./Groth16Verifier.sol";
-
+import "forge-std/console.sol";
 /// @title SP1 Verifier
 /// @author Succinct Labs
 /// @notice This contracts implements a solidity verifier for SP1.
@@ -52,6 +52,16 @@ contract SP1Verifier is Groth16Verifier, ISP1VerifierWithHash {
         inputs[0] = uint256(programVKey);
         inputs[1] = uint256(publicValuesDigest);
         uint256[8] memory proof = abi.decode(proofBytes[4:], (uint256[8]));
+        console.log("proof", proof[0]);
+        console.log("proof", proof[1]);
+        console.log("proof", proof[2]);
+        console.log("proof", proof[3]);
+        console.log("proof", proof[4]);
+        console.log("proof", proof[5]);
+        console.log("proof", proof[6]);
+        console.log("proof", proof[7]);
+        console.log("inputs", inputs[0]);
+        console.log("inputs", inputs[1]);
         this.Verify(proof, inputs);
     }
 }
