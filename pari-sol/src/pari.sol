@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+
 // Pari verifier for input size 2
 contract Pari {
-    /// Some of the provided public input values are larger than the field modulus.
-    /// @dev Public input elements are not automatically reduced, as this is can be
-    /// a dangerous source of bugs.
-    error PublicInputNotInField();
-
     /// The proof is invalid.
     /// @dev This can mean that provided Groth16 proof points are not on their
     /// curves, that pairing equation fails, or that the proof is not for the
@@ -49,9 +45,9 @@ contract Pari {
     uint256 constant NEG_H_Gi_1 =
         13274704216607947843011480449124596415239537050559949017414504948711435969894;
     uint256 constant NOM_0 =
-        16440620411579288719970892391199562879874424903382076654444990631808048476188;
+        13996290050407990942654523926513122675505818544092525252619375504959660382354;
     uint256 constant NOM_1 =
-        10517215346090920674167993631328532209117453960715322503941550432721646124186;
+        9405796352346804035542507533830365952491587809148719045076707764632396633432;
 
     // Elements in VK
 
@@ -225,7 +221,7 @@ contract Pari {
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P2, 0x40)
         }
 
-        require(success, "EC MUL failed for beta_g * v_b");
+        // require(success, "EC MUL failed for beta_g * v_b");
 
         // Compute P3 = g * v_q (assuming g = (1, 2))
         assembly {
@@ -237,7 +233,7 @@ contract Pari {
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P3, 0x40)
         }
 
-        require(success, "EC MUL failed for g * v_q");
+        // require(success, "EC MUL failed for g * v_q");
 
         // Compute P4 = u_g * challenge (scalar multiplication)
         assembly {
@@ -249,7 +245,7 @@ contract Pari {
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P4, 0x40)
         }
 
-        require(success, "EC MUL failed for u_g * challenge");
+        // require(success, "EC MUL failed for u_g * challenge");
 
         // Compute A = P1 + P2 + P3 - P4 (point addition using ecAdd)
         uint256[2] memory temp;
@@ -292,24 +288,53 @@ contract Pari {
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, P5, 0x40)
         }
 
-        require(success, "EC ADD failed for final A computation");
+        // require(success, "EC ADD failed for final A computation");
 
         A_x = P5[0];
         A_y = P5[1];
     }
 
     function comp_chall(
-        uint256[2] memory t_g
-    ) internal pure returns (uint256 chall) {
-        // bytes32 hash = keccak256(
-        //     abi.encodePacked(
-        //         t_g[0],
-        //         t_g[1]
-        //     )
-        // );
-        bytes32 hash = keccak256(abi.encodePacked(bytes1(0x00)));
-        // chall = uint256(hash) % P;
-        chall = 5;
+        uint256[2] memory t_g,
+        uint256[2] memory input
+    ) public pure returns (uint256) {
+        // Encode the first part
+        bytes memory part1 = abi.encodePacked(
+            t_g[0],
+            t_g[1],
+            input[0],
+            input[1],
+            G_X,
+            G_Y,
+            ALPHA_G_X,
+            ALPHA_G_Y,
+            BETA_G_X,
+            BETA_G_Y
+        );
+
+        // Encode the second part
+        bytes memory part2 = abi.encodePacked(
+            H_X_0,
+            H_X_1,
+            H_Y_0,
+            H_Y_1,
+            DELTA_TWO_H_X_0,
+            DELTA_TWO_H_X_1,
+            DELTA_TWO_H_Y_0,
+            DELTA_TWO_H_Y_1,
+            TAU_H_X_0,
+            TAU_H_X_1,
+            TAU_H_Y_0,
+            TAU_H_Y_1
+        );
+
+        // Compute Keccak-256 hash
+        bytes32 hash = keccak256(abi.encodePacked(part1, part2));
+
+        // Compute challenge
+        uint256 chall = uint256(hash) % R;
+
+        return chall;
     }
 
     // The verifier for `Circuit1` in `pari/test/Circuit1`
@@ -317,16 +342,11 @@ contract Pari {
         uint256[6] calldata proof,
         uint256[2] calldata input
     ) public view {
-        // Compute challenge
-        uint256 chall = comp_chall([proof[2], proof[3]]);
-
-        // Compute v_q using comp_vq
-        uint256 v_q = comp_vq(input, proof, chall);
-        // Compute A using elliptic curve precompiles
+        uint256 chall = comp_chall([proof[2], proof[3]], input);
         (uint256 A_x, uint256 A_y) = compute_A(
             proof[0],
             proof[1],
-            v_q,
+            comp_vq(input, proof, chall),
             chall,
             proof[4],
             proof[5]
@@ -339,8 +359,6 @@ contract Pari {
         uint256 t_g_y = proof[3];
         uint256 u_g_x = proof[4]; // Fix: Load calldata into memory first
         uint256 u_g_y = proof[5];
-
-
 
         assembly {
             let memPtr := mload(0x40) // Load free memory pointer

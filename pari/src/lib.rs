@@ -1,6 +1,7 @@
 #![feature(associated_type_defaults)]
 #![allow(unreachable_patterns)]
 
+use ark_crypto_primitives::snark::SNARK;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_relations::{
@@ -10,6 +11,7 @@ use ark_relations::{
     },
     lc, ns,
 };
+
 use ark_std::rand::{rngs::StdRng, RngCore, SeedableRng};
 
 pub use ark_relations::gr1cs::ConstraintSystemRef;

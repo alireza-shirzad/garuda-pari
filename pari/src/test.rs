@@ -14,7 +14,8 @@ use ark_relations::{
 };
 use ark_std::rand::{rngs::StdRng, RngCore, SeedableRng};
 use ark_std::{rand::Rng, test_rng};
-
+use ark_ff::PrimeField;
+use ark_ec::AffineRepr;
 use crate::{
     data_structures::{Proof, ProvingKey, VerifyingKey},
     Pari,
@@ -31,6 +32,8 @@ where
     E: Pairing,
     E::ScalarField: Field,
     E::ScalarField: std::convert::From<i32>,
+    E::BaseField: PrimeField,
+    <<E as Pairing>::G1Affine as AffineRepr>::BaseField: PrimeField,
 {
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
     let a_val = E::ScalarField::rand(&mut rng);

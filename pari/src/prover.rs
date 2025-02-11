@@ -24,6 +24,8 @@ use crate::{
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use shared_utils::transcript::IOPTranscript;
+use ark_ff::PrimeField;
+use ark_ec::AffineRepr;
 impl<E, R> Pari<E, R>
 where
     E: Pairing,
@@ -38,6 +40,9 @@ where
         E: Pairing,
         E::ScalarField: Field,
         E::ScalarField: std::convert::From<i32>,
+        E::BaseField: PrimeField,
+        <<E as Pairing>::G1Affine as AffineRepr>::BaseField: PrimeField,
+        
     {
         let timer_p = start_timer!(|| "Total Proving time");
         let cs = Self::circuit_to_prover_cs(circuit)?;

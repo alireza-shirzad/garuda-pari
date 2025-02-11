@@ -10,6 +10,6 @@ pub use bench::BenchResult;
 macro_rules! to_bytes {
     ($x:expr) => {{
         let mut buf = ark_std::vec![];
-        ark_serialize::CanonicalSerialize::serialize_uncompressed($x, &mut buf).map(|_| buf)
+        ark_serialize::CanonicalSerialize::serialize_compressed($x, &mut buf).map(|_| buf)
     }};
 }

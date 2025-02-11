@@ -189,16 +189,6 @@ where
             h,
         };
 
-        //TODO: Fix for all the code
-        #[cfg(feature="sol")]
-        {
-            use ark_ec::AffineRepr;
-            println!("G: {:?}", g.into_affine());
-            println!("H: {:?}", h.into_affine());
-            println!("ALPHA_G: {:?}", alpha_g.into_affine());
-            println!("BETA_G: {:?}", beta_g.into_affine());
-            println!("TAU_H: {:?}", tau_h.into_affine());
-        }
 
         // Output the proving key: step 8, fig 6, https://eprint.iacr.org/2024/1245.pdf
         let pk: ProvingKey<E> = ProvingKey {
