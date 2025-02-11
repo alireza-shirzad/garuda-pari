@@ -89,6 +89,12 @@ where
 
         let right_first_right = vk.tau_h;
         let right_second_left = vk.alpha_g * v_a + vk.beta_g * v_b + vk.g * v_q - *u_g * challenge;
+        dbg!(t_g.clone());
+        dbg!(vk.delta_two_h.clone().into());
+        dbg!(u_g.clone());
+        dbg!(right_first_right.clone().into());
+        dbg!(right_second_left.clone().into());
+        dbg!(vk.h.clone().into());
         let right = E::multi_pairing(
             [t_g, u_g, &right_second_left.into()],
             [

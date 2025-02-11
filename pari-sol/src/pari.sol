@@ -57,22 +57,20 @@ contract Pari {
     // Elements in VK
 
     uint256 constant G_X =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+        18212102334394492265028276912568179054490083287966874604750371166771152878918;
 
     uint256 constant G_Y =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+        19051547621860615371097257781611854064184640229464227024340485503635323265514;
 
     uint256 constant H_X_0 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+        6544699278481598441600196070637395050672550111138901917854422452543436012878;
+    uint256 constant H_X_1 =
+        18264750924445413639031259445102017902843470530989736427633338720457892131674;
+    uint256 constant H_Y_0 =
+        10032665182248219466060852685902662225506768634169311208311258920574541095877;
 
     uint256 constant H_Y_1 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
-
-    uint256 constant H_X_1 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
-
-    uint256 constant H_Y_2 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+        562565163802533593527530741833919796588134748499727025473245471455959254462;
 
     uint256 constant ALPHA_G_X =
         10375097425119143760693064298273524711627205197396174789864790343176586385778;
@@ -87,28 +85,26 @@ contract Pari {
         18824360270889249169168621120076935537219524284404085152523532489397162633937;
 
     uint256 constant TAU_H_X_0 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
-
-    uint256 constant TAU_H_Y_0 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+        3540105755486918127918155275624837134217972567938476545305194345892756433201;
 
     uint256 constant TAU_H_X_1 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+        18041217636100106373175718744095198970708147600474642016419968418336857005685;
+
+    uint256 constant TAU_H_Y_0 =
+        14154078461999584676189907385082723012272946677131333469012033118434915197425;
 
     uint256 constant TAU_H_Y_1 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+        10552760699065714211118830328557327686959241925612332223301119938658446978136;
 
-    uint256 constant DELTA_TAU_H_X_0 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+    uint256 constant DELTA_TWO_H_X_0 =
+        20416030209017591869624962762622602296532943911399254301628797753019370265502;
+    uint256 constant DELTA_TWO_H_X_1 =
+        7875776821442817275516986721312659114205894673434809776375743956349652369084;
+    uint256 constant DELTA_TWO_H_Y_0 =
+        858090423195253233612889489901206326947347495854769386462359668205961784816;
 
-    uint256 constant DELTA_TAU_H_Y_0 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
-
-    uint256 constant DELTA_TAU_H_X_1 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
-
-    uint256 constant DELTA_TAU_H_Y_1 =
-        17805874995975841540914202342111839520379459829704422454583296818431106115052;
+    uint256 constant DELTA_TWO_H_Y_1 =
+        16817700532945113191388981405523623747613676538168443311998210006164550228010;
 
     /// Exponentiation in Fp.
     /// @notice Returns a number x such that a ^ e = x in Fp.
@@ -208,7 +204,10 @@ contract Pari {
         uint256[2] memory P2;
         uint256[2] memory P3;
         uint256[2] memory P4;
-
+        uint256[2] memory P5;
+        console.log("alphag_x = {}", ALPHA_G_X);
+        console.log("alphag_y = {}", ALPHA_G_Y);
+        console.log("v_a = {}", v_a);
         // Compute P1 = α_g * v_a (scalar multiplication)
         assembly {
             let ptr := mload(0x40)
@@ -216,8 +215,9 @@ contract Pari {
             mstore(add(ptr, 0x20), ALPHA_G_Y)
             mstore(add(ptr, 0x40), v_a)
 
-            success := staticcall(gas(), 0x07, ptr, 0x60, P1, 0x40)
+            success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P1, 0x40)
         }
+
         require(success, "EC MUL failed for alpha_g * v_a");
 
         // Compute P2 = β_g * v_b (scalar multiplication)
@@ -227,19 +227,21 @@ contract Pari {
             mstore(add(ptr, 0x20), BETA_G_Y)
             mstore(add(ptr, 0x40), v_b)
 
-            success := staticcall(gas(), 0x07, ptr, 0x60, P2, 0x40)
+            success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P2, 0x40)
         }
+
         require(success, "EC MUL failed for beta_g * v_b");
 
         // Compute P3 = g * v_q (assuming g = (1, 2))
         assembly {
             let ptr := mload(0x40)
-            mstore(ptr, 1)
-            mstore(add(ptr, 0x20), 2)
+            mstore(ptr, G_X)
+            mstore(add(ptr, 0x20), G_Y)
             mstore(add(ptr, 0x40), v_q)
 
-            success := staticcall(gas(), 0x07, ptr, 0x60, P3, 0x40)
+            success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P3, 0x40)
         }
+
         require(success, "EC MUL failed for g * v_q");
 
         // Compute P4 = u_g * challenge (scalar multiplication)
@@ -249,8 +251,9 @@ contract Pari {
             mstore(add(ptr, 0x20), u_g_y)
             mstore(add(ptr, 0x40), chall)
 
-            success := staticcall(gas(), 0x07, ptr, 0x60, P4, 0x40)
+            success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P4, 0x40)
         }
+
         require(success, "EC MUL failed for u_g * challenge");
 
         // Compute A = P1 + P2 + P3 - P4 (point addition using ecAdd)
@@ -264,8 +267,9 @@ contract Pari {
             mstore(add(ptr, 0x40), mload(P2))
             mstore(add(ptr, 0x60), mload(add(P2, 0x20)))
 
-            success := staticcall(gas(), 0x06, ptr, 0x80, temp, 0x40)
+            success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
         }
+
         require(success, "EC ADD failed for P1 + P2");
 
         // Step 2: temp = temp + P3
@@ -276,8 +280,9 @@ contract Pari {
             mstore(add(ptr, 0x40), mload(P3))
             mstore(add(ptr, 0x60), mload(add(P3, 0x20)))
 
-            success := staticcall(gas(), 0x06, ptr, 0x80, temp, 0x40)
+            success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
         }
+
         require(success, "EC ADD failed for (P1 + P2) + P3");
 
         // Step 3: A = temp - P4 (Point subtraction: A = temp + (-P4))
@@ -289,14 +294,14 @@ contract Pari {
             mstore(add(ptr, 0x40), mload(P4))
             mstore(add(ptr, 0x60), sub(P, mload(add(P4, 0x20)))) // Negate P4_Y (mod P)
 
-            success := staticcall(gas(), 0x06, ptr, 0x80, A_x, 0x40)
+            success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, P5, 0x40)
         }
+        console.log("P1_x = {}", P5[0]);
+        console.log("P1_y = {}", P5[1]);
         require(success, "EC ADD failed for final A computation");
 
-        // Return final (A_x, A_y)
-        assembly {
-            A_y := mload(add(A_x, 0x20))
-        }
+        A_x = P5[0];
+        A_y = P5[1];
     }
 
     function comp_chall(
@@ -327,8 +332,8 @@ contract Pari {
         console.log("v_q", v_q);
         // Compute A using elliptic curve precompiles
         (uint256 A_x, uint256 A_y) = compute_A(
-            input[0],
-            input[1],
+            proof[0],
+            proof[1],
             v_q,
             chall,
             proof[4],
@@ -340,6 +345,30 @@ contract Pari {
         bool success;
         uint256 t_g_x = proof[2]; // Fix: Load calldata into memory first
         uint256 t_g_y = proof[3];
+        uint256 u_g_x = proof[4]; // Fix: Load calldata into memory first
+        uint256 u_g_y = proof[5];
+
+        console.log("t_g_x", t_g_x);
+        console.log("t_g_y", t_g_y);
+        console.log("DELTA_TWO_H_X_0", DELTA_TWO_H_X_0);
+        console.log("DELTA_TWO_H_X_1", DELTA_TWO_H_X_1);
+        console.log("DELTA_TWO_H_Y_0", DELTA_TWO_H_Y_0);
+        console.log("DELTA_TWO_H_Y_1", DELTA_TWO_H_Y_1);
+
+        console.log("u_g_x", u_g_x);
+        console.log("u_g_y", u_g_y);
+        console.log("TAU_H_X_0", TAU_H_X_0);
+        console.log("TAU_H_X_1", TAU_H_X_1);
+        console.log("TAU_H_Y_0", TAU_H_Y_0);
+        console.log("TAU_H_Y_1", TAU_H_Y_1);
+
+        console.log("A_x", A_x);
+        console.log("A_y", A_y);
+        console.log("H_X_0", H_X_0);
+        console.log("H_X_1", H_X_1);
+        console.log("H_Y_0", H_Y_0);
+        console.log("H_Y_1", H_Y_1);
+
         assembly {
             // Allocate memory for the input
             let memPtr := mload(0x40) // Load free memory pointer
@@ -347,24 +376,24 @@ contract Pari {
             // Copy G1 elements into memory
             mstore(add(memPtr, 0x00), t_g_x) // G1_1_X
             mstore(add(memPtr, 0x20), t_g_y) // G1_1_Y
-            mstore(add(memPtr, 0x40), DELTA_TAU_H_X_0) // G2_1_X1
-            mstore(add(memPtr, 0x60), DELTA_TAU_H_X_1) // G2_1_X2
-            mstore(add(memPtr, 0x80), DELTA_TAU_H_Y_0) // G2_1_Y1
-            mstore(add(memPtr, 0xa0), DELTA_TAU_H_Y_1) // G2_1_Y2
+            mstore(add(memPtr, 0x40), DELTA_TWO_H_X_0) // G2_1_X1
+            mstore(add(memPtr, 0x60), DELTA_TWO_H_X_1) // G2_1_X2
+            mstore(add(memPtr, 0x80), DELTA_TWO_H_Y_0) // G2_1_Y1
+            mstore(add(memPtr, 0xa0), DELTA_TWO_H_Y_1) // G2_1_Y2
 
-            mstore(add(memPtr, 0xc0), t_g_x) // G1_2_X
-            mstore(add(memPtr, 0xe0), t_g_y) // G1_2_Y
+            mstore(add(memPtr, 0xc0), u_g_x) // G1_2_X
+            mstore(add(memPtr, 0xe0), u_g_y) // G1_2_Y
             mstore(add(memPtr, 0x100), TAU_H_X_0) // G2_2_X1
             mstore(add(memPtr, 0x120), TAU_H_X_1) // G2_2_X2
             mstore(add(memPtr, 0x140), TAU_H_Y_0) // G2_2_Y1
             mstore(add(memPtr, 0x160), TAU_H_Y_1) // G2_2_Y2
 
-            mstore(add(memPtr, 0x180), t_g_x) // G1_3_X
-            mstore(add(memPtr, 0x1a0), t_g_y) // G1_3_Y
+            mstore(add(memPtr, 0x180), A_x) // G1_3_X
+            mstore(add(memPtr, 0x1a0), A_y) // G1_3_Y
             mstore(add(memPtr, 0x1c0), H_X_0) // G2_3_X1
             mstore(add(memPtr, 0x1e0), H_X_1) // G2_3_X2
-            mstore(add(memPtr, 0x200), H_Y_1) // G2_3_Y1
-            mstore(add(memPtr, 0x220), H_Y_2) // G2_3_Y2
+            mstore(add(memPtr, 0x200), H_Y_0) // G2_3_Y1
+            mstore(add(memPtr, 0x220), H_Y_1) // G2_3_Y2
 
             // Call the BN254 pairing precompile (0x08)
             success := staticcall(
@@ -376,12 +405,11 @@ contract Pari {
                 0x20 // Output size (32 bytes)
             )
             success := and(success, mload(memPtr))
-
-            // if (!success) {
-            //     // Either proof or verification key invalid.
-            //     // We assume the contract is correctly generated, so the verification key is valid.
-            //     revert ProofInvalid();
-            // }
+        }
+        if (!success) {
+            // Either proof or verification key invalid.
+            // We assume the contract is correctly generated, so the verification key is valid.
+            revert ProofInvalid();
         }
     }
 }
