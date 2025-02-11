@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "forge-std/console.sol";
 
 // Pari verifier for input size 2
 contract Pari {
@@ -205,9 +204,7 @@ contract Pari {
         uint256[2] memory P3;
         uint256[2] memory P4;
         uint256[2] memory P5;
-        console.log("alphag_x = {}", ALPHA_G_X);
-        console.log("alphag_y = {}", ALPHA_G_Y);
-        console.log("v_a = {}", v_a);
+
         // Compute P1 = α_g * v_a (scalar multiplication)
         assembly {
             let ptr := mload(0x40)
@@ -296,8 +293,7 @@ contract Pari {
 
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, P5, 0x40)
         }
-        console.log("P1_x = {}", P5[0]);
-        console.log("P1_y = {}", P5[1]);
+
         require(success, "EC ADD failed for final A computation");
 
         A_x = P5[0];
@@ -316,7 +312,6 @@ contract Pari {
         bytes32 hash = keccak256(abi.encodePacked(bytes1(0x00)));
         // chall = uint256(hash) % P; // Ensure it's in the field F_p
         chall = 5;
-        console.log("Challenge", chall);
     }
 
     // The verifier for `Circuit1` in `pari/test/Circuit1`
@@ -329,7 +324,6 @@ contract Pari {
 
         // Compute v_q using comp_vq
         uint256 v_q = comp_vq(input, proof, chall);
-        console.log("v_q", v_q);
         // Compute A using elliptic curve precompiles
         (uint256 A_x, uint256 A_y) = compute_A(
             proof[0],
@@ -348,52 +342,31 @@ contract Pari {
         uint256 u_g_x = proof[4]; // Fix: Load calldata into memory first
         uint256 u_g_y = proof[5];
 
-        console.log("t_g_x", t_g_x);
-        console.log("t_g_y", t_g_y);
-        console.log("DELTA_TWO_H_X_0", DELTA_TWO_H_X_0);
-        console.log("DELTA_TWO_H_X_1", DELTA_TWO_H_X_1);
-        console.log("DELTA_TWO_H_Y_0", DELTA_TWO_H_Y_0);
-        console.log("DELTA_TWO_H_Y_1", DELTA_TWO_H_Y_1);
 
-        console.log("u_g_x", u_g_x);
-        console.log("u_g_y", u_g_y);
-        console.log("TAU_H_X_0", TAU_H_X_0);
-        console.log("TAU_H_X_1", TAU_H_X_1);
-        console.log("TAU_H_Y_0", TAU_H_Y_0);
-        console.log("TAU_H_Y_1", TAU_H_Y_1);
-
-        console.log("A_x", A_x);
-        console.log("A_y", A_y);
-        console.log("H_X_0", H_X_0);
-        console.log("H_X_1", H_X_1);
-        console.log("H_Y_0", H_Y_0);
-        console.log("H_Y_1", H_Y_1);
 
         assembly {
-            // Allocate memory for the input
             let memPtr := mload(0x40) // Load free memory pointer
 
-            // Copy G1 elements into memory
-            mstore(add(memPtr, 0x00), t_g_x) // G1_1_X
-            mstore(add(memPtr, 0x20), t_g_y) // G1_1_Y
-            mstore(add(memPtr, 0x40), DELTA_TWO_H_X_0) // G2_1_X1
-            mstore(add(memPtr, 0x60), DELTA_TWO_H_X_1) // G2_1_X2
-            mstore(add(memPtr, 0x80), DELTA_TWO_H_Y_0) // G2_1_Y1
-            mstore(add(memPtr, 0xa0), DELTA_TWO_H_Y_1) // G2_1_Y2
+            mstore(add(memPtr, 0x00), t_g_x)
+            mstore(add(memPtr, 0x20), t_g_y)
+            mstore(add(memPtr, 0x40), DELTA_TWO_H_X_1)
+            mstore(add(memPtr, 0x60), DELTA_TWO_H_X_0)
+            mstore(add(memPtr, 0x80), DELTA_TWO_H_Y_1)
+            mstore(add(memPtr, 0xa0), DELTA_TWO_H_Y_0)
 
-            mstore(add(memPtr, 0xc0), u_g_x) // G1_2_X
-            mstore(add(memPtr, 0xe0), u_g_y) // G1_2_Y
-            mstore(add(memPtr, 0x100), TAU_H_X_0) // G2_2_X1
-            mstore(add(memPtr, 0x120), TAU_H_X_1) // G2_2_X2
-            mstore(add(memPtr, 0x140), TAU_H_Y_0) // G2_2_Y1
-            mstore(add(memPtr, 0x160), TAU_H_Y_1) // G2_2_Y2
+            mstore(add(memPtr, 0xc0), u_g_x)
+            mstore(add(memPtr, 0xe0), u_g_y)
+            mstore(add(memPtr, 0x100), TAU_H_X_1)
+            mstore(add(memPtr, 0x120), TAU_H_X_0)
+            mstore(add(memPtr, 0x140), TAU_H_Y_1)
+            mstore(add(memPtr, 0x160), TAU_H_Y_0)
 
-            mstore(add(memPtr, 0x180), A_x) // G1_3_X
-            mstore(add(memPtr, 0x1a0), A_y) // G1_3_Y
-            mstore(add(memPtr, 0x1c0), H_X_0) // G2_3_X1
-            mstore(add(memPtr, 0x1e0), H_X_1) // G2_3_X2
-            mstore(add(memPtr, 0x200), H_Y_0) // G2_3_Y1
-            mstore(add(memPtr, 0x220), H_Y_1) // G2_3_Y2
+            mstore(add(memPtr, 0x180), A_x)
+            mstore(add(memPtr, 0x1a0), A_y)
+            mstore(add(memPtr, 0x1c0), H_X_1)
+            mstore(add(memPtr, 0x1e0), H_X_0)
+            mstore(add(memPtr, 0x200), H_Y_1)
+            mstore(add(memPtr, 0x220), H_Y_0)
 
             // Call the BN254 pairing precompile (0x08)
             success := staticcall(
