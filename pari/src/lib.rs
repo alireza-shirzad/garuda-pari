@@ -22,6 +22,8 @@ mod generator;
 mod prover;
 mod verifier;
 mod utils;
+mod solidity;
+
 #[cfg(test)]
 mod test;
 

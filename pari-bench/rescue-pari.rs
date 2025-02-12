@@ -1,4 +1,5 @@
 use ark_bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
+// use ark_bn254::{Bn254, Fr as Bn254_Fr};
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
@@ -105,11 +106,11 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
 }
 
 macro_rules! bench {
-    ($bench_name:ident, $num_invocations:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
+    ($bench_name:ident, $num_invocations:expr,$input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
         let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
         let config = create_test_rescue_parameter(&mut rng);
         let mut input = Vec::new();
-        for _ in 0..9 {
+        for _ in 0..$input_size {
             input.push(<$bench_field>::rand(&mut rng));
         }
         let mut expected_image = CRH::<$bench_field>::evaluate(&config, input.clone()).unwrap();
@@ -171,6 +172,7 @@ macro_rules! bench {
             predicate_constraints: cs.get_all_predicates_num_constraints(),
             num_invocations: $num_invocations,
             num_thread: $num_thread,
+            input_size: $input_size,
             num_keygen_iterations: $num_keygen_iterations,
             num_prover_iterations: $num_prover_iterations,
             num_verifier_iterations: $num_verifier_iterations,
@@ -196,16 +198,16 @@ fn main() {
         .build_global()
         .unwrap();
 
-    let _ = bench!(bench, 72, 1, 10, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    let _ = bench!(bench, 72,20, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
         .save_to_csv("pari.csv", false);
-    let _ = bench!(bench, 144, 1, 5, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-        .save_to_csv("pari.csv", true);
-    let _ = bench!(bench, 288, 1, 2, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-        .save_to_csv("pari.csv", true);
-    let _ = bench!(bench, 577, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-        .save_to_csv("pari.csv", true);
-    let _ = bench!(bench, 1154, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-        .save_to_csv("pari.csv", false);
+    // let _ = bench!(bench, 144, 1, 5, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 288, 1, 2, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 577, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", true);
+    // let _ = bench!(bench, 1154, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
+    //     .save_to_csv("pari.csv", false);
     // let _ = bench!(bench, 2309, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
     //     .save_to_csv("pari.csv", true);
     // let _ = bench!(bench, 4619, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)

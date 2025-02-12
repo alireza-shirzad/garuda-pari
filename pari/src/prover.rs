@@ -157,13 +157,7 @@ where
         // let u =w_a_proof + w_b_proof+ q_proof;
         end_timer!(timer_msms);
         end_timer!(timer_opening);
-        #[cfg(feature="sol")]
-        {
-            println!("proof[0]: {:?}", v_a);
-            println!("proof[1]: {:?}", v_b);
-            println!("proof[2:3]: {:?}", t);
-            println!("proof[4:5]: {:?}", u.into());
-        }
+
         let output = Ok(Proof {
             t_g: t,
             u_g: u.into(),

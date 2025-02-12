@@ -45,7 +45,7 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 macro_rules! bench {
-    ($bench_name:ident, $num_invocations:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty,$pcs_srs:expr,$jf_gate:expr) => {{
+    ($bench_name:ident, $num_invocations:expr, $input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty,$pcs_srs:expr,$jf_gate:expr) => {{
         let mut prover_time = Duration::new(0, 0);
         let mut keygen_time = Duration::new(0, 0);
         let mut verifier_time = Duration::new(0, 0);
@@ -104,6 +104,7 @@ macro_rules! bench {
             num_constraints: 1 << nv,
             predicate_constraints: BTreeMap::new(),
             num_invocations: $num_invocations,
+            input_size: $input_size,
             num_thread: $num_thread,
             num_keygen_iterations: $num_keygen_iterations,
             num_prover_iterations: $num_prover_iterations,
@@ -157,6 +158,7 @@ fn main() {
     let _ = bench!(
         bench,
         72,
+        0,
         1,
         2,
         100,
@@ -170,6 +172,7 @@ fn main() {
     bench!(
         bench,
         144,
+        0,
         1,
         2,
         100,
@@ -183,6 +186,7 @@ fn main() {
     bench!(
         bench,
         288,
+        0,
         1,
         2,
         100,
@@ -196,6 +200,7 @@ fn main() {
     bench!(
         bench,
         577,
+        0,
         1,
         2,
         100,
@@ -209,6 +214,7 @@ fn main() {
     bench!(
         bench,
         1154,
+        0,
         1,
         2,
         100,
@@ -222,6 +228,7 @@ fn main() {
     bench!(
         bench,
         2309,
+        0,
         1,
         2,
         100,

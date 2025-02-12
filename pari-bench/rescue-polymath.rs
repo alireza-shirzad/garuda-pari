@@ -1,7 +1,9 @@
-use ark_bls12_381::{Bls12_381, Fr as Bls12_381_Fr};
+use ark_bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
+use ark_crypto_primitives::snark::CircuitSpecificSetupSNARK;
+use ark_crypto_primitives::snark::SNARK;
 use ark_crypto_primitives::sponge::rescue::RescueConfig;
 use ark_ff::PrimeField;
 use ark_r1cs_std::alloc::AllocVar;
@@ -11,26 +13,23 @@ use ark_relations::gr1cs;
 use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
 use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
 use ark_relations::gr1cs::instance_outliner::outline_r1cs;
-use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
 use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_serialize::CanonicalSerialize;
 use ark_std::UniformRand;
-use ark_std::rand::rngs::StdRng;
 use ark_std::rc::Rc;
 use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
-use garuda::Garuda;
+use charms_polymath::Polymath;
+use charms_polymath::merlin::MerlinFieldTranscript;
 use num_bigint::BigUint;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::env;
-use std::fs::File;
-use std::path::Path;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const RESCUE_ROUNDS: usize = 12;
 
@@ -48,24 +47,24 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
     rng: &mut impl Rng,
 ) -> RescueConfig<F> {
     let mut mds = vec![vec![]; 4];
-    for i in 0..4 {
+    for row in mds.iter_mut() {
         for _ in 0..4 {
-            mds[i].push(F::rand(rng));
+            row.push(F::rand(rng));
         }
     }
 
     let mut ark = vec![vec![]; 25];
-    for i in 0..(2 * RESCUE_ROUNDS + 1) {
+    ark.iter_mut().take(2 * RESCUE_ROUNDS + 1).for_each(|row| {
         for _ in 0..4 {
-            ark[i].push(F::rand(rng));
+            row.push(F::rand(rng));
         }
-    }
+    });
     let alpha_inv: BigUint = BigUint::from_str(
         "20974350070050476191779096203274386335076221000211055129041463479975432473805",
     )
     .unwrap();
-    let params = RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1);
-    params
+
+    RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1)
 }
 
 impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
@@ -74,13 +73,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
         let params_g =
             CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();
-        let _ = cs.clone().register_predicate(
-            "XXX",
-            PredicateConstraintSystem::new_polynomial_predicate(2, vec![
-                (F::from(1i8), vec![(0, 5)]),
-                (F::from(-1i8), vec![(1, 1)]),
-            ]),
-        );
+
         let mut input_g = Vec::new();
 
         for elem in self
@@ -114,7 +107,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
 }
 
 macro_rules! bench {
-    ($bench_name:ident, $num_invocations:expr, $input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
+    ($bench_name:ident, $num_invocations:expr,$input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
         let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
         let config = create_test_rescue_parameter(&mut rng);
         let mut input = Vec::new();
@@ -131,9 +124,6 @@ macro_rules! bench {
         let mut prover_time = Duration::new(0, 0);
         let mut keygen_time = Duration::new(0, 0);
         let mut verifier_time = Duration::new(0, 0);
-        let mut pk_size: usize = 0;
-        let mut vk_size: usize = 0;
-        let mut proof_size: usize = 0;
         let circuit = RescueDemo::<$bench_field> {
             input: Some(input.clone()),
             image: Some(expected_image),
@@ -141,33 +131,33 @@ macro_rules! bench {
             num_invocations: $num_invocations,
         };
         let setup_circuit = circuit.clone();
-        let (mut pk, mut vk) =
-            Garuda::<$bench_pairing_engine, StdRng>::keygen(setup_circuit, &mut rng);
+        let (pk, vk) = Polymath::<$bench_pairing_engine, MerlinFieldTranscript<$bench_field>>::setup(setup_circuit, &mut rng).unwrap();
+        // let vk = prepare_verifying_key::<$bench_pairing_engine>(&ivk);
         for _ in 0..$num_keygen_iterations {
             let setup_circuit = circuit.clone();
             let start = ark_std::time::Instant::now();
-            (pk, vk) = Garuda::<$bench_pairing_engine, StdRng>::keygen(setup_circuit, &mut rng);
+            let (_pk, _vk) =
+                Polymath::<$bench_pairing_engine, MerlinFieldTranscript<$bench_field>>::setup(setup_circuit, &mut rng).unwrap();
+            // let _vk = prepare_verifying_key::<$bench_pairing_engine, MerlinFieldTranscript<$bench_field>>(&ivk);
             keygen_time += start.elapsed();
         }
-        pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
-        vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
+        let pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
+        let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
         let prover_circuit = circuit.clone();
-        let mut proof =
-            Garuda::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
+        let proof = Polymath::<Bls12_381, MerlinFieldTranscript<$bench_field>>::prove(&pk, prover_circuit, &mut rng).unwrap();
         for _ in 0..$num_keygen_iterations {
             let prover_circuit = circuit.clone();
             let start = ark_std::time::Instant::now();
-            proof = Garuda::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
+            let _proof = Polymath::<Bls12_381, MerlinFieldTranscript<$bench_field>>::prove(&pk, prover_circuit, &mut rng).unwrap();
             prover_time += start.elapsed();
         }
-        proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
+        let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
         let start = ark_std::time::Instant::now();
         for _ in 0..$num_verifier_iterations {
-            assert!(Garuda::<$bench_pairing_engine, StdRng>::verify(
-                &proof,
-                &vk,
-                &[expected_image],
-            ));
+            assert!(
+                Polymath::<Bls12_381, MerlinFieldTranscript<$bench_field>>::verify_with_processed_vk(&vk, &[expected_image], &proof)
+                    .unwrap()
+            );
         }
         verifier_time += start.elapsed();
         let cs: gr1cs::ConstraintSystemRef<$bench_field> = gr1cs::ConstraintSystem::new_ref();
@@ -210,50 +200,35 @@ fn main() {
         .build_global()
         .unwrap();
 
-    bench!(
+    let _ = bench!(
         bench,
         72,
-        10,
+        20,
         1,
         2,
         100,
         num_thread,
         Bls12_381,
-        Bls12_381_Fr
+        BlsFr12_381_Fr
     )
-    .save_to_csv("garuda.csv", false);
-    bench!(
-        bench,
-        144,
-        10,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr
-    )
-    .save_to_csv("garuda.csv", true);
-    bench!(
-        bench,
-        288,
-        10,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr
-    )
-    .save_to_csv("garuda.csv", true);
-    // bench!(bench, 577, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
-    //     .save_to_csv("garuda.csv", true);
-    // bench!(bench, 1154, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
-    //     .save_to_csv("garuda.csv", true);
-    // bench!(bench, 2309, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
-    //     .save_to_csv("garuda.csv", true);
-    // bench!(bench, 4619, 1, 2, 100, num_thread, Bls12_381, Bls12_381_Fr)
-    //     .save_to_csv("garuda.csv", true);
+    .save_to_csv("Polymath.csv", false);
+    // let _ = bench!(
+    //     bench,
+    //     144,
+    //     20,
+    //     1,
+    //     2,
+    //     100,
+    //     num_thread,
+    //     Bls12_381,
+    //     BlsFr12_381_Fr
+    // )
+    // .save_to_csv("Polymath.csv", true);
+    // bench!(bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
+    // bench!(bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
     // bench!(bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
     // bench!(
     //     bench,

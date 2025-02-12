@@ -1,8 +1,162 @@
-// SPDX-License-Identifier: MIT
+use crate::data_structures::Proof;
+use crate::data_structures::VerifyingKey;
+use ark_ec::pairing::Pairing;
+use ark_ec::AffineRepr;
+use ark_ff::quadratic_extension::{QuadExtConfig, QuadExtField};
+use ark_ff::Field;
+use ark_ff::PrimeField;
+use num_bigint::BigUint;
+use regex::Regex;
+use std::fs::File;
+use std::io::Write;
+pub struct Solidifier<E: Pairing> {
+    pub p: Option<BigUint>,
+    pub q: Option<BigUint>,
+    pub coset_size: Option<usize>,
+    pub coset_offset: Option<E::ScalarField>,
+    pub minus_coset_offset_to_coset_size: Option<E::ScalarField>,
+    pub coset_offset_to_coset_size_inverse: Option<E::ScalarField>,
+    pub neg_h_gi: Option<Vec<E::ScalarField>>,
+    pub nom_i: Option<Vec<E::ScalarField>>,
+    pub g: Option<E::G1Affine>,
+    pub h: Option<E::G2Affine>,
+    pub alpha_g: Option<E::G1Affine>,
+    pub beta_g: Option<E::G1Affine>,
+    pub tau_h: Option<E::G2Affine>,
+    pub delta_h: Option<E::G2Affine>,
+    pub v_a: Option<E::ScalarField>,
+    pub v_b: Option<E::ScalarField>,
+    pub t_g: Option<E::G1Affine>,
+    pub u_g: Option<E::G1Affine>,
+    pub input: Option<Vec<E::ScalarField>>,
+}
+
+impl<E: Pairing> Solidifier<E> {
+    pub fn new() -> Self {
+        Solidifier {
+            p: Some(E::BaseField::MODULUS.into()),
+            q: Some(E::ScalarField::MODULUS.into()),
+            coset_size: None,
+            coset_offset: None,
+            minus_coset_offset_to_coset_size: None,
+            coset_offset_to_coset_size_inverse: None,
+            neg_h_gi: None,
+            nom_i: None,
+            g: None,
+            h: None,
+            alpha_g: None,
+            beta_g: None,
+            tau_h: None,
+            delta_h: None,
+            v_a: None,
+            v_b: None,
+            t_g: None,
+            u_g: None,
+            input: None,
+        }
+    }
+    fn extract_quad_ext_field_coordinates(input: &str) -> Option<(String, String)> {
+        let re = Regex::new(r"QuadExtField\s*\(\s*([\d]+)\s*\+\s*([\d]+)\s*\*\s*u\s*\)").unwrap();
+
+        re.captures(input).map(|caps| {
+            let num1 = caps.get(1).unwrap().as_str().trim().to_string();
+            let num2 = caps.get(2).unwrap().as_str().trim().to_string();
+            (num1, num2)
+        })
+    }
+    pub(crate) fn set_vk(&mut self, vk: &VerifyingKey<E>) {
+        self.g = Some(vk.g.into());
+        self.h = Some(vk.h.into());
+        self.alpha_g = Some(vk.alpha_g.into());
+        self.beta_g = Some(vk.beta_g.into());
+        self.tau_h = Some(vk.tau_h.into());
+        self.delta_h = Some(vk.delta_two_h.into());
+    }
+
+    pub(crate) fn set_proof(&mut self, proof: &Proof<E>) {
+        self.v_a = Some(proof.v_a);
+        self.v_b = Some(proof.v_b);
+        self.t_g = Some(proof.t_g.into());
+        self.u_g = Some(proof.u_g.into());
+    }
+
+    pub(crate) fn set_input(&mut self, input: &[E::ScalarField]) {
+        dbg!(input.len());
+        let mut input_vec = vec![E::ScalarField::ONE];
+        input_vec.extend_from_slice(input);
+        self.input = Some(input_vec);
+    }
+
+    pub fn solidify(&self) {
+        let input_size = 2; // Change this to the desired input size
+
+        let neg_h_gi_str = self
+            .neg_h_gi
+            .as_ref()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .fold(String::new(), |acc, (i, x)| {
+                acc + &format!("    uint256 constant NEG_H_Gi_{i} = {x};\n")
+            });
+        let nom_i_str = self
+            .nom_i
+            .as_ref()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .fold(String::new(), |acc, (i, x)| {
+                acc + &format!("    uint256 constant NOM_{i} = {x};\n")
+            });
+
+        let input_str = self
+            .input
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|x| format!("{x}"))
+            .collect::<Vec<_>>()
+            .join(",\n ");
+
+        let h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
+            "{}",
+            self.h.clone().unwrap().x().unwrap()
+        ))
+        .unwrap();
+        let h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
+            "{}",
+            self.h.clone().unwrap().y().unwrap()
+        ))
+        .unwrap();
+
+        let delta_h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
+            "{}",
+            self.delta_h.clone().unwrap().x().unwrap()
+        ))
+        .unwrap();
+        let delta_h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
+            "{}",
+            self.delta_h.clone().unwrap().y().unwrap()
+        ))
+        .unwrap();
+
+        let tau_h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
+            "{}",
+            self.tau_h.clone().unwrap().x().unwrap()
+        ))
+        .unwrap();
+        let tau_h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
+            "{}",
+            self.tau_h.clone().unwrap().y().unwrap()
+        ))
+        .unwrap();
+
+        let solidity_code = format!(
+            r#"// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// Pari verifier for input size 2
-contract Pari {
+// Pari verifier for input size {input_size}
+contract Pari {{
     /// The proof is invalid.
     /// @dev This can mean that provided Groth16 proof points are not on their
     /// curves, that pairing equation fails, or that the proof is not for the
@@ -20,11 +174,11 @@ contract Pari {
     //     t = 4965661367192848881
     //     P = 36⋅t⁴ + 36⋅t³ + 24⋅t² + 6⋅t + 1
     //     R = 36⋅t⁴ + 36⋅t³ + 18⋅t² + 6⋅t + 1
-    uint256 constant P = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
-    uint256 constant R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    uint256 constant P = {p};
+    uint256 constant R = {q};
 
     // Exponents for inversions and square roots mod P
-    uint256 constant EXP_INVERSE_FR = 21888242871839275222246405745257275088548364400416034343698204186575808495615; // R - 2
+    uint256 constant EXP_INVERSE_FR = {exp_inv_r}; // R - 2
 
     //////////////////////////////// constants for processing the input //////////////////////////////
 
@@ -34,36 +188,32 @@ contract Pari {
 
     // Preprocessed intermediate values for computing the lagrande polynomials
     // This computation is done according to https://o1-labs.github.io/proof-systems/plonk/lagrange.html
-    uint256 constant MINUS_COSET_OFFSET_TO_COSET_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495616;
-    uint256 constant COSET_OFFSET_TO_COSET_SIZE_INVERSE = 12522135958231538956014838009639886980167592684488620783210650311745525656931;
+    uint256 constant MINUS_COSET_OFFSET_TO_COSET_SIZE = {minus_coset_offset_to_coset_size};
+    uint256 constant COSET_OFFSET_TO_COSET_SIZE_INVERSE = {coset_offset_to_coset_size_inverse};
 
-        uint256 constant NEG_H_Gi_0 = 15634706786522089014999940912207647497621112715300598509090847765194894752723;
-    uint256 constant NEG_H_Gi_1 = 13274704216607947843011480449124596415239537050559949017414504948711435969894;
-
-        uint256 constant NOM_0 = 13996290050407990942654523926513122675505818544092525252619375504959660382354;
-    uint256 constant NOM_1 = 9405796352346804035542507533830365952491587809148719045076707764632396633432;
-
+    {neg_h_gi_str}
+    {nom_i_str}
 
     ////////////////////////////////////// Preprocessed verification key ////////////////////////////////
 
-    uint256 constant G_X = 18212102334394492265028276912568179054490083287966874604750371166771152878918;
-    uint256 constant G_Y = 19051547621860615371097257781611854064184640229464227024340485503635323265514;
-    uint256 constant H_X_0 = 6544699278481598441600196070637395050672550111138901917854422452543436012878;
-    uint256 constant H_X_1 = 18264750924445413639031259445102017902843470530989736427633338720457892131674;
-    uint256 constant H_Y_0 = 10032665182248219466060852685902662225506768634169311208311258920574541095877;
-    uint256 constant H_Y_1 = 562565163802533593527530741833919796588134748499727025473245471455959254462;
-    uint256 constant ALPHA_G_X = 10375097425119143760693064298273524711627205197396174789864790343176586385778;
-    uint256 constant ALPHA_G_Y = 7365195522646952169974124049143981581485838643027381005174321961855915684522;
-    uint256 constant BETA_G_X = 12971105903759373104453077008007773448943457323386137776428466989247741330899;
-    uint256 constant BETA_G_Y = 18824360270889249169168621120076935537219524284404085152523532489397162633937;
-    uint256 constant TAU_H_X_0 = 3540105755486918127918155275624837134217972567938476545305194345892756433201;
-    uint256 constant TAU_H_X_1 = 18041217636100106373175718744095198970708147600474642016419968418336857005685;
-    uint256 constant TAU_H_Y_0 = 14154078461999584676189907385082723012272946677131333469012033118434915197425;
-    uint256 constant TAU_H_Y_1 = 10552760699065714211118830328557327686959241925612332223301119938658446978136;
-    uint256 constant DELTA_TWO_H_X_0 = 20416030209017591869624962762622602296532943911399254301628797753019370265502;
-    uint256 constant DELTA_TWO_H_X_1 = 7875776821442817275516986721312659114205894673434809776375743956349652369084;
-    uint256 constant DELTA_TWO_H_Y_0 = 858090423195253233612889489901206326947347495854769386462359668205961784816;
-    uint256 constant DELTA_TWO_H_Y_1 = 16817700532945113191388981405523623747613676538168443311998210006164550228010;
+    uint256 constant G_X = {g_x};
+    uint256 constant G_Y = {g_y};
+    uint256 constant H_X_0 = {h_x_0};
+    uint256 constant H_X_1 = {h_x_1};
+    uint256 constant H_Y_0 = {h_y_0};
+    uint256 constant H_Y_1 = {h_y_1};
+    uint256 constant ALPHA_G_X = {alpha_g_x};
+    uint256 constant ALPHA_G_Y = {alpha_g_y};
+    uint256 constant BETA_G_X = {beta_g_x};
+    uint256 constant BETA_G_Y = {beta_g_y};
+    uint256 constant TAU_H_X_0 = {tau_h_x_0};
+    uint256 constant TAU_H_X_1 = {tau_h_x_1};
+    uint256 constant TAU_H_Y_0 = {tau_h_y_0};
+    uint256 constant TAU_H_Y_1 = {tau_h_y_1};
+    uint256 constant DELTA_TWO_H_X_0 = {delta_h_x_0};
+    uint256 constant DELTA_TWO_H_X_1 = {delta_h_x_1};
+    uint256 constant DELTA_TWO_H_Y_0 = {delta_h_y_0};
+    uint256 constant DELTA_TWO_H_Y_1 = {delta_h_y_1};
 
     /////////////////////////////////////// Helper functions ////////////////////////////////
 
@@ -73,9 +223,9 @@ contract Pari {
     /// @param a the base
     /// @param e the exponent
     /// @return x the result
-    function exp(uint256 a, uint256 e) internal view returns (uint256 x) {
+    function exp(uint256 a, uint256 e) internal view returns (uint256 x) {{
         bool success;
-        assembly ("memory-safe") {
+        assembly ("memory-safe") {{
             let f := mload(0x40)
             mstore(f, 0x20)
             mstore(add(f, 0x20), 0x20)
@@ -85,13 +235,13 @@ contract Pari {
             mstore(add(f, 0xa0), R)
             success := staticcall(gas(), PRECOMPILE_MODEXP, f, 0xc0, f, 0x20)
             x := mload(f)
-        }
-        if (!success) {
+        }}
+        if (!success) {{
             // Exponentiation failed.
             // Should not happen.
             revert ProofInvalid();
-        }
-    }
+        }}
+    }}
 
     /// Invertsion in Fr.
     /// @notice Returns a number x such that a * x = 1 in Fr.
@@ -99,32 +249,32 @@ contract Pari {
     /// @notice Reverts with ProofInvalid() if the inverse does not exist
     /// @param a the input
     /// @return x the solution
-    function invert_FR(uint256 a) internal view returns (uint256 x) {
+    function invert_FR(uint256 a) internal view returns (uint256 x) {{
         x = exp(a, EXP_INVERSE_FR);
-        if (mulmod(a, x, R) != 1) {
+        if (mulmod(a, x, R) != 1) {{
             // Inverse does not exist.
             // Can only happen during G2 point decompression.
             revert ProofInvalid();
-        }
-    }
+        }}
+    }}
 
     // Computes Z_H(challenge) as the vanishing polynomial for the coset
     // Z_H(x) = x^m-h^m
     // where m = COSET_SIZE and h = COSET_OFFSET
     function compute_vanishing_poly(
         uint256 chall
-    ) internal view returns (uint256 result) {
+    ) internal view returns (uint256 result) {{
         // Exp uses 0x05 precompile internally
         uint256 tau_exp = exp(chall, COSET_SIZE);
         result = addmod(tau_exp, MINUS_COSET_OFFSET_TO_COSET_SIZE, R);
-    }
+    }}
 
     // Computes v_q = (v_a^2-v_b)/Z_H(challenge)
     function comp_vq(
         uint256[2] calldata input,
         uint256[6] calldata proof,
         uint256 chall
-    ) internal view returns (uint256 v_q) {
+    ) internal view returns (uint256 v_q) {{
         uint256 neg_cur_elem0 = addmod(chall, NEG_H_Gi_0, R);
         uint256 neg_cur_elem1 = addmod(chall, NEG_H_Gi_1, R);
 
@@ -152,7 +302,7 @@ contract Pari {
         uint256 vanishing_poly_inv = invert_FR(vanishing_poly);
         // Compute v_q = numerator * vanishing_poly_inv mod P
         v_q = mulmod(numerator, vanishing_poly_inv, R);
-    }
+    }}
 
     // Computes A = α_g * v_a + β_g * v_b + g * v_q - u_g * challenge
     // This is used in pairing check
@@ -163,7 +313,7 @@ contract Pari {
         uint256 chall,
         uint256 u_g_x,
         uint256 u_g_y
-    ) internal view returns (uint256 A_x, uint256 A_y) {
+    ) internal view returns (uint256 A_x, uint256 A_y) {{
         bool success;
         uint256[2] memory P1;
         uint256[2] memory P2;
@@ -172,50 +322,50 @@ contract Pari {
         uint256[2] memory P5;
 
         // Compute P1 = α_g * v_a (scalar multiplication)
-        assembly {
+        assembly {{
             let ptr := mload(0x40)
             mstore(ptr, ALPHA_G_X)
             mstore(add(ptr, 0x20), ALPHA_G_Y)
             mstore(add(ptr, 0x40), v_a)
 
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P1, 0x40)
-        }
+        }}
 
         // Compute P2 = β_g * v_b (scalar multiplication)
-        assembly {
+        assembly {{
             let ptr := mload(0x40)
             mstore(ptr, BETA_G_X)
             mstore(add(ptr, 0x20), BETA_G_Y)
             mstore(add(ptr, 0x40), v_b)
 
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P2, 0x40)
-        }
+        }}
 
         // Compute P3 = g * v_q (assuming g = (1, 2))
-        assembly {
+        assembly {{
             let ptr := mload(0x40)
             mstore(ptr, G_X)
             mstore(add(ptr, 0x20), G_Y)
             mstore(add(ptr, 0x40), v_q)
 
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P3, 0x40)
-        }
+        }}
 
         // Compute P4 = u_g * challenge (scalar multiplication)
-        assembly {
+        assembly {{
             let ptr := mload(0x40)
             mstore(ptr, u_g_x)
             mstore(add(ptr, 0x20), u_g_y)
             mstore(add(ptr, 0x40), chall)
 
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P4, 0x40)
-        }
+        }}
 
         // Compute A = P1 + P2 + P3 - P4 (point addition using ecAdd)
         uint256[2] memory temp;
 
         // Step 1: temp = P1 + P2
-        assembly {
+        assembly {{
             let ptr := mload(0x40)
             mstore(ptr, mload(P1))
             mstore(add(ptr, 0x20), mload(add(P1, 0x20)))
@@ -223,12 +373,12 @@ contract Pari {
             mstore(add(ptr, 0x60), mload(add(P2, 0x20)))
 
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
-        }
+        }}
 
         require(success, "EC ADD failed for P1 + P2");
 
         // Step 2: temp = temp + P3
-        assembly {
+        assembly {{
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
@@ -236,13 +386,13 @@ contract Pari {
             mstore(add(ptr, 0x60), mload(add(P3, 0x20)))
 
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
-        }
+        }}
 
         require(success, "EC ADD failed for (P1 + P2) + P3");
 
         // Step 3: A = temp - P4 (Point subtraction: A = temp + (-P4))
         // In elliptic curves, subtraction is adding the negated Y-coordinate.
-        assembly {
+        assembly {{
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
@@ -250,11 +400,11 @@ contract Pari {
             mstore(add(ptr, 0x60), sub(P, mload(add(P4, 0x20)))) // Negate P4_Y (mod P)
 
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, P5, 0x40)
-        }
+        }}
 
         A_x = P5[0];
         A_y = P5[1];
-    }
+    }}
 
     // Compute the RO challenge, this is done by hashing all the available public data up to the evaluation step of the verification process
     // This public data includes T_g (Which is the batch commitment and is a part of the proof, i.e. Proof[2:3]), the public input, and the verification key
@@ -262,7 +412,7 @@ contract Pari {
     function comp_chall(
         uint256[2] memory t_g,
         uint256[2] memory input
-    ) public pure returns (uint256) {
+    ) public pure returns (uint256) {{
         // Encode the first part
         bytes memory part1 = abi.encodePacked(
             t_g[0],
@@ -300,7 +450,7 @@ contract Pari {
         uint256 chall = uint256(hash) % R;
 
         return chall;
-    }
+    }}
 
     ///////////////////////// The main verification function of Pari ///////////////////////////
 
@@ -308,7 +458,7 @@ contract Pari {
     function Verify(
         uint256[6] calldata proof,
         uint256[2] calldata input
-    ) public view {
+    ) public view {{
         uint256 chall = comp_chall([proof[2], proof[3]], input);
         (uint256 A_x, uint256 A_y) = compute_A(
             proof[0],
@@ -327,7 +477,7 @@ contract Pari {
         uint256 u_g_x = proof[4]; // Fix: Load calldata into memory first
         uint256 u_g_y = proof[5];
 
-        assembly {
+        assembly {{
             let memPtr := mload(0x40) // Load free memory pointer
 
             mstore(add(memPtr, 0x00), t_g_x)
@@ -361,13 +511,97 @@ contract Pari {
                 0x20 // Output size (32 bytes)
             )
             success := and(success, mload(memPtr))
-        }
-        if (!success) {
+        }}
+        if (!success) {{
             // Either proof or verification key invalid.
             // We assume the contract is correctly generated, so the verification key is valid.
             revert ProofInvalid();
-        }
+        }}
+    }}
+}}
+
+    "#,
+            input_size = input_size,
+            p = self.p.clone().unwrap(),
+            q = self.q.clone().unwrap(),
+            exp_inv_r = self.q.clone().unwrap() - BigUint::from(2u32),
+            neg_h_gi_str = neg_h_gi_str,
+            nom_i_str = nom_i_str,
+            g_x = self.g.clone().unwrap().x().unwrap(),
+            g_y = self.g.clone().unwrap().y().unwrap(),
+            alpha_g_x = self.alpha_g.clone().unwrap().x().unwrap(),
+            alpha_g_y = self.alpha_g.clone().unwrap().y().unwrap(),
+            beta_g_x = self.beta_g.clone().unwrap().x().unwrap(),
+            beta_g_y = self.beta_g.clone().unwrap().y().unwrap(),
+            h_x_0 = h_x.0,
+            h_x_1 = h_x.1,
+            h_y_0 = h_y.0,
+            h_y_1 = h_y.1,
+            delta_h_x_0 = delta_h_x.0,
+            delta_h_x_1 = delta_h_x.1,
+            delta_h_y_0 = delta_h_y.0,
+            delta_h_y_1 = delta_h_y.1,
+            tau_h_x_0 = tau_h_x.0,
+            tau_h_x_1 = tau_h_x.1,
+            tau_h_y_0 = tau_h_y.0,
+            tau_h_y_1 = tau_h_y.1,
+            minus_coset_offset_to_coset_size =
+                self.minus_coset_offset_to_coset_size.clone().unwrap(),
+            coset_offset_to_coset_size_inverse =
+                self.coset_offset_to_coset_size_inverse.clone().unwrap(),
+        );
+
+        let mut file = File::create("pari.sol").unwrap();
+        file.write_all(solidity_code.as_bytes()).unwrap();
+
+        println!("pari.sol file has been generated successfully.");
+
+        let solidity_test_code = format!(
+            r#"// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "forge-std/Test.sol";
+import "../src/Pari.sol";
+
+contract PariGasTest is Test {{
+    Pari verifier;
+
+    function setUp() public {{
+        verifier = new Pari();
+    }}
+
+    function testGasVerify() public {{
+        uint256[6] memory proof = [
+            {v_a},
+            {v_b},
+            {t_g_x},
+            {t_g_y},
+            {u_g_x},
+            {u_g_y}
+        ];
+        uint256[2] memory input = [
+            {input_str}
+        ];
+
+        verifier.Verify(proof, input);
+    }}
+}}
+
+
+
+    "#,
+            v_a = self.v_a.clone().unwrap(),
+            v_b = self.v_b.clone().unwrap(),
+            t_g_x = self.t_g.clone().unwrap().x().unwrap(),
+            t_g_y = self.t_g.clone().unwrap().y().unwrap(),
+            u_g_x = self.u_g.clone().unwrap().x().unwrap(),
+            u_g_y = self.u_g.clone().unwrap().y().unwrap(),
+            input_str = input_str,
+        );
+
+        let mut file = File::create("pari.t.sol").unwrap();
+        file.write_all(solidity_test_code.as_bytes()).unwrap();
+
+        println!("pari.t.sol file has been generated successfully.");
     }
 }
-
-    

@@ -9,6 +9,7 @@ use std::io::Write;
 pub struct BenchResult {
     pub curve: String,
     pub num_thread: usize,
+    pub input_size:usize,
     pub num_invocations: usize,
     pub num_keygen_iterations: usize,
     pub num_prover_iterations: usize,
@@ -41,6 +42,7 @@ impl BenchResult {
                 "Curve",
                 "Num Threads",
                 "Num Invocations",
+                "Input Size",
                 "Num Constraints",
                 "Predicate Constraints",
                 "Num KeyGen Iterations",
@@ -68,6 +70,7 @@ impl BenchResult {
             &self.curve,
             &self.num_thread.to_string(),
             &self.num_invocations.to_string(),
+            &self.input_size.to_string(),
             &self.num_constraints.to_string(),
             &predicate_constraints_str,
             &self.num_keygen_iterations.to_string(),

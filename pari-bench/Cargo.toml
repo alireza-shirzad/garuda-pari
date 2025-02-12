@@ -6,13 +6,13 @@ edition = "2024"
 [dependencies]
 pari = { path = "../pari" }
 shared-utils = { path = "../shared-utils" }
-ark-groth16 = {workspace = true}
+ark-groth16 = { workspace = true }
 ark-serialize = { workspace = true }
 ark-ff = { workspace = true }
 ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
-ark-crypto-primitives = { workspace = true , features = ["r1cs"]}
+ark-crypto-primitives = { workspace = true, features = ["r1cs"] }
 ark-r1cs-std = { workspace = true }
 ark-relations = { workspace = true }
 merlin = { workspace = true }
@@ -21,7 +21,8 @@ tracing = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
-
+ark-bn254 = { workspace = true }
+charms-polymath = { path = "../../polymath" }
 
 [[bench]]
 name = "rescue-pari"
@@ -31,6 +32,12 @@ harness = false
 [[bench]]
 name = "rescue-groth16"
 path = "./rescue-groth16.rs"
+harness = false
+
+
+[[bench]]
+name = "rescue-polymath"
+path = "./rescue-polymath.rs"
 harness = false
 
 [features]
@@ -53,3 +60,4 @@ parallel = [
     "ark-std/parallel",
     "rayon",
 ]
+sol = ["pari/sol"]

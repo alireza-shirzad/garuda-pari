@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/Pari.sol"; // Import your contract
+import "../src/Pari.sol";
 
 contract PariGasTest is Test {
     Pari verifier;
@@ -22,14 +22,13 @@ contract PariGasTest is Test {
         ];
         uint256[2] memory input = [
             1,
-            17742978824661181944260703318854679487142470606980304978432813425780788864323
+ 17742978824661181944260703318854679487142470606980304978432813425780788864323
         ];
 
-        // Expect the contract to revert but still measure gas
-        // vm.expectRevert("Pairing check failed");
         verifier.Verify(proof, input);
     }
 }
 
-// 1040420573
-// 1040420572
+
+
+    

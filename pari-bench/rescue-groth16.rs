@@ -107,11 +107,11 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
 }
 
 macro_rules! bench {
-    ($bench_name:ident, $num_invocations:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
+    ($bench_name:ident, $num_invocations:expr,$input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
         let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
         let config = create_test_rescue_parameter(&mut rng);
         let mut input = Vec::new();
-        for _ in 0..9 {
+        for _ in 0..$input_size {
             input.push(<$bench_field>::rand(&mut rng));
         }
         let mut expected_image = CRH::<$bench_field>::evaluate(&config, input.clone()).unwrap();
@@ -173,6 +173,7 @@ macro_rules! bench {
             num_constraints: cs.num_constraints(),
             predicate_constraints: cs.get_all_predicates_num_constraints(),
             num_invocations: $num_invocations,
+            input_size: $input_size,
             num_thread: $num_thread,
             num_keygen_iterations: $num_keygen_iterations,
             num_prover_iterations: $num_prover_iterations,
@@ -199,7 +200,7 @@ fn main() {
         .build_global()
         .unwrap();
 
-    let _ = bench!(bench, 72, 1, 2, 100, num_thread, Bls12_381, BlsFr12_381_Fr)
+    let _ = bench!(bench, 72,20, 1, 2, 100, num_thread, Bls12_381, BlsFr12_381_Fr)
         .save_to_csv("groth16.csv", false);
     // bench!(bench, 144, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
     // bench!(bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
