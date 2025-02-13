@@ -65,30 +65,42 @@ impl<E: Pairing> Solidifier<E> {
 
     fn generate_input_static_code(input_size: usize) -> String {
         let i = input_size - 1;
+    
+        // Generate the Lagrange coefficient calculations
         let neg_lagrange_code = (0..=i)
             .map(|idx| {
                 format!(
                     "uint256 neg_cur_elem{idx} = addmod(chall, NEG_H_Gi_{idx}, R); \n
-                 uint256 neg_cur_elem{idx}_inv = invert_FR(neg_cur_elem{idx}); \n
-                 uint256 lagrange_{idx} = mulmod(neg_cur_elem{idx}_inv, NOM_{idx}, R);\n"
+                     uint256 neg_cur_elem{idx}_inv = invert_FR(neg_cur_elem{idx}); \n
+                     uint256 lagrange_{idx} = mulmod(neg_cur_elem{idx}_inv, NOM_{idx}, R);\n"
                 )
             })
             .collect::<Vec<_>>()
             .join(" ");
-
-        let x_a_code = if i == 0 {
-            format!("uint256 x_a = mulmod(lagrange_0, input[0], R);")
-        } else {
-            let mut addmod_expr = format!("mulmod(lagrange_0, input[0], R)");
-            for idx in 1..=i {
-                addmod_expr = format!(
-                    "addmod({}, mulmod(lagrange_{}, input[{}], R), R)",
-                    addmod_expr, idx, idx
-                );
+    
+        // Generate Solidity code for binary tree addition
+        let mut input_vars: Vec<String> = (0..=i)
+            .map(|idx| format!("mulmod(lagrange_{}, input[{}], R)", idx, idx))
+            .collect();
+    
+        while input_vars.len() > 1 {
+            let mut new_input_vars = Vec::new();
+            let len = input_vars.len();
+            
+            for j in (0..len).step_by(2) {
+                if j + 1 < len {
+                    // Pairwise addmod
+                    new_input_vars.push(format!("addmod({}, {}, R)", input_vars[j], input_vars[j + 1]));
+                } else {
+                    // If odd number, carry last element
+                    new_input_vars.push(input_vars[j].clone());
+                }
             }
-            format!("uint256 x_a = {};", addmod_expr)
-        };
-
+            input_vars = new_input_vars;
+        }
+    
+        let x_a_code = format!("uint256 x_a = {};", input_vars[0]);
+    
         format!("{}\n\n{}", neg_lagrange_code, x_a_code)
     }
 
