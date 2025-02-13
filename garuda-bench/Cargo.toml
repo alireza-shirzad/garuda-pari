@@ -20,6 +20,7 @@ tracing = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
+ark-bls12-377 = { workspace = true }
 
 
 # These are for the hyperplonk benches
@@ -64,3 +65,10 @@ parallel = [
     "ark-std/parallel",
     "rayon",
 ]
+
+# Plots for the paper:
+# Remove constraints plot
+# Prover time (NUM_THREAD = 1,4) for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk
+# VErifier time for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk
+# Proof size for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk
+# PK and VK size for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk

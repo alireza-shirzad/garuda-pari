@@ -1,6 +1,13 @@
 use std::{ops::Neg, rc::Rc};
 
+use crate::utils::compute_chall;
+use crate::{
+    data_structures::{Proof, ProvingKey, VerifyingKey},
+    Pari,
+};
+use ark_ec::AffineRepr;
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
+use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
 use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Evaluations,
@@ -16,16 +23,9 @@ use ark_relations::{
     sr1cs::Sr1csAdapter,
 };
 use ark_std::{cfg_iter_mut, end_timer, rand::RngCore, start_timer};
-use crate::utils::compute_chall;
-use crate::{
-    data_structures::{Proof, ProvingKey, VerifyingKey},
-    Pari,
-};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use shared_utils::transcript::IOPTranscript;
-use ark_ff::PrimeField;
-use ark_ec::AffineRepr;
 impl<E, R> Pari<E, R>
 where
     E: Pairing,
@@ -42,7 +42,6 @@ where
         E::ScalarField: std::convert::From<i32>,
         E::BaseField: PrimeField,
         <<E as Pairing>::G1Affine as AffineRepr>::BaseField: PrimeField,
-        
     {
         let timer_p = start_timer!(|| "Total Proving time");
         let cs = Self::circuit_to_prover_cs(circuit)?;
@@ -69,7 +68,7 @@ where
         /////////////////////////// Computing the evaluation domain ///////////////////////
 
         let timer_eval_domain = start_timer!(|| "Computing the evaluation domain");
-        let domain = GeneralEvaluationDomain::new(num_constraints).unwrap();
+        let domain = GeneralEvaluationDomain::<E::ScalarField>::new(num_constraints).unwrap();
         end_timer!(timer_eval_domain);
 
         /////////////////////// Computing polynomials z_A, z_B, w_A, w_B ///////////////////////
@@ -113,7 +112,8 @@ where
 
         /////////////////////// initilizing the transcript ///////////////////////
         let timer_init_transcript = start_timer!(|| "Computing Challenge");
-        let challenge = compute_chall::<E>(&pk.verifying_key, &instance_assignment[1..].to_vec(), &t);
+        let challenge =
+            compute_chall::<E>(&pk.verifying_key, &instance_assignment[1..].to_vec(), &t);
         end_timer!(timer_init_transcript);
 
         /////////////////////// Random Evaluation of the polynomials ///////////////////////
@@ -127,6 +127,12 @@ where
         let v_b = w_b_hat.evaluate(&challenge);
         let v_q = q.evaluate(&challenge);
 
+        assert!(
+            (z_a_hat.evaluate(&challenge) * z_a_hat.evaluate(&challenge)
+                - z_b_hat.evaluate(&challenge))
+                / &domain.evaluate_vanishing_polynomial(challenge)
+                == v_q
+        );
         end_timer!(timer_eval);
 
         /////////////////////// Proof of correct opening ///////////////////////

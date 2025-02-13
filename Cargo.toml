@@ -30,6 +30,9 @@ ark-crypto-primitives = { path = "../crypto-primitives/crypto-primitives", defau
 ark-bls12-381 = { version = "^0.5.0", default-features = false, features = [
     "curve",
 ] }
+ark-bls12-377 = { version = "^0.5.0", default-features = false, features = [
+    "curve",
+] }
 
 ark-bn254 = { version = "^0.5.0", default-features = false, features = [
     "curve",

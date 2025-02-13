@@ -64,7 +64,7 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
         "20974350070050476191779096203274386335076221000211055129041463479975432473805",
     )
     .unwrap();
-    let params = RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1);
+    let params = RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1, 1);
     params
 }
 

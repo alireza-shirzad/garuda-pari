@@ -78,7 +78,6 @@ where
                 Some(E::ScalarField::ONE / domain.evaluate_vanishing_polynomial(challenge));
             solidifier.solidify();
         }
-
         let x_a = lagrange_ceoffs
             .iter()
             .zip(px_evaluations.iter())
@@ -88,13 +87,12 @@ where
 
         /////////////////////// Computing the quotient evaluation///////////////////////
 
+
         let timer_q = start_timer!(|| "Computing the quotient evaluation");
 
         let v_q: E::ScalarField =
             (z_a * z_a - v_b) / domain.evaluate_vanishing_polynomial(challenge);
-        use ark_ff::PrimeField;
         end_timer!(timer_q);
-
         /////////////////////// Final Pairing///////////////////////
 
         let timer_pairing = start_timer!(|| "Final Pairing");

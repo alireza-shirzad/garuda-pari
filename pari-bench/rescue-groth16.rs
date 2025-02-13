@@ -64,7 +64,7 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
     )
     .unwrap();
 
-    RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1)
+    RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1 ,1)
 }
 
 impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>

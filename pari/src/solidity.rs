@@ -9,6 +9,7 @@ use num_bigint::BigUint;
 use regex::Regex;
 use std::fs::File;
 use std::io::Write;
+pub const CONTRACT_PATH: &str = "./smart-contracts/";
 pub struct Solidifier<E: Pairing> {
     pub p: Option<BigUint>,
     pub q: Option<BigUint>,
@@ -18,16 +19,8 @@ pub struct Solidifier<E: Pairing> {
     pub coset_offset_to_coset_size_inverse: Option<E::ScalarField>,
     pub neg_h_gi: Option<Vec<E::ScalarField>>,
     pub nom_i: Option<Vec<E::ScalarField>>,
-    pub g: Option<E::G1Affine>,
-    pub h: Option<E::G2Affine>,
-    pub alpha_g: Option<E::G1Affine>,
-    pub beta_g: Option<E::G1Affine>,
-    pub tau_h: Option<E::G2Affine>,
-    pub delta_h: Option<E::G2Affine>,
-    pub v_a: Option<E::ScalarField>,
-    pub v_b: Option<E::ScalarField>,
-    pub t_g: Option<E::G1Affine>,
-    pub u_g: Option<E::G1Affine>,
+    pub vk: Option<VerifyingKey<E>>,
+    pub proof: Option<Proof<E>>,
     pub input: Option<Vec<E::ScalarField>>,
 }
 
@@ -42,16 +35,8 @@ impl<E: Pairing> Solidifier<E> {
             coset_offset_to_coset_size_inverse: None,
             neg_h_gi: None,
             nom_i: None,
-            g: None,
-            h: None,
-            alpha_g: None,
-            beta_g: None,
-            tau_h: None,
-            delta_h: None,
-            v_a: None,
-            v_b: None,
-            t_g: None,
-            u_g: None,
+            vk: None,
+            proof: None,
             input: None,
         }
     }
@@ -65,30 +50,50 @@ impl<E: Pairing> Solidifier<E> {
         })
     }
     pub(crate) fn set_vk(&mut self, vk: &VerifyingKey<E>) {
-        self.g = Some(vk.g.into());
-        self.h = Some(vk.h.into());
-        self.alpha_g = Some(vk.alpha_g.into());
-        self.beta_g = Some(vk.beta_g.into());
-        self.tau_h = Some(vk.tau_h.into());
-        self.delta_h = Some(vk.delta_two_h.into());
+        self.vk = Some(vk.clone());
     }
 
     pub(crate) fn set_proof(&mut self, proof: &Proof<E>) {
-        self.v_a = Some(proof.v_a);
-        self.v_b = Some(proof.v_b);
-        self.t_g = Some(proof.t_g.into());
-        self.u_g = Some(proof.u_g.into());
+        self.proof = Some(proof.clone());
     }
 
     pub(crate) fn set_input(&mut self, input: &[E::ScalarField]) {
-        dbg!(input.len());
         let mut input_vec = vec![E::ScalarField::ONE];
         input_vec.extend_from_slice(input);
         self.input = Some(input_vec);
     }
 
+    fn generate_input_static_code(input_size: usize) -> String {
+        let i = input_size - 1;
+        let neg_lagrange_code = (0..=i)
+            .map(|idx| {
+                format!(
+                    "uint256 neg_cur_elem{idx} = addmod(chall, NEG_H_Gi_{idx}, R); \n
+                 uint256 neg_cur_elem{idx}_inv = invert_FR(neg_cur_elem{idx}); \n
+                 uint256 lagrange_{idx} = mulmod(neg_cur_elem{idx}_inv, NOM_{idx}, R);\n"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let x_a_code = if i == 0 {
+            format!("uint256 x_a = mulmod(lagrange_0, input[0], R);")
+        } else {
+            let mut addmod_expr = format!("mulmod(lagrange_0, input[0], R)");
+            for idx in 1..=i {
+                addmod_expr = format!(
+                    "addmod({}, mulmod(lagrange_{}, input[{}], R), R)",
+                    addmod_expr, idx, idx
+                );
+            }
+            format!("uint256 x_a = {};", addmod_expr)
+        };
+
+        format!("{}\n\n{}", neg_lagrange_code, x_a_code)
+    }
+
     pub fn solidify(&self) {
-        let input_size = 2; // Change this to the desired input size
+        let input_size = self.input.as_ref().unwrap().len();
 
         let neg_h_gi_str = self
             .neg_h_gi
@@ -120,34 +125,34 @@ impl<E: Pairing> Solidifier<E> {
 
         let h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.h.clone().unwrap().x().unwrap()
+            self.vk.clone().unwrap().h.into().x().unwrap()
         ))
         .unwrap();
         let h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.h.clone().unwrap().y().unwrap()
+            self.vk.clone().unwrap().h.into().y().unwrap()
         ))
         .unwrap();
 
         let delta_h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.delta_h.clone().unwrap().x().unwrap()
+            self.vk.clone().unwrap().delta_two_h.into().x().unwrap()
         ))
         .unwrap();
         let delta_h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.delta_h.clone().unwrap().y().unwrap()
+            self.vk.clone().unwrap().delta_two_h.into().y().unwrap()
         ))
         .unwrap();
 
         let tau_h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.tau_h.clone().unwrap().x().unwrap()
+            self.vk.clone().unwrap().tau_h.into().x().unwrap()
         ))
         .unwrap();
         let tau_h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.tau_h.clone().unwrap().y().unwrap()
+            self.vk.clone().unwrap().tau_h.into().y().unwrap()
         ))
         .unwrap();
 
@@ -183,8 +188,8 @@ contract Pari {{
     //////////////////////////////// constants for processing the input //////////////////////////////
 
     // FFT Coset information
-    uint256 constant COSET_SIZE = 16;
-    uint256 constant COSET_OFFSET = 1;
+    uint256 constant COSET_SIZE = {coset_size};
+    uint256 constant COSET_OFFSET = {coset_offset};
 
     // Preprocessed intermediate values for computing the lagrande polynomials
     // This computation is done according to https://o1-labs.github.io/proof-systems/plonk/lagrange.html
@@ -271,24 +276,12 @@ contract Pari {{
 
     // Computes v_q = (v_a^2-v_b)/Z_H(challenge)
     function comp_vq(
-        uint256[2] calldata input,
+        uint256[{input_size}] calldata input,
         uint256[6] calldata proof,
         uint256 chall
     ) internal view returns (uint256 v_q) {{
-        uint256 neg_cur_elem0 = addmod(chall, NEG_H_Gi_0, R);
-        uint256 neg_cur_elem1 = addmod(chall, NEG_H_Gi_1, R);
 
-        uint256 neg_cur_elem0_inv = invert_FR(neg_cur_elem0);
-        uint256 neg_cur_elem1_inv = invert_FR(neg_cur_elem1);
-
-        uint256 lagrange_0 = mulmod(neg_cur_elem0_inv, NOM_0, R);
-        uint256 lagrange_1 = mulmod(neg_cur_elem1_inv, NOM_1, R);
-
-        uint256 x_a = addmod(
-            mulmod(lagrange_0, input[0], R),
-            mulmod(lagrange_1, input[1], R),
-            R
-        );
+        {input_processing_vars_str}
 
         // Compute vanishing polynomial
         uint256 vanishing_poly = compute_vanishing_poly(chall);
@@ -411,7 +404,7 @@ contract Pari {{
     // Dues to stack limitation, the input to Keccak256 is split into two parts
     function comp_chall(
         uint256[2] memory t_g,
-        uint256[2] memory input
+        uint256[{input_size}] memory input
     ) public pure returns (uint256) {{
         // Encode the first part
         bytes memory part1 = abi.encodePacked(
@@ -457,7 +450,7 @@ contract Pari {{
     // The verifier for `Circuit1` in `pari/test/Circuit1`
     function Verify(
         uint256[6] calldata proof,
-        uint256[2] calldata input
+        uint256[{input_size}] calldata input
     ) public view {{
         uint256 chall = comp_chall([proof[2], proof[3]], input);
         (uint256 A_x, uint256 A_y) = compute_A(
@@ -527,12 +520,12 @@ contract Pari {{
             exp_inv_r = self.q.clone().unwrap() - BigUint::from(2u32),
             neg_h_gi_str = neg_h_gi_str,
             nom_i_str = nom_i_str,
-            g_x = self.g.clone().unwrap().x().unwrap(),
-            g_y = self.g.clone().unwrap().y().unwrap(),
-            alpha_g_x = self.alpha_g.clone().unwrap().x().unwrap(),
-            alpha_g_y = self.alpha_g.clone().unwrap().y().unwrap(),
-            beta_g_x = self.beta_g.clone().unwrap().x().unwrap(),
-            beta_g_y = self.beta_g.clone().unwrap().y().unwrap(),
+            g_x = self.vk.clone().unwrap().g.into().x().unwrap(),
+            g_y = self.vk.clone().unwrap().g.into().y().unwrap(),
+            alpha_g_x = self.vk.clone().unwrap().alpha_g.into().x().unwrap(),
+            alpha_g_y = self.vk.clone().unwrap().alpha_g.into().y().unwrap(),
+            beta_g_x = self.vk.clone().unwrap().beta_g.into().x().unwrap(),
+            beta_g_y = self.vk.clone().unwrap().beta_g.into().y().unwrap(),
             h_x_0 = h_x.0,
             h_x_1 = h_x.1,
             h_y_0 = h_y.0,
@@ -549,9 +542,14 @@ contract Pari {{
                 self.minus_coset_offset_to_coset_size.clone().unwrap(),
             coset_offset_to_coset_size_inverse =
                 self.coset_offset_to_coset_size_inverse.clone().unwrap(),
+            coset_size = self.coset_size.clone().unwrap(),
+            coset_offset = self.coset_offset.clone().unwrap(),
+            input_processing_vars_str =
+                Self::generate_input_static_code(self.input.as_ref().unwrap().len()),
         );
 
-        let mut file = File::create("pari.sol").unwrap();
+        let mut file =
+            File::create(CONTRACT_PATH.to_owned() + &format!("pari-{}.sol", input_size)).unwrap();
         file.write_all(solidity_code.as_bytes()).unwrap();
 
         println!("pari.sol file has been generated successfully.");
@@ -579,7 +577,7 @@ contract PariGasTest is Test {{
             {u_g_x},
             {u_g_y}
         ];
-        uint256[2] memory input = [
+        uint256[{input_size}] memory input = [
             {input_str}
         ];
 
@@ -590,16 +588,18 @@ contract PariGasTest is Test {{
 
 
     "#,
-            v_a = self.v_a.clone().unwrap(),
-            v_b = self.v_b.clone().unwrap(),
-            t_g_x = self.t_g.clone().unwrap().x().unwrap(),
-            t_g_y = self.t_g.clone().unwrap().y().unwrap(),
-            u_g_x = self.u_g.clone().unwrap().x().unwrap(),
-            u_g_y = self.u_g.clone().unwrap().y().unwrap(),
+            v_a = self.proof.clone().unwrap().v_a,
+            v_b = self.proof.clone().unwrap().v_b,
+            t_g_x = self.proof.clone().unwrap().t_g.x().unwrap(),
+            t_g_y = self.proof.clone().unwrap().t_g.y().unwrap(),
+            u_g_x = self.proof.clone().unwrap().u_g.x().unwrap(),
+            u_g_y = self.proof.clone().unwrap().u_g.y().unwrap(),
             input_str = input_str,
+            input_size = input_size
         );
 
-        let mut file = File::create("pari.t.sol").unwrap();
+        let mut file =
+            File::create(CONTRACT_PATH.to_owned() + &format!("pari-{}.t.sol", input_size)).unwrap();
         file.write_all(solidity_test_code.as_bytes()).unwrap();
 
         println!("pari.t.sol file has been generated successfully.");

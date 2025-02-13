@@ -1,6 +1,8 @@
 #[cfg(test)]
-use ark_bls12_381::{Bls12_381, Fr as Bls12_381_Fr};
+// use ark_bls12_381::{Bls12_381, Fr as Bls12_381_Fr};
 use ark_bn254::{Bn254, Fr as Bn254_Fr};
+// use ark_bls::{Bls12_381, Fr as Bls12_381_Fr};
+// use ark_bn254::{Bn254, Fr as Bn254_Fr};
 use ark_ec::pairing::Pairing;
 use ark_ff::{AdditiveGroup, Field, UniformRand};
 use ark_poly::GeneralEvaluationDomain;
