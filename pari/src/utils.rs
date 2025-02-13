@@ -58,7 +58,10 @@ where
     hasher.update(&encode_packed(t_g.x().unwrap()));
     hasher.update(&encode_packed(t_g.y().unwrap()));
     hasher.update(&encode_packed(E::ScalarField::from(1)));
-    hasher.update(&encode_packed(public_input[0]));
+    for elem in public_input.iter() {
+        hasher.update(&encode_packed(*elem));
+    }
+
     hasher.update(&encode_packed(vk.g.into().x().unwrap()));
     hasher.update(&encode_packed(vk.g.into().y().unwrap()));
     hasher.update(&encode_packed(vk.alpha_g.into().x().unwrap()));

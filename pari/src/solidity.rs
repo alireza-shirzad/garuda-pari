@@ -122,6 +122,15 @@ impl<E: Pairing> Solidifier<E> {
             .map(|x| format!("{x}"))
             .collect::<Vec<_>>()
             .join(",\n ");
+        let input_refs_str = self
+            .input
+            .as_ref()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("input[{}],\n", i))
+            .collect::<Vec<_>>()
+            .join("");
 
         let h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
@@ -315,7 +324,7 @@ contract Pari {{
         uint256[2] memory P5;
 
         // Compute P1 = α_g * v_a (scalar multiplication)
-        assembly {{
+        assembly ("memory-safe") {{
             let ptr := mload(0x40)
             mstore(ptr, ALPHA_G_X)
             mstore(add(ptr, 0x20), ALPHA_G_Y)
@@ -325,7 +334,7 @@ contract Pari {{
         }}
 
         // Compute P2 = β_g * v_b (scalar multiplication)
-        assembly {{
+        assembly ("memory-safe") {{
             let ptr := mload(0x40)
             mstore(ptr, BETA_G_X)
             mstore(add(ptr, 0x20), BETA_G_Y)
@@ -335,7 +344,7 @@ contract Pari {{
         }}
 
         // Compute P3 = g * v_q (assuming g = (1, 2))
-        assembly {{
+        assembly ("memory-safe") {{
             let ptr := mload(0x40)
             mstore(ptr, G_X)
             mstore(add(ptr, 0x20), G_Y)
@@ -345,7 +354,7 @@ contract Pari {{
         }}
 
         // Compute P4 = u_g * challenge (scalar multiplication)
-        assembly {{
+        assembly ("memory-safe") {{
             let ptr := mload(0x40)
             mstore(ptr, u_g_x)
             mstore(add(ptr, 0x20), u_g_y)
@@ -358,7 +367,7 @@ contract Pari {{
         uint256[2] memory temp;
 
         // Step 1: temp = P1 + P2
-        assembly {{
+        assembly ("memory-safe") {{
             let ptr := mload(0x40)
             mstore(ptr, mload(P1))
             mstore(add(ptr, 0x20), mload(add(P1, 0x20)))
@@ -371,7 +380,7 @@ contract Pari {{
         require(success, "EC ADD failed for P1 + P2");
 
         // Step 2: temp = temp + P3
-        assembly {{
+        assembly ("memory-safe") {{
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
@@ -385,7 +394,7 @@ contract Pari {{
 
         // Step 3: A = temp - P4 (Point subtraction: A = temp + (-P4))
         // In elliptic curves, subtraction is adding the negated Y-coordinate.
-        assembly {{
+        assembly ("memory-safe") {{
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
@@ -406,38 +415,32 @@ contract Pari {{
         uint256[2] memory t_g,
         uint256[{input_size}] memory input
     ) public pure returns (uint256) {{
-        // Encode the first part
-        bytes memory part1 = abi.encodePacked(
-            t_g[0],
-            t_g[1],
-            input[0],
-            input[1],
-            G_X,
-            G_Y,
-            ALPHA_G_X,
-            ALPHA_G_Y,
-            BETA_G_X,
-            BETA_G_Y
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                t_g[0],
+                t_g[1],
+                {input_refs_str}
+                G_X,
+                G_Y,
+                ALPHA_G_X,
+                ALPHA_G_Y,
+                BETA_G_X,
+                BETA_G_Y,
+                H_X_0,
+                H_X_1,
+                H_Y_0,
+                H_Y_1,
+                DELTA_TWO_H_X_0,
+                DELTA_TWO_H_X_1,
+                DELTA_TWO_H_Y_0,
+                DELTA_TWO_H_Y_1,
+                TAU_H_X_0,
+                TAU_H_X_1,
+                TAU_H_Y_0,
+                TAU_H_Y_1
+            )
         );
 
-        // Encode the second part
-        bytes memory part2 = abi.encodePacked(
-            H_X_0,
-            H_X_1,
-            H_Y_0,
-            H_Y_1,
-            DELTA_TWO_H_X_0,
-            DELTA_TWO_H_X_1,
-            DELTA_TWO_H_Y_0,
-            DELTA_TWO_H_Y_1,
-            TAU_H_X_0,
-            TAU_H_X_1,
-            TAU_H_Y_0,
-            TAU_H_Y_1
-        );
-
-        // Compute Keccak-256 hash
-        bytes32 hash = keccak256(abi.encodePacked(part1, part2));
 
         // Compute challenge
         uint256 chall = uint256(hash) % R;
@@ -470,7 +473,7 @@ contract Pari {{
         uint256 u_g_x = proof[4]; // Fix: Load calldata into memory first
         uint256 u_g_y = proof[5];
 
-        assembly {{
+        assembly ("memory-safe") {{
             let memPtr := mload(0x40) // Load free memory pointer
 
             mstore(add(memPtr, 0x00), t_g_x)
@@ -546,6 +549,7 @@ contract Pari {{
             coset_offset = self.coset_offset.clone().unwrap(),
             input_processing_vars_str =
                 Self::generate_input_static_code(self.input.as_ref().unwrap().len()),
+            input_refs_str = input_refs_str
         );
 
         let mut file =
