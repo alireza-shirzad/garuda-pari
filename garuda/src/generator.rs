@@ -198,7 +198,7 @@ where
         Option<MLBatchedCommitment<E>>,
     ) {
         match index.num_predicates {
-            0 => (None, None),
+            1 => (None, None),
             _ => {
                 let sel_polys = Self::create_sel_polynomials(
                     index.log_num_constraints,

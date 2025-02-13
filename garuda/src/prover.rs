@@ -113,12 +113,15 @@ where
         end_timer!(timer_eval_mw_polys);
 
         let timer_eval_sel_polys = start_timer!(|| "Evaluate Selector Polynomials");
-        let sel_poly_evals: Option<Vec<E::ScalarField>> = pk.sel_polys.as_ref().map(|sel_polys| {
-            sel_polys
-                .iter()
-                .map(|selector| selector.evaluate(&zero_check_proof.point))
-                .collect()
-        });
+        let sel_poly_evals: Option<Vec<E::ScalarField>> = match index.num_predicates {
+            1 => None,
+            _ => pk.sel_polys.as_ref().map(|sel_polys| {
+                sel_polys
+                    .iter()
+                    .map(|selector| selector.evaluate(&zero_check_proof.point))
+                    .collect()
+            }),
+        };
         end_timer!(timer_eval_sel_polys);
         end_timer!(timer_eval_polys);
 
