@@ -175,10 +175,10 @@ fn main() {
         .num_threads(num_thread)
         .build_global()
         .unwrap();
-    bench_smart_contract();
+    // bench_smart_contract();
 
-    // let _ =
-    // bench!(bench, 72, 4, 1, 1, 1, num_thread, Bn254, Bn254_Fr).save_to_csv("pari.csv", false);
+    let _ =
+    bench!(bench, 2, 4, 1, 1, 1, num_thread, Bn254, Bn254_Fr).save_to_csv("pari.csv", false);
     // let _ = bench!(bench, 144, 1, 5, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
     //     .save_to_csv("pari.csv", true);
     // let _ = bench!(bench, 288, 1, 2, 1, num_thread, Bls12_381, BlsFr12_381_Fr)

@@ -202,7 +202,7 @@ fn main() {
 
     let _ = bench!(
         bench,
-        72,
+        2,
         20,
         1,
         2,
