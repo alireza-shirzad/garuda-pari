@@ -31,40 +31,13 @@ use std::env;
 use std::str::FromStr;
 use std::time::Duration;
 
-const RESCUE_ROUNDS: usize = 12;
-
-/// This is our demo circuit for proving knowledge of the
-/// preimage of a Rescue hash invocation.
 #[derive(Clone)]
 struct RescueDemo<F: PrimeField> {
-    input: Option<Vec<F>>,
-    image: Option<F>,
+    rescue_input: Option<Vec<F>>,
+    num_isntances: usize,
+    rescue_image: Option<F>,
     config: RescueConfig<F>,
     num_invocations: usize,
-}
-
-pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
-    rng: &mut impl Rng,
-) -> RescueConfig<F> {
-    let mut mds = vec![vec![]; 4];
-    for row in mds.iter_mut() {
-        for _ in 0..4 {
-            row.push(F::rand(rng));
-        }
-    }
-
-    let mut ark = vec![vec![]; 25];
-    ark.iter_mut().take(2 * RESCUE_ROUNDS + 1).for_each(|row| {
-        for _ in 0..4 {
-            row.push(F::rand(rng));
-        }
-    });
-    let alpha_inv: BigUint = BigUint::from_str(
-        "20974350070050476191779096203274386335076221000211055129041463479975432473805",
-    )
-    .unwrap();
-
-    RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1 ,1)
 }
 
 impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
@@ -77,7 +50,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
         let mut input_g = Vec::new();
 
         for elem in self
-            .input
+            .rescue_input
             .clone()
             .ok_or(SynthesisError::AssignmentMissing)
             .unwrap()
@@ -92,14 +65,18 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
             crh_a_g =
                 Some(CRHGadget::<F>::evaluate(&params_g, &vec![crh_a_g.unwrap(); 9]).unwrap());
         }
+        for i in 0..self.num_isntances - 1 {
+            let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
+                Ok(self
+                    .rescue_image
+                    .ok_or(SynthesisError::AssignmentMissing)
+                    .unwrap())
+            })
+            .unwrap();
 
-        let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
-            Ok(self.image.ok_or(SynthesisError::AssignmentMissing).unwrap())
-        })
-        .unwrap();
-
-        if let Some(crh_a_g) = crh_a_g {
-            let _ = crh_a_g.enforce_equal(&image_instance);
+            if let Some(crh_a_g) = crh_a_g.clone() {
+                let _ = crh_a_g.enforce_equal(&image_instance);
+            }
         }
 
         Ok(())
@@ -109,12 +86,14 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
 macro_rules! bench {
     ($bench_name:ident, $num_invocations:expr,$input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
         let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
-        let config = create_test_rescue_parameter(&mut rng);
-        let mut input = Vec::new();
-        for _ in 0..$input_size {
-            input.push(<$bench_field>::rand(&mut rng));
+        let config = RescueConfig::<$bench_field>::test_conf();
+
+        let mut rescue_input = Vec::new();
+        for _ in 0..9 {
+            rescue_input.push(<$bench_field>::rand(&mut rng));
         }
-        let mut expected_image = CRH::<$bench_field>::evaluate(&config, input.clone()).unwrap();
+        let mut expected_image =
+            CRH::<$bench_field>::evaluate(&config, rescue_input.clone()).unwrap();
 
         for _i in 0..($num_invocations - 1) {
             let output = vec![expected_image; 9];
@@ -125,8 +104,9 @@ macro_rules! bench {
         let mut keygen_time = Duration::new(0, 0);
         let mut verifier_time = Duration::new(0, 0);
         let circuit = RescueDemo::<$bench_field> {
-            input: Some(input.clone()),
-            image: Some(expected_image),
+            rescue_input: Some(rescue_input.clone()),
+            num_isntances: $input_size,
+            rescue_image: Some(expected_image),
             config: config.clone(),
             num_invocations: $num_invocations,
         };
@@ -145,7 +125,7 @@ macro_rules! bench {
         let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
         let prover_circuit = circuit.clone();
         let proof = Groth16::<Bls12_381>::prove(&pk, prover_circuit, &mut rng).unwrap();
-        for _ in 0..$num_keygen_iterations {
+        for _ in 0..$num_prover_iterations {
             let prover_circuit = circuit.clone();
             let start = ark_std::time::Instant::now();
             let _proof = Groth16::<Bls12_381>::prove(&pk, prover_circuit, &mut rng).unwrap();
@@ -155,8 +135,12 @@ macro_rules! bench {
         let start = ark_std::time::Instant::now();
         for _ in 0..$num_verifier_iterations {
             assert!(
-                Groth16::<Bls12_381>::verify_with_processed_vk(&vk, &[expected_image], &proof)
-                    .unwrap()
+                Groth16::<Bls12_381>::verify_with_processed_vk(
+                    &vk,
+                    &vec![expected_image; $input_size - 1],
+                    &proof
+                )
+                .unwrap()
             );
         }
         verifier_time += start.elapsed();
