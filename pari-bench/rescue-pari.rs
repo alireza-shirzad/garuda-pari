@@ -1,5 +1,5 @@
-// use ark_bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
-use ark_bn254::{Bn254, Fr as Bn254_Fr};
+use ark_bls12_381::{Bls12_381, Fr as BlsFr12_381_Fr};
+// use ark_bn254::{Bn254, Fr as Bn254_Fr};
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
@@ -120,7 +120,7 @@ macro_rules! bench {
         let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
         let prover_circuit = circuit.clone();
         let mut proof = Pari::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
-        for _ in 0..$num_keygen_iterations {
+        for _ in 0..$num_prover_iterations {
             let prover_circuit = circuit.clone();
             let start = ark_std::time::Instant::now();
             proof = Pari::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
@@ -150,7 +150,7 @@ macro_rules! bench {
             predicate_constraints: cs.get_all_predicates_num_constraints(),
             num_invocations: $num_invocations,
             num_thread: $num_thread,
-            input_size: $input_size,
+            input_size: cs.num_instance_variables(),
             num_keygen_iterations: $num_keygen_iterations,
             num_prover_iterations: $num_prover_iterations,
             num_verifier_iterations: $num_verifier_iterations,
@@ -175,30 +175,47 @@ fn main() {
         .num_threads(num_thread)
         .build_global()
         .unwrap();
-    // bench_smart_contract();
 
-    let _ =
-    bench!(bench, 2, 4, 1, 1, 1, num_thread, Bn254, Bn254_Fr).save_to_csv("pari.csv", false);
-    // let _ = bench!(bench, 144, 1, 5, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 288, 1, 2, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 577, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 1154, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", false);
-    // let _ = bench!(bench, 2309, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 4619, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 9238, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    //     .save_to_csv("pari.csv", true);
-    // let _ = bench!(bench, 18477, 1, 1, 1, num_thread, Bls12_381, BlsFr12_381_Fr)
-    // .save_to_csv("pari.csv", true);
-}
+    /////////// Benchmark Pari for different input sizes ///////////
+    let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
+    for i in 0..num_inputs.len() {
+        let _ = bench!(
+            bench,
+            1,
+            num_inputs[i],
+            1,
+            1,
+            1000,
+            num_thread,
+            Bls12_381,
+            BlsFr12_381_Fr
+        )
+        .save_to_csv("pari.csv", true);
+    }
 
-fn bench_smart_contract() {
-    for i in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
-        let _ = bench!(bench, 2, *i, 1, 1, 1, 0, Bn254, Bn254_Fr);
+    /////////// Benchmark Pari for different circuit sizes ///////////
+    let MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    for i in 0..num_invocations.len() {
+        let _ = bench!(
+            bench,
+            num_invocations[i],
+            20,
+            1,
+            1,
+            100,
+            num_thread,
+            Bls12_381,
+            BlsFr12_381_Fr
+        )
+        .save_to_csv("pari.csv", true);
     }
 }
+
+// fn bench_smart_contract() {
+//     for i in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
+//         let _ = bench!(bench, 2, *i, 1, 1, 1, 0, Bn254, Bn254_Fr);
+//     }
+// }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// Pari verifier for input size 2
+// Pari verifier for input size 1
 contract Pari {
     /// The proof is invalid.
     /// @dev This can mean that provided Groth16 proof points are not on their
@@ -20,14 +20,11 @@ contract Pari {
     //     t = 4965661367192848881
     //     P = 36⋅t⁴ + 36⋅t³ + 24⋅t² + 6⋅t + 1
     //     R = 36⋅t⁴ + 36⋅t³ + 18⋅t² + 6⋅t + 1
-    uint256 constant P =
-        21888242871839275222246405745257275088696311157297823662689037894645226208583;
-    uint256 constant R =
-        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    uint256 constant P = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
+    uint256 constant R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
     // Exponents for inversions and square roots mod P
-    uint256 constant EXP_INVERSE_FR =
-        21888242871839275222246405745257275088548364400416034343698204186575808495615; // R - 2
+    uint256 constant EXP_INVERSE_FR = 21888242871839275222246405745257275088548364400416034343698204186575808495615; // R - 2
 
     //////////////////////////////// constants for processing the input //////////////////////////////
 
@@ -37,59 +34,34 @@ contract Pari {
 
     // Preprocessed intermediate values for computing the lagrande polynomials
     // This computation is done according to https://o1-labs.github.io/proof-systems/plonk/lagrange.html
-    uint256 constant MINUS_COSET_OFFSET_TO_COSET_SIZE =
-        21888242871839275222246405745257275088548364400416034343698204186575808495616;
-    uint256 constant COSET_OFFSET_TO_COSET_SIZE_INVERSE =
-        8405086447822313838752646273194456000031217045728360237704343779480766987115;
+    uint256 constant MINUS_COSET_OFFSET_TO_COSET_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495616;
+    uint256 constant COSET_OFFSET_TO_COSET_SIZE_INVERSE = 18054556265820234195946152430238664673837407741942405729392590827829900537638;
 
-    uint256 constant NEG_H_Gi_0 =
-        13326885000311358912287078648031726819564990472170503574014291661505430978205;
-    uint256 constant NEG_H_Gi_1 =
-        4849392470595825263046812474188855353535321188723106867993138455938662753942;
+        uint256 constant NEG_H_Gi_0 = 4658854783519236281304787251426829785380272013053939496434657852755686889074;
 
-    uint256 constant NOM_0 =
-        14220450601458511673532606231352176427117945320416516159190713724478490024550;
-    uint256 constant NOM_1 =
-        5548614325997279117816616015086394390005228669711183081159836678771404380761;
+        uint256 constant NOM_0 = 15117197861681116210664999616737025990923645154890205130423708291180769107200;
+
 
     ////////////////////////////////////// Preprocessed verification key ////////////////////////////////
 
-    uint256 constant G_X =
-        19760134438617651871453468315483567841071605526694098053742883504090254514364;
-    uint256 constant G_Y =
-        7793307282958081219582865225040306749427619588777494126095807997225038567914;
-    uint256 constant H_X_0 =
-        15107519626438429753219536593708956924652976791314712957797314020274856024409;
-    uint256 constant H_X_1 =
-        14122693296893380104129524497578004632443439377632543312641053195073048228943;
-    uint256 constant H_Y_0 =
-        3755999432472398517198964599208617491776398181264958893260920167271302869584;
-    uint256 constant H_Y_1 =
-        3628672316656067923136354629391974220973066651561656219744429303673984729133;
-    uint256 constant ALPHA_G_X =
-        17117157057832940174282361915717324730879613848801909474443046625162937924738;
-    uint256 constant ALPHA_G_Y =
-        4912946022067341086926247926576655921713090630212747124179044707234477330213;
-    uint256 constant BETA_G_X =
-        6674938903558993035054571578365883078134800890104980674937713805994918596057;
-    uint256 constant BETA_G_Y =
-        3063729283729914084118689934566456601745586698919252761693132744009991923320;
-    uint256 constant TAU_H_X_0 =
-        19755739294702072308064810597738321137133863011448432042811737477294614186354;
-    uint256 constant TAU_H_X_1 =
-        7402033671645717150240329576186857582846987457652861799749233285030402985398;
-    uint256 constant TAU_H_Y_0 =
-        8088563936954206872933002633932719506006545552370278310585878994482044694722;
-    uint256 constant TAU_H_Y_1 =
-        8755609046364811094992203899104917966328729103809389613205406784809722295327;
-    uint256 constant DELTA_TWO_H_X_0 =
-        8444257463180828655082382641071723106553811213214499031744530464596715083038;
-    uint256 constant DELTA_TWO_H_X_1 =
-        3078227587912202320482865994940325897112751752596849976866904527004632776724;
-    uint256 constant DELTA_TWO_H_Y_0 =
-        1892704013847525363054549589001048916241549423418179546196529832810640362035;
-    uint256 constant DELTA_TWO_H_Y_1 =
-        4052909182836464039553378618668476668081637576194760304751880353526624109889;
+    uint256 constant G_X = 19760134438617651871453468315483567841071605526694098053742883504090254514364;
+    uint256 constant G_Y = 7793307282958081219582865225040306749427619588777494126095807997225038567914;
+    uint256 constant H_X_0 = 15107519626438429753219536593708956924652976791314712957797314020274856024409;
+    uint256 constant H_X_1 = 14122693296893380104129524497578004632443439377632543312641053195073048228943;
+    uint256 constant H_Y_0 = 3755999432472398517198964599208617491776398181264958893260920167271302869584;
+    uint256 constant H_Y_1 = 3628672316656067923136354629391974220973066651561656219744429303673984729133;
+    uint256 constant ALPHA_G_X = 17117157057832940174282361915717324730879613848801909474443046625162937924738;
+    uint256 constant ALPHA_G_Y = 4912946022067341086926247926576655921713090630212747124179044707234477330213;
+    uint256 constant BETA_G_X = 6674938903558993035054571578365883078134800890104980674937713805994918596057;
+    uint256 constant BETA_G_Y = 3063729283729914084118689934566456601745586698919252761693132744009991923320;
+    uint256 constant TAU_H_X_0 = 19755739294702072308064810597738321137133863011448432042811737477294614186354;
+    uint256 constant TAU_H_X_1 = 7402033671645717150240329576186857582846987457652861799749233285030402985398;
+    uint256 constant TAU_H_Y_0 = 8088563936954206872933002633932719506006545552370278310585878994482044694722;
+    uint256 constant TAU_H_Y_1 = 8755609046364811094992203899104917966328729103809389613205406784809722295327;
+    uint256 constant DELTA_TWO_H_X_0 = 8444257463180828655082382641071723106553811213214499031744530464596715083038;
+    uint256 constant DELTA_TWO_H_X_1 = 3078227587912202320482865994940325897112751752596849976866904527004632776724;
+    uint256 constant DELTA_TWO_H_Y_0 = 1892704013847525363054549589001048916241549423418179546196529832810640362035;
+    uint256 constant DELTA_TWO_H_Y_1 = 4052909182836464039553378618668476668081637576194760304751880353526624109889;
 
     /////////////////////////////////////// Helper functions ////////////////////////////////
 
@@ -101,7 +73,7 @@ contract Pari {
     /// @return x the result
     function exp(uint256 a, uint256 e) internal view returns (uint256 x) {
         bool success;
-        assembly  {
+        assembly ("memory-safe") {
             let f := mload(0x40)
             mstore(f, 0x20)
             mstore(add(f, 0x20), 0x20)
@@ -147,26 +119,19 @@ contract Pari {
 
     // Computes v_q = (v_a^2-v_b)/Z_H(challenge)
     function comp_vq(
-        uint256[2] calldata input,
+        uint256[1] calldata input,
         uint256[6] calldata proof,
         uint256 chall
     ) internal view returns (uint256 v_q) {
-        uint256 neg_cur_elem0 = addmod(chall, NEG_H_Gi_0, R);
 
-        uint256 neg_cur_elem0_inv = invert_FR(neg_cur_elem0);
+        uint256 neg_cur_elem0 = addmod(chall, NEG_H_Gi_0, R); 
 
-        uint256 lagrange_0 = mulmod(neg_cur_elem0_inv, NOM_0, R);
-        uint256 neg_cur_elem1 = addmod(chall, NEG_H_Gi_1, R);
+                     uint256 neg_cur_elem0_inv = invert_FR(neg_cur_elem0); 
 
-        uint256 neg_cur_elem1_inv = invert_FR(neg_cur_elem1);
+                     uint256 lagrange_0 = mulmod(neg_cur_elem0_inv, NOM_0, R);
 
-        uint256 lagrange_1 = mulmod(neg_cur_elem1_inv, NOM_1, R);
 
-        uint256 x_a = addmod(
-            mulmod(lagrange_0, input[0], R),
-            mulmod(lagrange_1, input[1], R),
-            R
-        );
+uint256 x_a = mulmod(lagrange_0, input[0], R);
 
         // Compute vanishing polynomial
         uint256 vanishing_poly = compute_vanishing_poly(chall);
@@ -200,7 +165,7 @@ contract Pari {
         uint256[2] memory P5;
 
         // Compute P1 = α_g * v_a (scalar multiplication)
-        assembly  {
+        assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, ALPHA_G_X)
             mstore(add(ptr, 0x20), ALPHA_G_Y)
@@ -210,7 +175,7 @@ contract Pari {
         }
 
         // Compute P2 = β_g * v_b (scalar multiplication)
-        assembly  {
+        assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, BETA_G_X)
             mstore(add(ptr, 0x20), BETA_G_Y)
@@ -220,7 +185,7 @@ contract Pari {
         }
 
         // Compute P3 = g * v_q (assuming g = (1, 2))
-        assembly  {
+        assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, G_X)
             mstore(add(ptr, 0x20), G_Y)
@@ -230,7 +195,7 @@ contract Pari {
         }
 
         // Compute P4 = u_g * challenge (scalar multiplication)
-        assembly  {
+        assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, u_g_x)
             mstore(add(ptr, 0x20), u_g_y)
@@ -243,7 +208,7 @@ contract Pari {
         uint256[2] memory temp;
 
         // Step 1: temp = P1 + P2
-        assembly  {
+        assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(P1))
             mstore(add(ptr, 0x20), mload(add(P1, 0x20)))
@@ -256,7 +221,7 @@ contract Pari {
         require(success, "EC ADD failed for P1 + P2");
 
         // Step 2: temp = temp + P3
-        assembly  {
+        assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
@@ -270,7 +235,7 @@ contract Pari {
 
         // Step 3: A = temp - P4 (Point subtraction: A = temp + (-P4))
         // In elliptic curves, subtraction is adding the negated Y-coordinate.
-        assembly  {
+        assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
@@ -289,14 +254,14 @@ contract Pari {
     // Dues to stack limitation, the input to Keccak256 is split into two parts
     function comp_chall(
         uint256[2] memory t_g,
-        uint256[2] memory input
+        uint256[1] memory input
     ) public pure returns (uint256) {
         bytes32 hash = keccak256(
             abi.encodePacked(
                 t_g[0],
                 t_g[1],
                 input[0],
-                input[1],
+
                 G_X,
                 G_Y,
                 ALPHA_G_X,
@@ -318,6 +283,7 @@ contract Pari {
             )
         );
 
+
         // Compute challenge
         uint256 chall = uint256(hash) % R;
 
@@ -329,11 +295,9 @@ contract Pari {
     // The verifier for `Circuit1` in `pari/test/Circuit1`
     function Verify(
         uint256[6] calldata proof,
-        uint256[2] calldata input
+        uint256[1] calldata input
     ) public view {
-        // First part
         uint256 chall = comp_chall([proof[2], proof[3]], input);
-        // Second part
         (uint256 A_x, uint256 A_y) = compute_A(
             proof[0],
             proof[1],
@@ -344,14 +308,14 @@ contract Pari {
         );
 
         //////////////////// Pairing  ////////////////////
-        // Third part
+
         bool success;
         uint256 t_g_x = proof[2]; // Fix: Load calldata into memory first
         uint256 t_g_y = proof[3];
         uint256 u_g_x = proof[4]; // Fix: Load calldata into memory first
         uint256 u_g_y = proof[5];
 
-        assembly  {
+        assembly ("memory-safe") {
             let memPtr := mload(0x40) // Load free memory pointer
 
             mstore(add(memPtr, 0x00), t_g_x)
@@ -393,3 +357,5 @@ contract Pari {
         }
     }
 }
+
+    

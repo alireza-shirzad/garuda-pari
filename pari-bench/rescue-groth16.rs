@@ -200,22 +200,40 @@ fn main() {
         .build_global()
         .unwrap();
 
-    let _ = bench!(bench, 72,20, 1, 2, 100, num_thread, Bls12_381, BlsFr12_381_Fr)
-        .save_to_csv("groth16.csv", false);
-    // bench!(bench, 144, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(
-    //     bench,
-    //     18477,
-    //     1,
-    //     num_thread,
-    //     Bls12_381,
-    //     BlsFr12_381_Fr
-    // )
-    // .save_to_csv(true);
+    /////////// Benchmark Pari for different input sizes ///////////
+    let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
+    for i in 0..num_inputs.len() {
+        let _ = bench!(
+            bench,
+            1,
+            num_inputs[i],
+            1,
+            1,
+            1000,
+            num_thread,
+            Bls12_381,
+            BlsFr12_381_Fr
+        )
+        .save_to_csv("groth16.csv", true);
+    }
+
+    /////////// Benchmark Pari for different circuit sizes ///////////
+    let MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    for i in 0..num_invocations.len() {
+        let _ = bench!(
+            bench,
+            num_invocations[i],
+            20,
+            1,
+            1,
+            100,
+            num_thread,
+            Bls12_381,
+            BlsFr12_381_Fr
+        )
+        .save_to_csv("groth16.csv", true);
+    }
 }
