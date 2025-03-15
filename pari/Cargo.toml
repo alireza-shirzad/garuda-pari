@@ -33,6 +33,7 @@ ark-serialize = { workspace = true }
 tiny-keccak = { version = "2.0.2", optional = true }
 num-bigint = { version = "0.4.0" }
 regex = "1.11.1"
+
 [dev-dependencies]
 ark-bls12-381 = { workspace = true }
 ark-bls12-377 = { workspace = true }
@@ -51,28 +52,3 @@ parallel = [
     "rayon",
 ]
 sol = ["ark-std/std", "tiny-keccak/keccak"]
-
-[profile.release]
-opt-level = 3
-lto = "thin"
-incremental = true
-panic = 'abort'
-
-[profile.bench]
-opt-level = 3
-debug = false
-rpath = false
-lto = "thin"
-incremental = true
-debug-assertions = false
-
-[profile.dev]
-opt-level = 0
-panic = 'abort'
-
-[profile.test]
-opt-level = 3
-lto = "thin"
-incremental = true
-debug-assertions = true
-debug = true

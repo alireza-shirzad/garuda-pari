@@ -2,7 +2,7 @@ use std::{ops::Neg, rc::Rc};
 
 use crate::utils::compute_chall;
 use crate::{
-    data_structures::{Proof, ProvingKey, VerifyingKey},
+    data_structures::{Proof, ProvingKey},
     Pari,
 };
 use ark_ec::AffineRepr;
@@ -22,15 +22,12 @@ use ark_relations::{
     },
     sr1cs::Sr1csAdapter,
 };
-use ark_std::{cfg_iter_mut, end_timer, rand::RngCore, start_timer};
+use ark_std::{cfg_iter_mut, end_timer, start_timer};
+
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
-use shared_utils::transcript::IOPTranscript;
-impl<E, R> Pari<E, R>
-where
-    E: Pairing,
-    R: RngCore,
-{
+
+impl<E: Pairing> Pari<E> {
     pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
         pk: &ProvingKey<E>,

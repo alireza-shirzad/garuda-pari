@@ -1,5 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
+use ark_poly::Radix2EvaluationDomain;
 use ark_serialize::CanonicalSerialize;
 
 /// The proving key for Pari
@@ -22,14 +23,16 @@ where
 #[derive(Clone, Debug)]
 pub struct VerifyingKey<E: Pairing> {
     pub succinct_index: SuccinctIndex,
-    pub alpha_g: E::G1,
-    pub beta_g: E::G1,
+    pub g: E::G1Affine,
+    pub alpha_g: E::G1Affine,
+    pub beta_g: E::G1Affine,
+    pub delta_two_h: E::G2Affine,
     pub delta_two_h_prep: E::G2Prepared,
-    pub delta_two_h: E::G2,
-    pub tau_h: E::G2,
-    pub g: E::G1,
+    pub tau_h: E::G2Affine,
+    pub tau_h_prep: E::G2Prepared,
+    pub h: E::G2Affine,
     pub h_prep: E::G2Prepared,
-    pub h: E::G2,
+    pub domain: Radix2EvaluationDomain<E::ScalarField>,
 }
 
 impl<E: Pairing> CanonicalSerialize for VerifyingKey<E> {

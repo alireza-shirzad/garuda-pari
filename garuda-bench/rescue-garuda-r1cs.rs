@@ -215,5 +215,4 @@ fn main() {
         Bls12_381_Fr
     )
     .save_to_csv("garuda.csv", false);
-
 }

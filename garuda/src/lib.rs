@@ -1,6 +1,3 @@
-#![feature(associated_type_defaults)]
-#![allow(unreachable_patterns)]
-
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_relations::gr1cs::{ConstraintSynthesizer, LinearCombination, SynthesisError, Variable};

@@ -16,8 +16,8 @@ pub trait EPC<R: RngCore> {
     type BatchedCommitment;
     type Polynomial;
     type BasisPoly;
-    type PolynomialBasis = Vec<Self::BasisPoly>;
-    type EquifficientConstraint = Vec<Self::PolynomialBasis>;
+    type PolynomialBasis;
+    type EquifficientConstraint;
 
     fn setup(
         rng: &mut R,

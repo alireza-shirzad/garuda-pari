@@ -3,31 +3,21 @@ use crate::{
     data_structures::{Proof, VerifyingKey},
     Pari,
 };
-use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
+use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::PrimeField;
-use ark_ff::{FftField, Field, Zero};
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_std::{end_timer, rand::RngCore, start_timer};
-use shared_utils::transcript::IOPTranscript;
-impl<E, R> Pari<E, R>
-where
-    E: Pairing,
-    R: RngCore,
-{
-    pub fn verify(
-        proof: &Proof<E>,
-        vk: &VerifyingKey<E>,
-        public_input: &[E::ScalarField],
-    ) -> bool
+use ark_ff::{BigInteger, FftField, Field, Zero};
+use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
+use ark_std::{end_timer, ops::Neg, start_timer};
+
+impl<E: Pairing> Pari<E> {
+    pub fn verify(proof: &Proof<E>, vk: &VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
     where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::BaseField: PrimeField,
-        <<E as Pairing>::G1Affine as AffineRepr>::BaseField: PrimeField,
+        <E::G1Affine as AffineRepr>::BaseField: PrimeField,
+        E::G1Affine: Neg<Output = E::G1Affine>,
     {
         let timer_verify =
-            start_timer!(|| format!("Verification (|x|={})", vk.succinct_index.instance_len));
+            start_timer!(|| format!("Verification (|x|= {})", vk.succinct_index.instance_len));
         debug_assert_eq!(public_input.len(), vk.succinct_index.instance_len - 1);
         let Proof { t_g, u_g, v_a, v_b } = proof;
 
@@ -38,22 +28,21 @@ where
         /////////////////////// Computing polynomials x_A ///////////////////////
 
         let timer_x_poly = start_timer!(|| "Compute x_a polynomial");
-        let domain: GeneralEvaluationDomain<E::ScalarField> =
-            GeneralEvaluationDomain::new(vk.succinct_index.num_constraints).unwrap();
-        let mut px_evaluations: Vec<E::ScalarField> =
-            Vec::with_capacity(vk.succinct_index.instance_len);
-        let r1cs_orig_num_cnstrs =
-            vk.succinct_index.num_constraints - vk.succinct_index.instance_len;
+        let instance_size = vk.succinct_index.instance_len;
+        let mut px_evaluations = Vec::with_capacity(instance_size);
+        let r1cs_orig_num_cnstrs = vk.succinct_index.num_constraints - instance_size;
+
         px_evaluations.push(E::ScalarField::ONE);
-        for i in 1..vk.succinct_index.instance_len {
-            px_evaluations.push(public_input[i - 1]);
-        }
-        let mut lagrange_ceoffs = Self::eval_last_lagrange_coeffs::<E::ScalarField>(
-            &domain,
-            challenge,
-            r1cs_orig_num_cnstrs,
-            vk.succinct_index.instance_len,
-        );
+        px_evaluations.extend_from_slice(&public_input[..(instance_size - 1)]);
+        let lag_coeffs_time = start_timer!(|| "Computing last lagrange coefficients");
+        let (lagrange_coeffs, vanishing_poly_at_chall_inv) =
+            Self::eval_last_lagrange_coeffs::<E::ScalarField>(
+                &vk.domain,
+                challenge,
+                r1cs_orig_num_cnstrs,
+                vk.succinct_index.instance_len,
+            );
+        end_timer!(lag_coeffs_time);
         #[cfg(feature = "sol")]
         {
             use crate::solidity::Solidifier;
@@ -61,50 +50,52 @@ where
             solidifier.set_vk(&vk);
             solidifier.set_proof(&proof);
             solidifier.set_input(public_input);
-            let (lagrange_ceoffs, neg_h_i, nom_i) =
-                Self::eval_last_lagrange_coeffs_traced::<E::ScalarField>(
-                    &domain,
-                    challenge,
-                    r1cs_orig_num_cnstrs,
-                    vk.succinct_index.instance_len,
-                );
-            solidifier.coset_size = Some(domain.size());
-            solidifier.coset_offset = Some(domain.coset_offset());
+            let (_, neg_h_i, nom_i) = Self::eval_last_lagrange_coeffs_traced::<E::ScalarField>(
+                &vk.domain,
+                challenge,
+                r1cs_orig_num_cnstrs,
+                vk.succinct_index.instance_len,
+            );
+            solidifier.coset_size = Some(vk.domain.size());
+            solidifier.coset_offset = Some(vk.domain.coset_offset());
             solidifier.neg_h_gi = Some(neg_h_i);
             solidifier.nom_i = Some(nom_i);
             solidifier.minus_coset_offset_to_coset_size =
-                Some(-(domain.coset_offset().pow([domain.size() as u64])));
+                Some(-(vk.domain.coset_offset().pow([vk.domain.size() as u64])));
             solidifier.coset_offset_to_coset_size_inverse =
-                Some(E::ScalarField::ONE / domain.evaluate_vanishing_polynomial(challenge));
+                Some(E::ScalarField::ONE / vk.domain.evaluate_vanishing_polynomial(challenge));
             solidifier.solidify();
         }
-        let x_a = lagrange_ceoffs
-            .iter()
-            .zip(px_evaluations.iter())
-            .fold(E::ScalarField::zero(), |acc, (x, d)| acc + (*x) * (*d));
+        let x_a = lagrange_coeffs
+            .into_iter()
+            .zip(px_evaluations)
+            .fold(E::ScalarField::zero(), |acc, (x, d)| acc + x * d);
         let z_a = x_a + v_a;
         end_timer!(timer_x_poly);
 
         /////////////////////// Computing the quotient evaluation///////////////////////
 
-
         let timer_q = start_timer!(|| "Computing the quotient evaluation");
 
-        let v_q: E::ScalarField =
-            (z_a * z_a - v_b) / domain.evaluate_vanishing_polynomial(challenge);
+        let v_q = (z_a * z_a - v_b) * vanishing_poly_at_chall_inv;
         end_timer!(timer_q);
         /////////////////////// Final Pairing///////////////////////
 
+        let timer_scalar_mul = start_timer!(|| "Scalar mul");
+        let right_second_left = msm_bigint_wnaf::<E::G1>(
+            &[vk.alpha_g, vk.beta_g, vk.g, -*u_g],
+            &[(*v_a).into(), (*v_b).into(), v_q.into(), challenge.into()],
+        )
+        .into();
+
+        end_timer!(timer_scalar_mul);
+
         let timer_pairing = start_timer!(|| "Final Pairing");
-
-        let right_first_right = vk.tau_h;
-        let right_second_left = vk.alpha_g * v_a + vk.beta_g * v_b + vk.g * v_q - *u_g * challenge;
-
         let right = E::multi_pairing(
             [t_g, u_g, &right_second_left.into()],
             [
                 vk.delta_two_h_prep.clone(),
-                right_first_right.into().into(),
+                vk.tau_h_prep.clone(),
                 vk.h_prep.clone(),
             ],
         );
@@ -116,31 +107,29 @@ where
 
     #[cfg(feature = "sol")]
     fn eval_last_lagrange_coeffs_traced<F: FftField>(
-        domain: &GeneralEvaluationDomain<F>,
+        domain: &Radix2EvaluationDomain<F>,
         tau: F,
         start_ind: usize,
         count: usize,
     ) -> (Vec<F>, Vec<F>, Vec<F>)
     where
-        E::ScalarField: Field,
-        E::BaseField: PrimeField,
+        E::BaseField: PrimeField + FftField,
         E::BaseField: FftField,
     {
-        use ark_ff::fields::batch_inversion;
         let size: usize = domain.size();
         let z_h_at_tau: F = domain.evaluate_vanishing_polynomial(tau);
         let mut neg_hi = Vec::new();
         let mut nom_i = Vec::new();
         let offset: F = domain.coset_offset();
         let group_gen: F = domain.group_gen();
-        let starting_g: F = offset * group_gen.pow([start_ind as u64]);
+        let _starting_g: F = offset * group_gen.pow([start_ind as u64]);
         let group_gen_inv = domain.group_gen_inv();
         let v_0_inv = domain.size_as_field_element() * offset.pow([size as u64 - 1]);
         let start_gen = group_gen.pow([start_ind as u64]);
         let mut l_i = z_h_at_tau.inverse().unwrap() * v_0_inv;
         let mut negative_cur_elem = (-offset) * (start_gen);
         let mut lagrange_coefficients_inverse = vec![F::zero(); count];
-        for (i, coeff) in &mut lagrange_coefficients_inverse.iter_mut().enumerate() {
+        for (_, coeff) in &mut lagrange_coefficients_inverse.iter_mut().enumerate() {
             neg_hi.push(negative_cur_elem);
             let nom = start_gen * (l_i.inverse().unwrap());
             nom_i.push(nom);
@@ -149,55 +138,166 @@ where
             l_i *= &group_gen_inv;
             negative_cur_elem *= &group_gen;
         }
-        batch_inversion(lagrange_coefficients_inverse.as_mut_slice());
-        for x in lagrange_coefficients_inverse.iter_mut() {
-            *x *= &start_gen;
-        }
+        batch_inversion_and_mul(lagrange_coefficients_inverse.as_mut_slice(), &start_gen);
         (lagrange_coefficients_inverse, neg_hi, nom_i)
     }
 
     fn eval_last_lagrange_coeffs<F: FftField>(
-        domain: &GeneralEvaluationDomain<F>,
+        domain: &Radix2EvaluationDomain<F>,
         tau: F,
         start_ind: usize,
         count: usize,
-    ) -> Vec<F> {
-        let size: usize = domain.size();
-
+    ) -> (Vec<F>, F) {
         let z_h_at_tau: F = domain.evaluate_vanishing_polynomial(tau);
-        let offset: F = domain.coset_offset();
         let group_gen: F = domain.group_gen();
-        let starting_g: F = offset * group_gen.pow([start_ind as u64]);
-        if z_h_at_tau.is_zero() {
-            let mut u = vec![F::zero(); count];
-            let mut omega_i = starting_g;
-            for u_i in u.iter_mut().take(count) {
-                if omega_i == tau {
-                    *u_i = F::one();
-                    break;
-                }
-                omega_i *= &group_gen;
-            }
-            u
-        } else {
-            use ark_ff::fields::batch_inversion;
-            let group_gen_inv = domain.group_gen_inv();
-            let v_0_inv = domain.size_as_field_element() * offset.pow([size as u64 - 1]);
-            let start_gen = group_gen.pow([start_ind as u64]);
-            let mut l_i = z_h_at_tau.inverse().unwrap() * v_0_inv;
-            let mut negative_cur_elem = (-offset) * (start_gen);
-            let mut lagrange_coefficients_inverse = vec![F::zero(); count];
-            for (i, coeff) in &mut lagrange_coefficients_inverse.iter_mut().enumerate() {
-                let r_i = tau + negative_cur_elem;
-                *coeff = l_i * r_i;
-                l_i *= &group_gen_inv;
-                negative_cur_elem *= &group_gen;
-            }
-            batch_inversion(lagrange_coefficients_inverse.as_mut_slice());
-            for x in lagrange_coefficients_inverse.iter_mut() {
-                *x *= &start_gen;
-            }
-            lagrange_coefficients_inverse
+
+        assert!(!z_h_at_tau.is_zero());
+
+        let group_gen_inv = domain.group_gen_inv();
+        let v_0_inv = domain.size_as_field_element();
+
+        let start_gen = group_gen.pow([start_ind as u64]);
+        let z_h_at_tau_inv = z_h_at_tau.inverse().unwrap();
+        let mut l_i = z_h_at_tau_inv * v_0_inv;
+        let mut negative_cur_elem = -start_gen;
+        let mut lagrange_coefficients_inverse = vec![F::zero(); count];
+        for coeff in &mut lagrange_coefficients_inverse.iter_mut() {
+            *coeff = l_i * (tau + negative_cur_elem);
+            l_i *= &group_gen_inv;
+            negative_cur_elem *= &group_gen;
         }
+        batch_inversion_and_mul(lagrange_coefficients_inverse.as_mut_slice(), &start_gen);
+        (lagrange_coefficients_inverse, z_h_at_tau_inv)
+    }
+}
+
+// Compute msm using windowed non-adjacent form
+fn msm_bigint_wnaf<V: VariableBaseMSM>(
+    bases: &[V::MulBase],
+    scalars: &[<V::ScalarField as PrimeField>::BigInt],
+) -> V {
+    const C: usize = 2;
+    let digits_count = const { (V::ScalarField::MODULUS_BIT_SIZE as usize).div_ceil(C) };
+    let radix: u64 = 1 << C;
+    let scalar_digits = scalars
+        .iter()
+        .flat_map(|s| make_digits::<C>(s, digits_count, radix))
+        .collect::<Vec<_>>();
+    let zero = V::zero();
+    let mut window_sums = (0..digits_count).map(|i| {
+        let mut buckets = [zero; 1 << C];
+        for (digits, base) in scalar_digits.chunks(digits_count).zip(bases) {
+            use ark_std::cmp::Ordering;
+            // digits is the digits thing of the first scalar?
+            let scalar = digits[i];
+            match 0.cmp(&scalar) {
+                Ordering::Less => buckets[(scalar - 1) as usize] += base,
+                Ordering::Greater => buckets[(-scalar - 1) as usize] -= base,
+                Ordering::Equal => (),
+            }
+        }
+
+        let mut running_sum = V::zero();
+        let mut res = V::zero();
+        buckets.into_iter().rev().for_each(|b| {
+            running_sum += &b;
+            res += &running_sum;
+        });
+        res
+    });
+
+    // We store the sum for the lowest window.
+    let lowest = window_sums.next().unwrap();
+
+    // We're traversing windows from high to low.
+    lowest
+        + &window_sums.rev().fold(zero, |mut total, sum_i| {
+            total += sum_i;
+            for _ in 0..C {
+                total.double_in_place();
+            }
+            total
+        })
+}
+
+// From: https://github.com/arkworks-rs/gemini/blob/main/src/kzg/msm/variable_base.rs#L20
+#[inline]
+fn make_digits<const W: usize>(
+    a: &impl BigInteger,
+    digits_count: usize,
+    radix: u64,
+) -> impl Iterator<Item = i64> + '_ {
+    let scalar = a.as_ref();
+    let window_mask: u64 = radix - 1;
+
+    let mut carry = 0u64;
+    (0..digits_count).map(move |i| {
+        // Construct a buffer of bits of the scalar, starting at `bit_offset`.
+        let bit_offset = i * W;
+        let u64_idx = bit_offset / 64;
+        let bit_idx = bit_offset % 64;
+        // Read the bits from the scalar
+        let scalar_at_idx = scalar[u64_idx];
+        let bit_buf = if bit_idx < 64 - W || u64_idx == scalar.len() - 1 {
+            // This window's bits are contained in a single u64,
+            // or it's the last u64 anyway.
+            scalar_at_idx >> bit_idx
+        } else {
+            let scalar_at_idx_next = scalar[1 + u64_idx];
+            // Combine the current u64's bits with the bits from the next u64
+            (scalar_at_idx >> bit_idx) | (scalar_at_idx_next << (64 - bit_idx))
+        };
+
+        // Read the actual coefficient value from the window
+        let coef = carry + (bit_buf & window_mask); // coef = [0, 2^r)
+
+        // Recenter coefficients from [0,2^w) to [-2^w/2, 2^w/2)
+        carry = (coef + radix / 2) >> W;
+        let mut digit = (coef as i64) - (carry << W) as i64;
+
+        if i == digits_count - 1 {
+            digit += (carry << W) as i64;
+        }
+        digit
+    })
+}
+
+/// Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}.
+/// This method is explicitly single-threaded.
+fn batch_inversion_and_mul<F: Field>(v: &mut [F], coeff: &F) {
+    // Montgomery’s Trick and Fast Implementation of Masked AES
+    // Genelle, Prouff and Quisquater
+    // Section 3.2
+    // but with an optimization to multiply every element in the returned vector by
+    // coeff
+
+    // First pass: compute [a, ab, abc, ...]
+    let mut prod = Vec::with_capacity(v.len());
+    let mut tmp = F::one();
+    for f in v.iter().filter(|f| !f.is_zero()) {
+        tmp *= f;
+        prod.push(tmp);
+    }
+
+    // Invert `tmp`.
+    tmp = tmp.inverse().unwrap(); // Guaranteed to be nonzero.
+
+    // Multiply product by coeff, so all inverses will be scaled by coeff
+    tmp *= coeff;
+
+    // Second pass: iterate backwards to compute inverses
+    for (f, s) in v
+        .iter_mut()
+        // Backwards
+        .rev()
+        // Ignore normalized elements
+        .filter(|f| !f.is_zero())
+        // Backwards, skip last element, fill in one for last term.
+        .zip(prod.into_iter().rev().skip(1).chain(Some(F::one())))
+    {
+        // tmp := tmp * f; f := tmp * s = 1/f
+        let new_tmp = tmp * *f;
+        *f = tmp * &s;
+        tmp = new_tmp;
     }
 }

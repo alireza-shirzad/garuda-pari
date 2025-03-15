@@ -3,13 +3,12 @@ use std::{collections::BTreeMap, time::Duration};
 use csv::Writer;
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::Write;
 
 #[derive(Debug)]
 pub struct BenchResult {
     pub curve: String,
     pub num_thread: usize,
-    pub input_size:usize,
+    pub input_size: usize,
     pub num_invocations: usize,
     pub num_keygen_iterations: usize,
     pub num_prover_iterations: usize,
@@ -63,7 +62,7 @@ impl BenchResult {
         // Convert durations to milliseconds
         let keygen_time_ms = self.keygen_time.as_secs_f64();
         let prover_time_ms = self.prover_time.as_secs_f64();
-        let verifier_time_ms = self.verifier_time.as_millis_f64();
+        let verifier_time_ms = self.verifier_time.as_secs_f64() * 1000.0;
 
         // Write the benchmark results as a row
         writer.write_record(&[
@@ -87,13 +86,12 @@ impl BenchResult {
         writer.flush()?; // Ensure data is written
 
         println!(
-            "✅ Benchmark result {} to {}",
+            "✅ Benchmark result {} to {filename}",
             if append {
                 "appended"
             } else {
                 "saved (overwritten)"
             },
-            filename
         );
 
         Ok(())

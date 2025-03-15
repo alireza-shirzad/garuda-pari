@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::marker::PhantomData;
 
 use super::{
     data_structures::{
@@ -42,6 +42,9 @@ impl<E: Pairing, R: RngCore> EPC<R> for MultilinearEPC<E, R> {
     type Polynomial = DenseMultilinearExtension<E::ScalarField>;
     type Equifficient = E::ScalarField;
     type BasisPoly = SparseMultilinearExtension<E::ScalarField>;
+    type PolynomialBasis = Vec<Self::BasisPoly>;
+    type EquifficientConstraint = Vec<Self::PolynomialBasis>;
+
     fn setup(
         rng: &mut R,
         pp: &Self::PublicParameters,

@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
-use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing, CurveGroup};
+use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
 use ark_ff::{Field, Zero};
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -20,12 +20,8 @@ use ark_relations::{
 };
 use ark_std::{end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand};
 
-impl<E, R> Pari<E, R>
-where
-    E: Pairing,
-    R: RngCore,
-{
-    pub fn keygen<C: ConstraintSynthesizer<E::ScalarField>>(
+impl<E: Pairing> Pari<E> {
+    pub fn keygen<C: ConstraintSynthesizer<E::ScalarField>, R: RngCore>(
         circuit: C,
         rng: &mut R,
     ) -> (ProvingKey<E>, VerifyingKey<E>)
@@ -75,7 +71,7 @@ where
 
         /////////////////////// Computing the FFT domain ///////////////////////
         let timer_fft_domain = start_timer!(|| "Computing the FFT domain");
-        let domain = GeneralEvaluationDomain::new(cs.num_constraints()).unwrap();
+        let domain = Radix2EvaluationDomain::new(cs.num_constraints()).unwrap();
         assert_ne!(
             domain.evaluate_vanishing_polynomial(tau),
             E::ScalarField::zero()
@@ -177,21 +173,22 @@ where
         end_timer!(timer_commit_keys);
         end_timer!(timer_pk_gen);
         // Output the verifying key: step 8, fig 6, https://eprint.iacr.org/2024/1245.pdf
-        let vk: VerifyingKey<E> = VerifyingKey {
+        let vk = VerifyingKey {
             succinct_index,
-            alpha_g,
-            beta_g,
+            alpha_g: alpha_g.into(),
+            beta_g: beta_g.into(),
             delta_two_h_prep: delta_two_h.into().into(),
-            delta_two_h,
-            tau_h,
-            g,
+            delta_two_h: delta_two_h.into(),
+            tau_h: tau_h.into(),
+            tau_h_prep: tau_h.into().into(),
+            g: g.into(),
             h_prep: h.into().into(),
-            h,
+            h: h.into(),
+            domain,
         };
 
-
         // Output the proving key: step 8, fig 6, https://eprint.iacr.org/2024/1245.pdf
-        let pk: ProvingKey<E> = ProvingKey {
+        let pk = ProvingKey {
             sigma,
             sigma_a,
             sigma_b,
@@ -237,7 +234,7 @@ where
     fn compute_ai_bi_at_tau(
         tau: E::ScalarField,
         new_cs: &ConstraintSystem<E::ScalarField>,
-        domain: GeneralEvaluationDomain<E::ScalarField>,
+        domain: Radix2EvaluationDomain<E::ScalarField>,
     ) -> Result<(Vec<E::ScalarField>, Vec<E::ScalarField>), SynthesisError> {
         // Compute all the lagrange polynomials
         let timer_eval_all_lagrange_polys = start_timer!(|| "Evaluating all Lagrange polys");

@@ -76,10 +76,10 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
             CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();
         let _ = cs.clone().register_predicate(
             "XXX",
-            PredicateConstraintSystem::new_polynomial_predicate(2, vec![
-                (F::from(1i8), vec![(0, 5)]),
-                (F::from(-1i8), vec![(1, 1)]),
-            ]),
+            PredicateConstraintSystem::new_polynomial_predicate(
+                2,
+                vec![(F::from(1i8), vec![(0, 5)]), (F::from(-1i8), vec![(1, 1)])],
+            ),
         );
         let mut input_g = Vec::new();
 
@@ -222,5 +222,4 @@ fn main() {
         Bls12_381_Fr
     )
     .save_to_csv("garuda.csv", false);
-
 }

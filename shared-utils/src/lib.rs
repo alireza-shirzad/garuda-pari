@@ -1,4 +1,3 @@
-#![feature(duration_millis_float)]
 mod bench;
 pub mod transcript;
 pub use bench::BenchResult;

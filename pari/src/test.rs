@@ -1,28 +1,24 @@
 #[cfg(test)]
 // use ark_bls12_381::{Bls12_381, Fr as Bls12_381_Fr};
-use ark_bn254::{Bn254, Fr as Bn254_Fr};
+use ark_bn254::Bn254;
 // use ark_bls::{Bls12_381, Fr as Bls12_381_Fr};
 // use ark_bn254::{Bn254, Fr as Bn254_Fr};
-use ark_ec::pairing::Pairing;
-use ark_ff::{AdditiveGroup, Field, UniformRand};
-use ark_poly::GeneralEvaluationDomain;
-use ark_relations::gr1cs::{ConstraintSystemRef, OptimizationGoal};
-use ark_relations::{
-    gr1cs::{
-        predicate::PredicateConstraintSystem, ConstraintSynthesizer, ConstraintSystem,
-        LinearCombination, SynthesisError, Variable,
-    },
-    lc, ns,
-};
-use ark_std::rand::{rngs::StdRng, RngCore, SeedableRng};
-use ark_std::{rand::Rng, test_rng};
-use ark_ff::PrimeField;
-use ark_ec::AffineRepr;
 use crate::{
     data_structures::{Proof, ProvingKey, VerifyingKey},
     Pari,
 };
+use ark_ec::pairing::Pairing;
+use ark_ec::AffineRepr;
+use ark_ff::PrimeField;
+use ark_ff::{Field, UniformRand};
+use ark_relations::gr1cs::ConstraintSystemRef;
+use ark_relations::{
+    gr1cs::{ConstraintSynthesizer, SynthesisError},
+    lc,
+};
 use ark_std::ops::Neg;
+use ark_std::rand::{RngCore, SeedableRng};
+use ark_std::test_rng;
 #[test]
 fn run_test() {
     let _ = test_circuit::<Bn254>();
@@ -44,11 +40,10 @@ where
         a: Some(a_val),
         b: Some(b_val),
     };
-    let (pk, vk): (ProvingKey<E>, VerifyingKey<E>) =
-        Pari::<E, StdRng>::keygen(circuit.clone(), &mut rng);
-    let proof: Proof<E> = Pari::<E, StdRng>::prove(circuit.clone(), &pk).unwrap();
+    let (pk, vk): (ProvingKey<E>, VerifyingKey<E>) = Pari::<E>::keygen(circuit.clone(), &mut rng);
+    let proof: Proof<E> = Pari::prove(circuit.clone(), &pk).unwrap();
     let input_assignment = [a_val * b_val];
-    assert!(Pari::<E, StdRng>::verify(&proof, &vk, &input_assignment));
+    assert!(Pari::<E>::verify(&proof, &vk, &input_assignment));
 }
 
 #[derive(Clone)]

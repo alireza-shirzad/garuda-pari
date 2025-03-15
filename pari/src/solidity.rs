@@ -2,7 +2,6 @@ use crate::data_structures::Proof;
 use crate::data_structures::VerifyingKey;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
-use ark_ff::quadratic_extension::{QuadExtConfig, QuadExtField};
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
@@ -65,7 +64,7 @@ impl<E: Pairing> Solidifier<E> {
 
     fn generate_input_static_code(input_size: usize) -> String {
         let i = input_size - 1;
-    
+
         // Generate the Lagrange coefficient calculations
         let neg_lagrange_code = (0..=i)
             .map(|idx| {
@@ -77,20 +76,24 @@ impl<E: Pairing> Solidifier<E> {
             })
             .collect::<Vec<_>>()
             .join(" ");
-    
+
         // Generate Solidity code for binary tree addition
         let mut input_vars: Vec<String> = (0..=i)
             .map(|idx| format!("mulmod(lagrange_{}, input[{}], R)", idx, idx))
             .collect();
-    
+
         while input_vars.len() > 1 {
             let mut new_input_vars = Vec::new();
             let len = input_vars.len();
-            
+
             for j in (0..len).step_by(2) {
                 if j + 1 < len {
                     // Pairwise addmod
-                    new_input_vars.push(format!("addmod({}, {}, R)", input_vars[j], input_vars[j + 1]));
+                    new_input_vars.push(format!(
+                        "addmod({}, {}, R)",
+                        input_vars[j],
+                        input_vars[j + 1]
+                    ));
                 } else {
                     // If odd number, carry last element
                     new_input_vars.push(input_vars[j].clone());
@@ -98,9 +101,9 @@ impl<E: Pairing> Solidifier<E> {
             }
             input_vars = new_input_vars;
         }
-    
+
         let x_a_code = format!("uint256 x_a = {};", input_vars[0]);
-    
+
         format!("{}\n\n{}", neg_lagrange_code, x_a_code)
     }
 
@@ -143,39 +146,26 @@ impl<E: Pairing> Solidifier<E> {
             .map(|(i, _)| format!("input[{}],\n", i))
             .collect::<Vec<_>>()
             .join("");
+        let vk = self.vk.clone().unwrap();
 
-        let h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
-            "{}",
-            self.vk.clone().unwrap().h.into().x().unwrap()
-        ))
-        .unwrap();
-        let h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
-            "{}",
-            self.vk.clone().unwrap().h.into().y().unwrap()
-        ))
-        .unwrap();
+        let h_x: (String, String) =
+            Self::extract_quad_ext_field_coordinates(&format!("{}", vk.h.x().unwrap())).unwrap();
+        let h_y: (String, String) =
+            Self::extract_quad_ext_field_coordinates(&format!("{}", vk.h.y().unwrap())).unwrap();
 
-        let delta_h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
-            "{}",
-            self.vk.clone().unwrap().delta_two_h.into().x().unwrap()
-        ))
-        .unwrap();
-        let delta_h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
-            "{}",
-            self.vk.clone().unwrap().delta_two_h.into().y().unwrap()
-        ))
-        .unwrap();
+        let delta_h_x: (String, String) =
+            Self::extract_quad_ext_field_coordinates(&format!("{}", vk.delta_two_h.x().unwrap()))
+                .unwrap();
+        let delta_h_y: (String, String) =
+            Self::extract_quad_ext_field_coordinates(&format!("{}", vk.delta_two_h.y().unwrap()))
+                .unwrap();
 
-        let tau_h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
-            "{}",
-            self.vk.clone().unwrap().tau_h.into().x().unwrap()
-        ))
-        .unwrap();
-        let tau_h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
-            "{}",
-            self.vk.clone().unwrap().tau_h.into().y().unwrap()
-        ))
-        .unwrap();
+        let tau_h_x: (String, String) =
+            Self::extract_quad_ext_field_coordinates(&format!("{}", vk.tau_h.x().unwrap()))
+                .unwrap();
+        let tau_h_y: (String, String) =
+            Self::extract_quad_ext_field_coordinates(&format!("{}", vk.tau_h.y().unwrap()))
+                .unwrap();
 
         let solidity_code = format!(
             r#"// SPDX-License-Identifier: MIT
@@ -535,12 +525,12 @@ contract Pari {{
             exp_inv_r = self.q.clone().unwrap() - BigUint::from(2u32),
             neg_h_gi_str = neg_h_gi_str,
             nom_i_str = nom_i_str,
-            g_x = self.vk.clone().unwrap().g.into().x().unwrap(),
-            g_y = self.vk.clone().unwrap().g.into().y().unwrap(),
-            alpha_g_x = self.vk.clone().unwrap().alpha_g.into().x().unwrap(),
-            alpha_g_y = self.vk.clone().unwrap().alpha_g.into().y().unwrap(),
-            beta_g_x = self.vk.clone().unwrap().beta_g.into().x().unwrap(),
-            beta_g_y = self.vk.clone().unwrap().beta_g.into().y().unwrap(),
+            g_x = vk.g.x().unwrap(),
+            g_y = vk.g.y().unwrap(),
+            alpha_g_x = vk.alpha_g.x().unwrap(),
+            alpha_g_y = vk.alpha_g.y().unwrap(),
+            beta_g_x = vk.beta_g.x().unwrap(),
+            beta_g_y = vk.beta_g.y().unwrap(),
             h_x_0 = h_x.0,
             h_x_1 = h_x.1,
             h_y_0 = h_y.0,

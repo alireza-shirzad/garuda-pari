@@ -29,18 +29,18 @@ ark-bls12-377 = { workspace = true }
 
 [[bench]]
 name = "rescue-pari"
-path = "./rescue-pari.rs"
+path = "benches/rescue-pari.rs"
 harness = false
 
 [[bench]]
 name = "rescue-groth16"
-path = "./rescue-groth16.rs"
+path = "benches/rescue-groth16.rs"
 harness = false
 
 
 [[bench]]
 name = "rescue-polymath"
-path = "./rescue-polymath.rs"
+path = "benches/rescue-polymath.rs"
 harness = false
 
 [features]

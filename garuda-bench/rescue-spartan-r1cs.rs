@@ -77,10 +77,10 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
             CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();
         let _ = cs.clone().register_predicate(
             "XXX",
-            PredicateConstraintSystem::new_polynomial_predicate(2, vec![
-                (F::from(1i8), vec![(0, 5)]),
-                (F::from(-1i8), vec![(1, 1)]),
-            ]),
+            PredicateConstraintSystem::new_polynomial_predicate(
+                2,
+                vec![(F::from(1i8), vec![(0, 5)]), (F::from(-1i8), vec![(1, 1)])],
+            ),
         );
         let mut input_g = Vec::new();
 
@@ -312,11 +312,14 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
             });
         });
 
-    ark_amtrices[2].iter().enumerate().for_each(|(row_num, row)| {
-        row.iter().for_each(|(entry, col_num)| {
-            C.push((row_num, *col_num, ff_to_scalar(*entry).to_bytes()));
+    ark_amtrices[2]
+        .iter()
+        .enumerate()
+        .for_each(|(row_num, row)| {
+            row.iter().for_each(|(entry, col_num)| {
+                C.push((row_num, *col_num, ff_to_scalar(*entry).to_bytes()));
+            });
         });
-    });
     let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
 
     // create a VarsAssignment
