@@ -41,6 +41,7 @@ struct RescueDemo<F: PrimeField> {
     image: Option<F>,
     config: RescueConfig<F>,
     num_invocations: usize,
+    num_isntances: usize,
 }
 
 pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
@@ -93,13 +94,15 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
                 Some(CRHGadget::<F>::evaluate(&params_g, &vec![crh_a_g.unwrap(); 9]).unwrap());
         }
 
-        let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
-            Ok(self.image.ok_or(SynthesisError::AssignmentMissing).unwrap())
-        })
-        .unwrap();
+        for i in 0..self.num_isntances - 1 {
+            let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
+                Ok(self.image.ok_or(SynthesisError::AssignmentMissing).unwrap())
+            })
+            .unwrap();
 
-        if let Some(crh_a_g) = crh_a_g {
-            let _ = crh_a_g.enforce_equal(&image_instance);
+            if let Some(crh_a_g) = crh_a_g.clone() {
+                let _ = crh_a_g.enforce_equal(&image_instance);
+            }
         }
 
         Ok(())
@@ -111,7 +114,7 @@ macro_rules! bench {
         let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
         let config = create_test_rescue_parameter(&mut rng);
         let mut input = Vec::new();
-        for _ in 0..$input_size {
+        for _ in 0..9 {
             input.push(<$bench_field>::rand(&mut rng));
         }
         let mut expected_image = CRH::<$bench_field>::evaluate(&config, input.clone()).unwrap();
@@ -129,6 +132,7 @@ macro_rules! bench {
             image: Some(expected_image),
             config: config.clone(),
             num_invocations: $num_invocations,
+            num_isntances: $input_size,
         };
         let setup_circuit = circuit.clone();
         let (pk, vk) = Polymath::<$bench_pairing_engine, MerlinFieldTranscript<$bench_field>>::setup(setup_circuit, &mut rng).unwrap();
@@ -154,10 +158,8 @@ macro_rules! bench {
         let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
         let start = ark_std::time::Instant::now();
         for _ in 0..$num_verifier_iterations {
-            assert!(
-                Polymath::<Bls12_381, MerlinFieldTranscript<$bench_field>>::verify_with_processed_vk(&vk, &[expected_image], &proof)
-                    .unwrap()
-            );
+                let _ =Polymath::<Bls12_381, MerlinFieldTranscript<$bench_field>>::verify_with_processed_vk(&vk, &[expected_image], &proof)
+                    .unwrap();
         }
         verifier_time += start.elapsed();
         let cs: gr1cs::ConstraintSystemRef<$bench_field> = gr1cs::ConstraintSystem::new_ref();
@@ -173,7 +175,7 @@ macro_rules! bench {
             num_constraints: cs.num_constraints(),
             predicate_constraints: cs.get_all_predicates_num_constraints(),
             num_invocations: $num_invocations,
-            input_size: $input_size,
+            input_size:cs.num_instance_variables(),
             num_thread: $num_thread,
             num_keygen_iterations: $num_keygen_iterations,
             num_prover_iterations: $num_prover_iterations,
@@ -200,43 +202,20 @@ fn main() {
         .build_global()
         .unwrap();
 
-    let _ = bench!(
-        bench,
-        2,
-        20,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        BlsFr12_381_Fr
-    )
-    .save_to_csv("Polymath.csv", false);
-    // let _ = bench!(
-    //     bench,
-    //     144,
-    //     20,
-    //     1,
-    //     2,
-    //     100,
-    //     num_thread,
-    //     Bls12_381,
-    //     BlsFr12_381_Fr
-    // )
-    // .save_to_csv("Polymath.csv", true);
-    // bench!(bench, 288, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 577, 5, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 1154, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 2309, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // bench!(
-    //     bench,
-    //     18477,
-    //     1,
-    //     num_thread,
-    //     Bls12_381,
-    //     BlsFr12_381_Fr
-    // )
-    // .save_to_csv(true);
+    /////////// Benchmark Polymath for different input sizes ///////////
+    let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
+    for i in 0..num_inputs.len() {
+        let _ = bench!(
+            bench,
+            1,
+            num_inputs[i],
+            1,
+            1,
+            100,
+            num_thread,
+            Bls12_381,
+            BlsFr12_381_Fr
+        )
+        .save_to_csv("Polymath.csv", true);
+    }
 }

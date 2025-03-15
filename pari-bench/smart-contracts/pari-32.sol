@@ -179,193 +179,201 @@ contract Pari {
         result = addmod(tau_exp, MINUS_COSET_OFFSET_TO_COSET_SIZE, R);
     }
 
+    function batch_invert(uint256[32] memory arr) internal view {
+        // 1) forward pass
+        uint256 running = 1;
+        // We'll store partial_prod products in a separate local array of the same length
+        // so we can do the backward pass easily
+        uint256[32] memory partial_prod;
+        for (uint256 i = 0; i < 32; i++) {
+            partial_prod[i] = running; // store partial_prod
+            running = mulmod(running, arr[i], R);
+        }
+
+        // 2) invert the running product once
+        uint256 invRunning = exp(running, EXP_INVERSE_FR); // single exponentiation
+
+        // 3) backward pass
+        for (uint256 i = 32; i > 0; ) {
+            // i goes from 32 down to 1
+            // - 1 => i-1
+            unchecked {
+                i--;
+        }
+            // arr[i] = partial_prod[i] * invRunning
+            uint256 orig = arr[i];
+            arr[i] = mulmod(partial_prod[i], invRunning, R);
+            // update invRunning *= orig
+            invRunning = mulmod(invRunning, orig, R);
+        }
+        }
+
+
     // Computes v_q = (v_a^2-v_b)/Z_H(challenge)
     function comp_vq(
         uint256[32] calldata input,
         uint256[6] calldata proof,
         uint256 chall
     ) internal view returns (uint256 v_q) {
+        uint256[32] memory denoms;
+
+        denoms[0] = addmod(chall, NEG_H_Gi_0, R);
+denoms[1] = addmod(chall, NEG_H_Gi_1, R);
+denoms[2] = addmod(chall, NEG_H_Gi_2, R);
+denoms[3] = addmod(chall, NEG_H_Gi_3, R);
+denoms[4] = addmod(chall, NEG_H_Gi_4, R);
+denoms[5] = addmod(chall, NEG_H_Gi_5, R);
+denoms[6] = addmod(chall, NEG_H_Gi_6, R);
+denoms[7] = addmod(chall, NEG_H_Gi_7, R);
+denoms[8] = addmod(chall, NEG_H_Gi_8, R);
+denoms[9] = addmod(chall, NEG_H_Gi_9, R);
+denoms[10] = addmod(chall, NEG_H_Gi_10, R);
+denoms[11] = addmod(chall, NEG_H_Gi_11, R);
+denoms[12] = addmod(chall, NEG_H_Gi_12, R);
+denoms[13] = addmod(chall, NEG_H_Gi_13, R);
+denoms[14] = addmod(chall, NEG_H_Gi_14, R);
+denoms[15] = addmod(chall, NEG_H_Gi_15, R);
+denoms[16] = addmod(chall, NEG_H_Gi_16, R);
+denoms[17] = addmod(chall, NEG_H_Gi_17, R);
+denoms[18] = addmod(chall, NEG_H_Gi_18, R);
+denoms[19] = addmod(chall, NEG_H_Gi_19, R);
+denoms[20] = addmod(chall, NEG_H_Gi_20, R);
+denoms[21] = addmod(chall, NEG_H_Gi_21, R);
+denoms[22] = addmod(chall, NEG_H_Gi_22, R);
+denoms[23] = addmod(chall, NEG_H_Gi_23, R);
+denoms[24] = addmod(chall, NEG_H_Gi_24, R);
+denoms[25] = addmod(chall, NEG_H_Gi_25, R);
+denoms[26] = addmod(chall, NEG_H_Gi_26, R);
+denoms[27] = addmod(chall, NEG_H_Gi_27, R);
+denoms[28] = addmod(chall, NEG_H_Gi_28, R);
+denoms[29] = addmod(chall, NEG_H_Gi_29, R);
+denoms[30] = addmod(chall, NEG_H_Gi_30, R);
+denoms[31] = addmod(chall, NEG_H_Gi_31, R);
 
-        uint256 neg_cur_elem0 = addmod(chall, NEG_H_Gi_0, R); 
+        batch_invert(denoms);
 
-                     uint256 neg_cur_elem0_inv = invert_FR(neg_cur_elem0); 
+        uint256 x_a = 0;
+        uint256 lag = 0;
 
-                     uint256 lagrange_0 = mulmod(neg_cur_elem0_inv, NOM_0, R);
- uint256 neg_cur_elem1 = addmod(chall, NEG_H_Gi_1, R); 
 
-                     uint256 neg_cur_elem1_inv = invert_FR(neg_cur_elem1); 
+                lag = mulmod(denoms[0], NOM_0, R);
 
-                     uint256 lagrange_1 = mulmod(neg_cur_elem1_inv, NOM_1, R);
- uint256 neg_cur_elem2 = addmod(chall, NEG_H_Gi_2, R); 
+        x_a = addmod(x_a, mulmod(lag, input[0], R), R);
+        lag = mulmod(denoms[1], NOM_1, R);
 
-                     uint256 neg_cur_elem2_inv = invert_FR(neg_cur_elem2); 
+        x_a = addmod(x_a, mulmod(lag, input[1], R), R);
+        lag = mulmod(denoms[2], NOM_2, R);
 
-                     uint256 lagrange_2 = mulmod(neg_cur_elem2_inv, NOM_2, R);
- uint256 neg_cur_elem3 = addmod(chall, NEG_H_Gi_3, R); 
+        x_a = addmod(x_a, mulmod(lag, input[2], R), R);
+        lag = mulmod(denoms[3], NOM_3, R);
 
-                     uint256 neg_cur_elem3_inv = invert_FR(neg_cur_elem3); 
+        x_a = addmod(x_a, mulmod(lag, input[3], R), R);
+        lag = mulmod(denoms[4], NOM_4, R);
 
-                     uint256 lagrange_3 = mulmod(neg_cur_elem3_inv, NOM_3, R);
- uint256 neg_cur_elem4 = addmod(chall, NEG_H_Gi_4, R); 
+        x_a = addmod(x_a, mulmod(lag, input[4], R), R);
+        lag = mulmod(denoms[5], NOM_5, R);
 
-                     uint256 neg_cur_elem4_inv = invert_FR(neg_cur_elem4); 
+        x_a = addmod(x_a, mulmod(lag, input[5], R), R);
+        lag = mulmod(denoms[6], NOM_6, R);
 
-                     uint256 lagrange_4 = mulmod(neg_cur_elem4_inv, NOM_4, R);
- uint256 neg_cur_elem5 = addmod(chall, NEG_H_Gi_5, R); 
+        x_a = addmod(x_a, mulmod(lag, input[6], R), R);
+        lag = mulmod(denoms[7], NOM_7, R);
 
-                     uint256 neg_cur_elem5_inv = invert_FR(neg_cur_elem5); 
+        x_a = addmod(x_a, mulmod(lag, input[7], R), R);
+        lag = mulmod(denoms[8], NOM_8, R);
 
-                     uint256 lagrange_5 = mulmod(neg_cur_elem5_inv, NOM_5, R);
- uint256 neg_cur_elem6 = addmod(chall, NEG_H_Gi_6, R); 
+        x_a = addmod(x_a, mulmod(lag, input[8], R), R);
+        lag = mulmod(denoms[9], NOM_9, R);
 
-                     uint256 neg_cur_elem6_inv = invert_FR(neg_cur_elem6); 
+        x_a = addmod(x_a, mulmod(lag, input[9], R), R);
+        lag = mulmod(denoms[10], NOM_10, R);
 
-                     uint256 lagrange_6 = mulmod(neg_cur_elem6_inv, NOM_6, R);
- uint256 neg_cur_elem7 = addmod(chall, NEG_H_Gi_7, R); 
+        x_a = addmod(x_a, mulmod(lag, input[10], R), R);
+        lag = mulmod(denoms[11], NOM_11, R);
 
-                     uint256 neg_cur_elem7_inv = invert_FR(neg_cur_elem7); 
+        x_a = addmod(x_a, mulmod(lag, input[11], R), R);
+        lag = mulmod(denoms[12], NOM_12, R);
 
-                     uint256 lagrange_7 = mulmod(neg_cur_elem7_inv, NOM_7, R);
- uint256 neg_cur_elem8 = addmod(chall, NEG_H_Gi_8, R); 
+        x_a = addmod(x_a, mulmod(lag, input[12], R), R);
+        lag = mulmod(denoms[13], NOM_13, R);
 
-                     uint256 neg_cur_elem8_inv = invert_FR(neg_cur_elem8); 
+        x_a = addmod(x_a, mulmod(lag, input[13], R), R);
+        lag = mulmod(denoms[14], NOM_14, R);
 
-                     uint256 lagrange_8 = mulmod(neg_cur_elem8_inv, NOM_8, R);
- uint256 neg_cur_elem9 = addmod(chall, NEG_H_Gi_9, R); 
+        x_a = addmod(x_a, mulmod(lag, input[14], R), R);
+        lag = mulmod(denoms[15], NOM_15, R);
 
-                     uint256 neg_cur_elem9_inv = invert_FR(neg_cur_elem9); 
+        x_a = addmod(x_a, mulmod(lag, input[15], R), R);
+        lag = mulmod(denoms[16], NOM_16, R);
 
-                     uint256 lagrange_9 = mulmod(neg_cur_elem9_inv, NOM_9, R);
- uint256 neg_cur_elem10 = addmod(chall, NEG_H_Gi_10, R); 
+        x_a = addmod(x_a, mulmod(lag, input[16], R), R);
+        lag = mulmod(denoms[17], NOM_17, R);
 
-                     uint256 neg_cur_elem10_inv = invert_FR(neg_cur_elem10); 
+        x_a = addmod(x_a, mulmod(lag, input[17], R), R);
+        lag = mulmod(denoms[18], NOM_18, R);
 
-                     uint256 lagrange_10 = mulmod(neg_cur_elem10_inv, NOM_10, R);
- uint256 neg_cur_elem11 = addmod(chall, NEG_H_Gi_11, R); 
+        x_a = addmod(x_a, mulmod(lag, input[18], R), R);
+        lag = mulmod(denoms[19], NOM_19, R);
 
-                     uint256 neg_cur_elem11_inv = invert_FR(neg_cur_elem11); 
+        x_a = addmod(x_a, mulmod(lag, input[19], R), R);
+        lag = mulmod(denoms[20], NOM_20, R);
 
-                     uint256 lagrange_11 = mulmod(neg_cur_elem11_inv, NOM_11, R);
- uint256 neg_cur_elem12 = addmod(chall, NEG_H_Gi_12, R); 
+        x_a = addmod(x_a, mulmod(lag, input[20], R), R);
+        lag = mulmod(denoms[21], NOM_21, R);
 
-                     uint256 neg_cur_elem12_inv = invert_FR(neg_cur_elem12); 
+        x_a = addmod(x_a, mulmod(lag, input[21], R), R);
+        lag = mulmod(denoms[22], NOM_22, R);
 
-                     uint256 lagrange_12 = mulmod(neg_cur_elem12_inv, NOM_12, R);
- uint256 neg_cur_elem13 = addmod(chall, NEG_H_Gi_13, R); 
+        x_a = addmod(x_a, mulmod(lag, input[22], R), R);
+        lag = mulmod(denoms[23], NOM_23, R);
 
-                     uint256 neg_cur_elem13_inv = invert_FR(neg_cur_elem13); 
+        x_a = addmod(x_a, mulmod(lag, input[23], R), R);
+        lag = mulmod(denoms[24], NOM_24, R);
 
-                     uint256 lagrange_13 = mulmod(neg_cur_elem13_inv, NOM_13, R);
- uint256 neg_cur_elem14 = addmod(chall, NEG_H_Gi_14, R); 
+        x_a = addmod(x_a, mulmod(lag, input[24], R), R);
+        lag = mulmod(denoms[25], NOM_25, R);
 
-                     uint256 neg_cur_elem14_inv = invert_FR(neg_cur_elem14); 
+        x_a = addmod(x_a, mulmod(lag, input[25], R), R);
+        lag = mulmod(denoms[26], NOM_26, R);
 
-                     uint256 lagrange_14 = mulmod(neg_cur_elem14_inv, NOM_14, R);
- uint256 neg_cur_elem15 = addmod(chall, NEG_H_Gi_15, R); 
+        x_a = addmod(x_a, mulmod(lag, input[26], R), R);
+        lag = mulmod(denoms[27], NOM_27, R);
 
-                     uint256 neg_cur_elem15_inv = invert_FR(neg_cur_elem15); 
+        x_a = addmod(x_a, mulmod(lag, input[27], R), R);
+        lag = mulmod(denoms[28], NOM_28, R);
 
-                     uint256 lagrange_15 = mulmod(neg_cur_elem15_inv, NOM_15, R);
- uint256 neg_cur_elem16 = addmod(chall, NEG_H_Gi_16, R); 
+        x_a = addmod(x_a, mulmod(lag, input[28], R), R);
+        lag = mulmod(denoms[29], NOM_29, R);
 
-                     uint256 neg_cur_elem16_inv = invert_FR(neg_cur_elem16); 
+        x_a = addmod(x_a, mulmod(lag, input[29], R), R);
+        lag = mulmod(denoms[30], NOM_30, R);
 
-                     uint256 lagrange_16 = mulmod(neg_cur_elem16_inv, NOM_16, R);
- uint256 neg_cur_elem17 = addmod(chall, NEG_H_Gi_17, R); 
+        x_a = addmod(x_a, mulmod(lag, input[30], R), R);
+        lag = mulmod(denoms[31], NOM_31, R);
 
-                     uint256 neg_cur_elem17_inv = invert_FR(neg_cur_elem17); 
+        x_a = addmod(x_a, mulmod(lag, input[31], R), R);
 
-                     uint256 lagrange_17 = mulmod(neg_cur_elem17_inv, NOM_17, R);
- uint256 neg_cur_elem18 = addmod(chall, NEG_H_Gi_18, R); 
 
-                     uint256 neg_cur_elem18_inv = invert_FR(neg_cur_elem18); 
 
-                     uint256 lagrange_18 = mulmod(neg_cur_elem18_inv, NOM_18, R);
- uint256 neg_cur_elem19 = addmod(chall, NEG_H_Gi_19, R); 
+        // 4) We then do the usual steps: compute vanish, numerator, etc.
+        // vanish = (chall^COSET_SIZE + constant)
+        uint256 vanish = compute_vanishing_poly(chall);
 
-                     uint256 neg_cur_elem19_inv = invert_FR(neg_cur_elem19); 
-
-                     uint256 lagrange_19 = mulmod(neg_cur_elem19_inv, NOM_19, R);
- uint256 neg_cur_elem20 = addmod(chall, NEG_H_Gi_20, R); 
-
-                     uint256 neg_cur_elem20_inv = invert_FR(neg_cur_elem20); 
-
-                     uint256 lagrange_20 = mulmod(neg_cur_elem20_inv, NOM_20, R);
- uint256 neg_cur_elem21 = addmod(chall, NEG_H_Gi_21, R); 
-
-                     uint256 neg_cur_elem21_inv = invert_FR(neg_cur_elem21); 
-
-                     uint256 lagrange_21 = mulmod(neg_cur_elem21_inv, NOM_21, R);
- uint256 neg_cur_elem22 = addmod(chall, NEG_H_Gi_22, R); 
-
-                     uint256 neg_cur_elem22_inv = invert_FR(neg_cur_elem22); 
-
-                     uint256 lagrange_22 = mulmod(neg_cur_elem22_inv, NOM_22, R);
- uint256 neg_cur_elem23 = addmod(chall, NEG_H_Gi_23, R); 
-
-                     uint256 neg_cur_elem23_inv = invert_FR(neg_cur_elem23); 
-
-                     uint256 lagrange_23 = mulmod(neg_cur_elem23_inv, NOM_23, R);
- uint256 neg_cur_elem24 = addmod(chall, NEG_H_Gi_24, R); 
-
-                     uint256 neg_cur_elem24_inv = invert_FR(neg_cur_elem24); 
-
-                     uint256 lagrange_24 = mulmod(neg_cur_elem24_inv, NOM_24, R);
- uint256 neg_cur_elem25 = addmod(chall, NEG_H_Gi_25, R); 
-
-                     uint256 neg_cur_elem25_inv = invert_FR(neg_cur_elem25); 
-
-                     uint256 lagrange_25 = mulmod(neg_cur_elem25_inv, NOM_25, R);
- uint256 neg_cur_elem26 = addmod(chall, NEG_H_Gi_26, R); 
-
-                     uint256 neg_cur_elem26_inv = invert_FR(neg_cur_elem26); 
-
-                     uint256 lagrange_26 = mulmod(neg_cur_elem26_inv, NOM_26, R);
- uint256 neg_cur_elem27 = addmod(chall, NEG_H_Gi_27, R); 
-
-                     uint256 neg_cur_elem27_inv = invert_FR(neg_cur_elem27); 
-
-                     uint256 lagrange_27 = mulmod(neg_cur_elem27_inv, NOM_27, R);
- uint256 neg_cur_elem28 = addmod(chall, NEG_H_Gi_28, R); 
-
-                     uint256 neg_cur_elem28_inv = invert_FR(neg_cur_elem28); 
-
-                     uint256 lagrange_28 = mulmod(neg_cur_elem28_inv, NOM_28, R);
- uint256 neg_cur_elem29 = addmod(chall, NEG_H_Gi_29, R); 
-
-                     uint256 neg_cur_elem29_inv = invert_FR(neg_cur_elem29); 
-
-                     uint256 lagrange_29 = mulmod(neg_cur_elem29_inv, NOM_29, R);
- uint256 neg_cur_elem30 = addmod(chall, NEG_H_Gi_30, R); 
-
-                     uint256 neg_cur_elem30_inv = invert_FR(neg_cur_elem30); 
-
-                     uint256 lagrange_30 = mulmod(neg_cur_elem30_inv, NOM_30, R);
- uint256 neg_cur_elem31 = addmod(chall, NEG_H_Gi_31, R); 
-
-                     uint256 neg_cur_elem31_inv = invert_FR(neg_cur_elem31); 
-
-                     uint256 lagrange_31 = mulmod(neg_cur_elem31_inv, NOM_31, R);
-
-
-uint256 x_a = addmod(addmod(addmod(addmod(addmod(mulmod(lagrange_0, input[0], R), mulmod(lagrange_1, input[1], R), R), addmod(mulmod(lagrange_2, input[2], R), mulmod(lagrange_3, input[3], R), R), R), addmod(addmod(mulmod(lagrange_4, input[4], R), mulmod(lagrange_5, input[5], R), R), addmod(mulmod(lagrange_6, input[6], R), mulmod(lagrange_7, input[7], R), R), R), R), addmod(addmod(addmod(mulmod(lagrange_8, input[8], R), mulmod(lagrange_9, input[9], R), R), addmod(mulmod(lagrange_10, input[10], R), mulmod(lagrange_11, input[11], R), R), R), addmod(addmod(mulmod(lagrange_12, input[12], R), mulmod(lagrange_13, input[13], R), R), addmod(mulmod(lagrange_14, input[14], R), mulmod(lagrange_15, input[15], R), R), R), R), R), addmod(addmod(addmod(addmod(mulmod(lagrange_16, input[16], R), mulmod(lagrange_17, input[17], R), R), addmod(mulmod(lagrange_18, input[18], R), mulmod(lagrange_19, input[19], R), R), R), addmod(addmod(mulmod(lagrange_20, input[20], R), mulmod(lagrange_21, input[21], R), R), addmod(mulmod(lagrange_22, input[22], R), mulmod(lagrange_23, input[23], R), R), R), R), addmod(addmod(addmod(mulmod(lagrange_24, input[24], R), mulmod(lagrange_25, input[25], R), R), addmod(mulmod(lagrange_26, input[26], R), mulmod(lagrange_27, input[27], R), R), R), addmod(addmod(mulmod(lagrange_28, input[28], R), mulmod(lagrange_29, input[29], R), R), addmod(mulmod(lagrange_30, input[30], R), mulmod(lagrange_31, input[31], R), R), R), R), R), R);
-
-        // Compute vanishing polynomial
-        uint256 vanishing_poly = compute_vanishing_poly(chall);
-
-        // Compute numerator: (((proof[0] + x_a)^2) - proof[1]) mod P
+        // numerator = ( (proof[0] + x_a)^2 ) - proof[1]
         uint256 numerator = addmod(proof[0], x_a, R);
         numerator = mulmod(numerator, numerator, R);
         numerator = addmod(numerator, R - proof[1], R);
 
-        // Compute modular inverse of vanishing_poly
-        uint256 vanishing_poly_inv = invert_FR(vanishing_poly);
-        // Compute v_q = numerator * vanishing_poly_inv mod P
-        v_q = mulmod(numerator, vanishing_poly_inv, R);
+        // vanishInv
+        uint256 vanishInv = invert_FR(vanish);
+
+        // v_q
+        v_q = mulmod(numerator, vanishInv, R);
+
+
+
     }
 
-    // Computes A = α_g * v_a + β_g * v_b + g * v_q - u_g * challenge
-    // This is used in pairing check
     function compute_A(
         uint256 v_a,
         uint256 v_b,
@@ -374,6 +382,7 @@ uint256 x_a = addmod(addmod(addmod(addmod(addmod(mulmod(lagrange_0, input[0], R)
         uint256 u_g_x,
         uint256 u_g_y
     ) internal view returns (uint256 A_x, uint256 A_y) {
+
         bool success;
         uint256[2] memory P1;
         uint256[2] memory P2;
@@ -381,84 +390,63 @@ uint256 x_a = addmod(addmod(addmod(addmod(addmod(mulmod(lagrange_0, input[0], R)
         uint256[2] memory P4;
         uint256[2] memory P5;
 
-        // Compute P1 = α_g * v_a (scalar multiplication)
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, ALPHA_G_X)
             mstore(add(ptr, 0x20), ALPHA_G_Y)
             mstore(add(ptr, 0x40), v_a)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P1, 0x40)
         }
 
-        // Compute P2 = β_g * v_b (scalar multiplication)
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, BETA_G_X)
             mstore(add(ptr, 0x20), BETA_G_Y)
             mstore(add(ptr, 0x40), v_b)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P2, 0x40)
         }
 
-        // Compute P3 = g * v_q (assuming g = (1, 2))
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, G_X)
             mstore(add(ptr, 0x20), G_Y)
             mstore(add(ptr, 0x40), v_q)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P3, 0x40)
         }
 
-        // Compute P4 = u_g * challenge (scalar multiplication)
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, u_g_x)
             mstore(add(ptr, 0x20), u_g_y)
             mstore(add(ptr, 0x40), chall)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P4, 0x40)
         }
 
-        // Compute A = P1 + P2 + P3 - P4 (point addition using ecAdd)
         uint256[2] memory temp;
-
-        // Step 1: temp = P1 + P2
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(P1))
             mstore(add(ptr, 0x20), mload(add(P1, 0x20)))
             mstore(add(ptr, 0x40), mload(P2))
             mstore(add(ptr, 0x60), mload(add(P2, 0x20)))
-
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
         }
 
-        require(success, "EC ADD failed for P1 + P2");
-
-        // Step 2: temp = temp + P3
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
             mstore(add(ptr, 0x40), mload(P3))
             mstore(add(ptr, 0x60), mload(add(P3, 0x20)))
-
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
         }
 
-        require(success, "EC ADD failed for (P1 + P2) + P3");
-
-        // Step 3: A = temp - P4 (Point subtraction: A = temp + (-P4))
-        // In elliptic curves, subtraction is adding the negated Y-coordinate.
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
             mstore(add(ptr, 0x40), mload(P4))
-            mstore(add(ptr, 0x60), sub(P, mload(add(P4, 0x20)))) // Negate P4_Y (mod P)
-
+            mstore(add(ptr, 0x60), sub(P, mload(add(P4, 0x20)))) // Negate Y-coordinate for subtraction
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, P5, 0x40)
         }
 

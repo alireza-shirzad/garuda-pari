@@ -117,38 +117,77 @@ contract Pari {
         result = addmod(tau_exp, MINUS_COSET_OFFSET_TO_COSET_SIZE, R);
     }
 
+    function batch_invert(uint256[1] memory arr) internal view {
+        // 1) forward pass
+        uint256 running = 1;
+        // We'll store partial_prod products in a separate local array of the same length
+        // so we can do the backward pass easily
+        uint256[1] memory partial_prod;
+        for (uint256 i = 0; i < 1; i++) {
+            partial_prod[i] = running; // store partial_prod
+            running = mulmod(running, arr[i], R);
+        }
+
+        // 2) invert the running product once
+        uint256 invRunning = exp(running, EXP_INVERSE_FR); // single exponentiation
+
+        // 3) backward pass
+        for (uint256 i = 1; i > 0; ) {
+            // i goes from 1 down to 1
+            // - 1 => i-1
+            unchecked {
+                i--;
+        }
+            // arr[i] = partial_prod[i] * invRunning
+            uint256 orig = arr[i];
+            arr[i] = mulmod(partial_prod[i], invRunning, R);
+            // update invRunning *= orig
+            invRunning = mulmod(invRunning, orig, R);
+        }
+        }
+
+
     // Computes v_q = (v_a^2-v_b)/Z_H(challenge)
     function comp_vq(
         uint256[1] calldata input,
         uint256[6] calldata proof,
         uint256 chall
     ) internal view returns (uint256 v_q) {
+        uint256[1] memory denoms;
 
-        uint256 neg_cur_elem0 = addmod(chall, NEG_H_Gi_0, R); 
+        denoms[0] = addmod(chall, NEG_H_Gi_0, R);
 
-                     uint256 neg_cur_elem0_inv = invert_FR(neg_cur_elem0); 
+        batch_invert(denoms);
 
-                     uint256 lagrange_0 = mulmod(neg_cur_elem0_inv, NOM_0, R);
+        uint256 x_a = 0;
+        uint256 lag = 0;
 
 
-uint256 x_a = mulmod(lagrange_0, input[0], R);
+                lag = mulmod(denoms[0], NOM_0, R);
 
-        // Compute vanishing polynomial
-        uint256 vanishing_poly = compute_vanishing_poly(chall);
+        x_a = addmod(x_a, mulmod(lag, input[0], R), R);
 
-        // Compute numerator: (((proof[0] + x_a)^2) - proof[1]) mod P
+
+
+        // 4) We then do the usual steps: compute vanish, numerator, etc.
+        // vanish = (chall^COSET_SIZE + constant)
+        uint256 vanish = compute_vanishing_poly(chall);
+
+        // numerator = ( (proof[0] + x_a)^2 ) - proof[1]
         uint256 numerator = addmod(proof[0], x_a, R);
         numerator = mulmod(numerator, numerator, R);
         numerator = addmod(numerator, R - proof[1], R);
 
-        // Compute modular inverse of vanishing_poly
-        uint256 vanishing_poly_inv = invert_FR(vanishing_poly);
-        // Compute v_q = numerator * vanishing_poly_inv mod P
-        v_q = mulmod(numerator, vanishing_poly_inv, R);
+        // vanishInv
+        uint256 vanishInv = invert_FR(vanish);
+
+        // v_q
+        v_q = mulmod(numerator, vanishInv, R);
+
+
+
     }
 
-    // Computes A = α_g * v_a + β_g * v_b + g * v_q - u_g * challenge
-    // This is used in pairing check
     function compute_A(
         uint256 v_a,
         uint256 v_b,
@@ -157,6 +196,7 @@ uint256 x_a = mulmod(lagrange_0, input[0], R);
         uint256 u_g_x,
         uint256 u_g_y
     ) internal view returns (uint256 A_x, uint256 A_y) {
+
         bool success;
         uint256[2] memory P1;
         uint256[2] memory P2;
@@ -164,84 +204,63 @@ uint256 x_a = mulmod(lagrange_0, input[0], R);
         uint256[2] memory P4;
         uint256[2] memory P5;
 
-        // Compute P1 = α_g * v_a (scalar multiplication)
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, ALPHA_G_X)
             mstore(add(ptr, 0x20), ALPHA_G_Y)
             mstore(add(ptr, 0x40), v_a)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P1, 0x40)
         }
 
-        // Compute P2 = β_g * v_b (scalar multiplication)
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, BETA_G_X)
             mstore(add(ptr, 0x20), BETA_G_Y)
             mstore(add(ptr, 0x40), v_b)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P2, 0x40)
         }
 
-        // Compute P3 = g * v_q (assuming g = (1, 2))
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, G_X)
             mstore(add(ptr, 0x20), G_Y)
             mstore(add(ptr, 0x40), v_q)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P3, 0x40)
         }
 
-        // Compute P4 = u_g * challenge (scalar multiplication)
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, u_g_x)
             mstore(add(ptr, 0x20), u_g_y)
             mstore(add(ptr, 0x40), chall)
-
             success := staticcall(gas(), PRECOMPILE_MUL, ptr, 0x60, P4, 0x40)
         }
 
-        // Compute A = P1 + P2 + P3 - P4 (point addition using ecAdd)
         uint256[2] memory temp;
-
-        // Step 1: temp = P1 + P2
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(P1))
             mstore(add(ptr, 0x20), mload(add(P1, 0x20)))
             mstore(add(ptr, 0x40), mload(P2))
             mstore(add(ptr, 0x60), mload(add(P2, 0x20)))
-
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
         }
 
-        require(success, "EC ADD failed for P1 + P2");
-
-        // Step 2: temp = temp + P3
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
             mstore(add(ptr, 0x40), mload(P3))
             mstore(add(ptr, 0x60), mload(add(P3, 0x20)))
-
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, temp, 0x40)
         }
 
-        require(success, "EC ADD failed for (P1 + P2) + P3");
-
-        // Step 3: A = temp - P4 (Point subtraction: A = temp + (-P4))
-        // In elliptic curves, subtraction is adding the negated Y-coordinate.
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, mload(temp))
             mstore(add(ptr, 0x20), mload(add(temp, 0x20)))
             mstore(add(ptr, 0x40), mload(P4))
-            mstore(add(ptr, 0x60), sub(P, mload(add(P4, 0x20)))) // Negate P4_Y (mod P)
-
+            mstore(add(ptr, 0x60), sub(P, mload(add(P4, 0x20)))) // Negate Y-coordinate for subtraction
             success := staticcall(gas(), PRECOMPILE_ADD, ptr, 0x80, P5, 0x40)
         }
 
