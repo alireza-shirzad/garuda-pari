@@ -130,14 +130,16 @@ impl<E: Pairing> Solidifier<E> {
                 acc + &format!("    uint256 constant NOM_{i} = {x};\n")
             });
 
-        let input_str = self
-            .input
-            .as_ref()
-            .unwrap()
-            .iter()
-            .map(|x| format!("{x}"))
-            .collect::<Vec<_>>()
-            .join(",\n ");
+        let input_ref = self.input.as_ref().unwrap();
+        let input_str = if input_ref.len() == 1 {
+            format!("uint256({})", input_ref[0])
+        } else {
+            input_ref
+                .iter()
+                .map(|x| format!("{x}"))
+                .collect::<Vec<_>>()
+                .join(",\n ")
+        };
         let input_refs_str = self
             .input
             .as_ref()
@@ -163,12 +165,12 @@ impl<E: Pairing> Solidifier<E> {
 
         let tau_h_x: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.vk.clone().unwrap().tau_h.into().x().unwrap()
+            self.vk.clone().unwrap().tau_h.x().unwrap()
         ))
         .unwrap();
         let tau_h_y: (String, String) = Self::extract_quad_ext_field_coordinates(&format!(
             "{}",
-            self.vk.clone().unwrap().tau_h.into().y().unwrap()
+            self.vk.clone().unwrap().tau_h.y().unwrap()
         ))
         .unwrap();
         let denoms_init = (0..input_size)

@@ -1,4 +1,5 @@
 use ark_bls12_381::Bls12_381;
+use ark_bn254::Bn254;
 // use ark_bn254::{Bn254, Fr as Bn254_Fr};
 use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
@@ -141,11 +142,10 @@ where
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
     let start = ark_std::time::Instant::now();
     for _ in 0..num_verifier_iterations {
-        assert!(Pari::verify(
-            &proof,
-            &vk,
-            &vec![expected_image; input_size - 1],
-        ));
+        assert!(Pari::verify(&proof, &vk, &vec![
+            expected_image;
+            input_size - 1
+        ],));
     }
     verifier_time += start.elapsed();
     let cs = gr1cs::ConstraintSystem::new_ref();
@@ -186,6 +186,8 @@ fn main() {
         .build_global()
         .unwrap();
 
+    // bench_smart_contract();
+
     /////////// Benchmark Pari for different input sizes ///////////
     let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
     for i in 0..num_inputs.len() {
@@ -204,8 +206,8 @@ fn main() {
     }
 }
 
-// fn bench_smart_contract() {
-//     for i in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
-//         let _ = bench!(bench, 2, *i, 1, 1, 1, 0, Bn254, Bn254_Fr);
-//     }
-// }
+fn bench_smart_contract() {
+    for i in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
+        let _ = bench::<Bn254>("bench", 2, *i, 1, 1, 1, 0);
+    }
+}

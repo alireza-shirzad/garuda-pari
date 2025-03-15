@@ -19,7 +19,7 @@ where
     pub verifying_key: VerifyingKey<E>,
 }
 
-/// The verifying key for GARUDA
+/// The verifying key for Pari
 #[derive(Clone, Debug)]
 pub struct VerifyingKey<E: Pairing> {
     pub succinct_index: SuccinctIndex,

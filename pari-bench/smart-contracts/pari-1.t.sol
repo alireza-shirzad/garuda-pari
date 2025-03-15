@@ -21,7 +21,7 @@ contract PariGasTest is Test {
             20741274790932863599349205268948212777852843056132533898564507401219562375739
         ];
         uint256[1] memory input = [
-            1
+            uint256(1)
         ];
 
         verifier.Verify(proof, input);
