@@ -147,7 +147,7 @@ macro_rules! bench {
         let prover_circuit = circuit.clone();
         let mut proof =
             Garuda::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
-        for _ in 0..$num_keygen_iterations {
+        for _ in 0..$num_prover_iterations {
             let prover_circuit = circuit.clone();
             let start = ark_std::time::Instant::now();
             proof = Garuda::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();

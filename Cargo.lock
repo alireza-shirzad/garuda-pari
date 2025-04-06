@@ -160,7 +160,6 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
- "rayon",
  "zeroize",
 ]
 
@@ -315,7 +314,7 @@ dependencies = [
 [[package]]
 name = "ark-relations"
 version = "0.5.1"
-source = "git+https://github.com/alireza-shirzad/snark.git#bbca9f162f7907fcfd460b653bf78efff9bf3d9c"
+source = "git+https://github.com/alireza-shirzad/snark.git#7979d1e34f01ce0a4b9b565e170ea0514e873944"
 dependencies = [
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
@@ -376,7 +375,7 @@ dependencies = [
 [[package]]
 name = "ark-snark"
 version = "0.5.1"
-source = "git+https://github.com/alireza-shirzad/snark.git#bbca9f162f7907fcfd460b653bf78efff9bf3d9c"
+source = "git+https://github.com/alireza-shirzad/snark.git#7979d1e34f01ce0a4b9b565e170ea0514e873944"
 dependencies = [
  "ark-ff 0.5.0",
  "ark-relations",
@@ -401,6 +400,7 @@ dependencies = [
  "rand 0.7.3",
  "rand_chacha 0.3.1",
  "rand_core 0.5.1",
+ "rayon",
  "sha3",
  "subtle",
  "thiserror",
@@ -581,34 +581,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curve25519-dalek"
-version = "4.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "curve25519-dalek-derive",
- "fiat-crypto",
- "rand_core 0.6.4",
- "rustc_version",
- "serde",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek-derive"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.100",
-]
-
-[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -689,12 +661,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fiat-crypto"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -737,7 +703,6 @@ dependencies = [
  "ark-serialize 0.5.0",
  "ark-spartan",
  "ark-std 0.5.0",
- "curve25519-dalek",
  "displaydoc",
  "garuda",
  "hyperplonk",

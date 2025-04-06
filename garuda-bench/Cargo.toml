@@ -11,7 +11,7 @@ ark-ff = { workspace = true }
 ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
-ark-crypto-primitives = { workspace = true}
+ark-crypto-primitives = { workspace = true }
 ark-r1cs-std = { workspace = true }
 ark-relations = { workspace = true }
 merlin = { workspace = true }
@@ -21,7 +21,7 @@ rayon = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
 ark-bls12-377 = { workspace = true }
-ark-spartan = {git = "https://github.com/alireza-shirzad/spartan"}
+ark-spartan = { git = "https://github.com/alireza-shirzad/spartan", default-features = false }
 
 
 # These are for the hyperplonk benches
@@ -32,11 +32,6 @@ ark-bls12-381-v4 = { package = "ark-bls12-381", version = "0.4.0", default-featu
 ] }
 ark-ec-v4 = { package = "ark-ec", version = "0.4.0" }
 ark-serialize-v4 = { package = "ark-serialize", version = "0.4.0" }
-curve25519-dalek = { version = "4.1.1", features = [
-    "serde",
-    "alloc",
-    "rand_core",
-], default-features = false }
 rand = "0.8.5"
 
 
@@ -73,22 +68,19 @@ std = [
     "ark-std/std",
     "ark-serialize/std",
 ]
-print-trace = ["ark-std/print-trace"]
+print-trace = ["ark-std/print-trace", "ark-spartan/profile"]
 parallel = [
     "std",
     "ark-ff/parallel",
     "garuda/parallel",
     "ark-poly/parallel",
     "ark-std/parallel",
+    "ark-spartan/multicore",
     "rayon",
 ]
 
-r1cs = [
-    "ark-crypto-primitives/r1cs",
-]
-gr1cs = [
-    "ark-crypto-primitives/gr1cs",
-]
+r1cs = ["ark-crypto-primitives/r1cs"]
+gr1cs = ["ark-crypto-primitives/gr1cs"]
 
 # Plots for the paper:
 # Remove constraints plot

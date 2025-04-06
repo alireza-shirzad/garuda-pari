@@ -1,39 +1,34 @@
-use ark_bls12_381::{Bls12_381, Fr as Bls12_381_Fr};
+use ark_bls12_381::Bls12_381;
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
 use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
+use ark_crypto_primitives::sponge::Absorb;
 use ark_crypto_primitives::sponge::rescue::RescueConfig;
-use ark_ff::{BigInteger, Field, PrimeField};
+use ark_ec::AffineRepr;
+use ark_ec::pairing::Pairing;
+use ark_ff::PrimeField;
 use ark_r1cs_std::alloc::AllocVar;
 use ark_r1cs_std::eq::EqGadget;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_relations::gr1cs::OptimizationGoal;
 use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
-use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
-use ark_relations::gr1cs::instance_outliner::outline_r1cs;
-use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
-use ark_relations::gr1cs::{self, Matrix};
 use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
-use ark_serialize::CanonicalSerialize;
 use ark_std::UniformRand;
-use ark_std::rand::rngs::StdRng;
-use ark_std::rc::Rc;
 use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
-use core::num;
-use garuda::Garuda;
+use libspartan::{InputsAssignment, Instance, SNARK, SNARKGens, VarsAssignment};
+use merlin::Transcript;
 use num_bigint::BigUint;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::env;
-use std::fs::File;
-use std::path::Path;
+use std::ops::Neg;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 const RESCUE_ROUNDS: usize = 12;
 
 /// This is our demo circuit for proving knowledge of the
@@ -42,6 +37,7 @@ const RESCUE_ROUNDS: usize = 12;
 struct RescueDemo<F: PrimeField> {
     input: Option<Vec<F>>,
     image: Option<F>,
+    num_instances: usize,
     config: RescueConfig<F>,
     num_invocations: usize,
 }
@@ -95,118 +91,136 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
                 Some(CRHGadget::<F>::evaluate(&params_g, &vec![crh_a_g.unwrap(); 9]).unwrap());
         }
 
-        let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
-            Ok(self.image.ok_or(SynthesisError::AssignmentMissing).unwrap())
-        })
-        .unwrap();
+        for _ in 0..self.num_instances - 1 {
+            let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
+                Ok(self.image.ok_or(SynthesisError::AssignmentMissing).unwrap())
+            })
+            .unwrap();
 
-        if let Some(crh_a_g) = crh_a_g {
-            let _ = crh_a_g.enforce_equal(&image_instance);
+            if let Some(crh_a_g) = crh_a_g.clone() {
+                let _ = crh_a_g.enforce_equal(&image_instance);
+            }
         }
 
         Ok(())
     }
 }
 
-macro_rules! bench {
-    ($bench_name:ident, $num_invocations:expr, $input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty) => {{
-        let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
-        let config = create_test_rescue_parameter(&mut rng);
-        let mut input = Vec::new();
-        for _ in 0..$input_size {
-            input.push(<$bench_field>::rand(&mut rng));
-        }
-        let mut expected_image = CRH::<$bench_field>::evaluate(&config, input.clone()).unwrap();
+fn bench<E: Pairing>(
+    _bench_name: &str,
+    num_invocations: usize,
+    input_size: usize,
+    num_keygen_iterations: u32,
+    num_prover_iterations: u32,
+    num_verifier_iterations: u32,
+    num_thread: usize,
+) -> BenchResult
+where
+    E::ScalarField: PrimeField + Absorb,
+    E::G1Affine: Neg<Output = E::G1Affine>,
+    <E::G1Affine as AffineRepr>::BaseField: PrimeField,
+    num_bigint::BigUint: From<<E::ScalarField as PrimeField>::BigInt>,
+{
+    let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
+    let config = create_test_rescue_parameter(&mut rng);
+    let mut input = Vec::new();
+    for _ in 0..9 {
+        input.push(<E::ScalarField>::rand(&mut rng));
+    }
+    let mut expected_image = CRH::<E::ScalarField>::evaluate(&config, input.clone()).unwrap();
 
-        for _i in 0..($num_invocations - 1) {
-            let output = vec![expected_image; 9];
-            expected_image = CRH::<$bench_field>::evaluate(&config, output.clone()).unwrap();
-        }
+    for _i in 0..(num_invocations - 1) {
+        let output = vec![expected_image; 9];
+        expected_image = CRH::<E::ScalarField>::evaluate(&config, output.clone()).unwrap();
+    }
 
-        let mut prover_time = Duration::new(0, 0);
-        let mut keygen_time = Duration::new(0, 0);
-        let mut verifier_time = Duration::new(0, 0);
-        let mut pk_size: usize = 0;
-        let mut vk_size: usize = 0;
-        let mut proof_size: usize = 0;
-        let circuit = RescueDemo::<$bench_field> {
-            input: Some(input.clone()),
-            image: Some(expected_image),
-            config: config.clone(),
-            num_invocations: $num_invocations,
-        };
-        let circuit = circuit.clone();
-        let cs: gr1cs::ConstraintSystemRef<$bench_field> = ConstraintSystem::new_ref();
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        circuit.generate_constraints(cs.clone()).unwrap();
-        cs.finalize();
-        let (
-            num_cons,
-            num_vars,
-            num_inputs,
-            num_non_zero_entries,
-            inst,
-            assignment_vars,
-            assignment_inputs,
-        ) = arkwork_r1cs_adapter(cs);
-        // let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+    let mut prover_time = Duration::new(0, 0);
+    let mut keygen_time = Duration::new(0, 0);
+    let mut verifier_time = Duration::new(0, 0);
+    let mut pk_size: usize = 0;
+    let mut vk_size: usize = 0;
+    let mut proof_size: usize = 0;
+    let circuit = RescueDemo::<E::ScalarField> {
+        input: Some(input.clone()),
+        num_instances: input_size,
+        image: Some(expected_image),
+        config: config.clone(),
+        num_invocations,
+    };
+    let circuit = circuit.clone();
+    let cs: ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+    cs.set_optimization_goal(OptimizationGoal::Constraints);
+    circuit.clone().generate_constraints(cs.clone()).unwrap();
+    cs.finalize();
+    let (num_cons, num_vars, num_inputs, num_non_zero_entries, inst, vars, inputs) =
+        arkwork_r1cs_adapter(cs);
+    let mut gens = SNARKGens::<E::G1>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+    let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
+    for _ in 0..num_keygen_iterations {
+        let start = ark_std::time::Instant::now();
+        gens = SNARKGens::<E::G1>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+        (comm, decomm) = SNARK::encode(&inst, &gens);
+        keygen_time += start.elapsed();
+    }
+    // produce a proof of satisfiability
+    let mut prover_transcript = Transcript::new(b"snark_example");
+    let mut proof = SNARK::prove(
+        &inst,
+        &comm,
+        &decomm,
+        vars.clone(),
+        &inputs,
+        &gens,
+        &mut prover_transcript,
+    );
+    for _ in 0..num_prover_iterations {
+        let vars = vars.clone();
+        let start = ark_std::time::Instant::now();
+        prover_transcript = Transcript::new(b"snark_example");
+        proof = SNARK::prove(
+            &inst,
+            &comm,
+            &decomm,
+            vars,
+            &inputs,
+            &gens,
+            &mut prover_transcript,
+        );
+        prover_time += start.elapsed();
+    }
+    let start = ark_std::time::Instant::now();
+    for _ in 0..num_verifier_iterations {
+        let mut verifier_transcript = Transcript::new(b"snark_example");
+        assert!(
+            proof
+                .verify(&comm, &inputs, &mut verifier_transcript, &gens)
+                .is_ok()
+        );
+    }
+    verifier_time += start.elapsed();
 
-        // let (mut pk, mut vk) =
-        //     Garuda::<$bench_pairing_engine, StdRng>::keygen(setup_circuit, &mut rng);
-        // for _ in 0..$num_keygen_iterations {
-        //     let setup_circuit = circuit.clone();
-        //     let start = ark_std::time::Instant::now();
-        //     (pk, vk) = Garuda::<$bench_pairing_engine, StdRng>::keygen(setup_circuit, &mut rng);
-        //     keygen_time += start.elapsed();
-        // }
-        // pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
-        // vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
-        // let prover_circuit = circuit.clone();
-        // let mut proof =
-        //     Garuda::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
-        // for _ in 0..$num_keygen_iterations {
-        //     let prover_circuit = circuit.clone();
-        //     let start = ark_std::time::Instant::now();
-        //     proof = Garuda::<$bench_pairing_engine, StdRng>::prove(prover_circuit, &pk).unwrap();
-        //     prover_time += start.elapsed();
-        // }
-        // proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
-        // let start = ark_std::time::Instant::now();
-        // for _ in 0..$num_verifier_iterations {
-        //     assert!(Garuda::<$bench_pairing_engine, StdRng>::verify(
-        //         &proof,
-        //         &vk,
-        //         &[expected_image],
-        //     ));
-        // }
-        // verifier_time += start.elapsed();
-        // let cs: gr1cs::ConstraintSystemRef<$bench_field> = gr1cs::ConstraintSystem::new_ref();
-        // cs.set_instance_outliner(InstanceOutliner {
-        //     pred_label: R1CS_PREDICATE_LABEL.to_string(),
-        //     func: Rc::new(outline_r1cs),
-        // });
-        // let _ = circuit.clone().generate_constraints(cs.clone());
-        // cs.finalize();
+    let cs: ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+    cs.set_optimization_goal(OptimizationGoal::Constraints);
+    circuit.generate_constraints(cs.clone()).unwrap();
+    cs.finalize();
 
-        // let bench_result = BenchResult {
-        //     curve: type_name::<$bench_pairing_engine>().to_string(),
-        //     num_constraints: cs.num_constraints(),
-        //     predicate_constraints: cs.get_all_predicates_num_constraints(),
-        //     num_invocations: $num_invocations,
-        //     input_size: $input_size,
-        //     num_thread: $num_thread,
-        //     num_keygen_iterations: $num_keygen_iterations,
-        //     num_prover_iterations: $num_prover_iterations,
-        //     num_verifier_iterations: $num_verifier_iterations,
-        //     pk_size,
-        //     vk_size,
-        //     proof_size,
-        //     prover_time: (prover_time / $num_prover_iterations),
-        //     verifier_time: (verifier_time / $num_verifier_iterations),
-        //     keygen_time: (keygen_time / $num_keygen_iterations),
-        // };
-        // bench_result
-    }};
+    BenchResult {
+        curve: type_name::<E::G1>().to_string(),
+        num_constraints: num_cons,
+        predicate_constraints: cs.get_all_predicates_num_constraints(),
+        num_invocations,
+        input_size,
+        num_thread,
+        num_keygen_iterations: num_keygen_iterations as usize,
+        num_prover_iterations: num_prover_iterations as usize,
+        num_verifier_iterations: num_verifier_iterations as usize,
+        pk_size,
+        vk_size,
+        proof_size,
+        prover_time: (prover_time / num_prover_iterations),
+        verifier_time: (verifier_time / num_verifier_iterations),
+        keygen_time: (keygen_time / num_keygen_iterations),
+    }
 }
 
 fn main() {
@@ -220,22 +234,25 @@ fn main() {
         .build_global()
         .unwrap();
 
-    bench!(
-        bench,
-        72,
-        10,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr
-    )
-    // .save_to_csv("garuda.csv", false);
+    // bench_smart_contract();
+
+    /////////// Benchmark Pari for different input sizes ///////////
+    // let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
+    // for i in 0..num_inputs.len() {
+    //     let _ = bench::<Bls12_381>("bench", 1, num_inputs[i], 1, 1, 100, num_thread)
+    //         .save_to_csv("spartan-gr1cs.csv", true);
+    // }
+
+    /////////// Benchmark Pari for different circuit sizes ///////////
+    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    for i in 0..num_invocations.len() {
+        let _ = bench::<Bls12_381>("bench", num_invocations[i], 20, 1, 1, 100, num_thread)
+            .save_to_csv("spartan-gr1cs.csv", true);
+    }
 }
-use curve25519_dalek::scalar::Scalar;
-use libspartan::{InputsAssignment, Instance, SNARK, SNARKGens, VarsAssignment};
-use rand::rngs::OsRng;
 
 fn arkwork_r1cs_adapter<F: PrimeField>(
     cs: ConstraintSystemRef<F>,
@@ -251,21 +268,19 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
     assert!(cs.is_satisfied().unwrap());
     assert_eq!(cs.num_predicates(), 1);
     let ark_amtrices: Vec<Vec<Vec<(F, usize)>>> =
-        cs.to_matrices().unwrap()[R1CS_PREDICATE_LABEL].clone();
+        cs.to_spartan_matrices().unwrap()[R1CS_PREDICATE_LABEL].clone();
     assert_eq!(ark_amtrices.len(), 3);
     let instance_assignment = cs.instance_assignment().unwrap();
     let witness_assignment = cs.witness_assignment().unwrap();
     let num_cons = cs.num_constraints();
-    let num_inputs = cs.num_instance_variables();
+    let num_inputs = cs.num_instance_variables() - 1;
     let num_vars = cs.num_witness_variables();
     assert_eq!(num_vars, witness_assignment.len());
-    assert_eq!(num_inputs, instance_assignment.len());
-    let num_non_zero_entries = 5;
+    assert_eq!(num_inputs, instance_assignment.len() - 1);
 
     let mut A: Vec<(usize, usize, F)> = Vec::new();
     let mut B: Vec<(usize, usize, F)> = Vec::new();
     let mut C: Vec<(usize, usize, F)> = Vec::new();
-
     ark_amtrices[0]
         .iter()
         .enumerate()
@@ -274,7 +289,6 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
                 A.push((row_num, *col_num, *entry));
             });
         });
-
     ark_amtrices[1]
         .iter()
         .enumerate()
@@ -292,9 +306,10 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
                 C.push((row_num, *col_num, *entry));
             });
         });
+    let num_non_zero_entries = ark_amtrices.iter().map(|x| x.len()).sum();
     let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
     let assignment_vars = VarsAssignment::new(&witness_assignment).unwrap();
-    let assignment_inputs = InputsAssignment::new(&instance_assignment).unwrap();
+    let assignment_inputs = InputsAssignment::new(&instance_assignment[1..]).unwrap();
     let res = inst.is_sat(&assignment_vars, &assignment_inputs);
     assert!(res.unwrap());
 

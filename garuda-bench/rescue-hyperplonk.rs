@@ -1,29 +1,8 @@
 use ark_bls12_381_v4::{Bls12_381, Fr as Bls12_381_Fr};
-use ark_crypto_primitives::crh::rescue::CRH;
-use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
-use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
-use ark_crypto_primitives::sponge::rescue::RescueConfig;
-use ark_ff::PrimeField;
-use ark_r1cs_std::alloc::AllocVar;
-use ark_r1cs_std::eq::EqGadget;
-use ark_r1cs_std::fields::fp::FpVar;
-use ark_relations::gr1cs;
-use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
-use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
-use ark_relations::gr1cs::instance_outliner::outline_r1cs;
-use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
-use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_serialize_v4::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::UniformRand;
 use ark_std::collections::BTreeMap;
 use ark_std::log2;
-use ark_std::rand::rngs::StdRng;
-use ark_std::rc::Rc;
-use ark_std::{
-    rand::{Rng, RngCore, SeedableRng},
-    test_rng,
-};
-use core::num;
+use ark_std::test_rng;
 use hp_hyperplonk::HyperPlonkSNARK;
 use hp_hyperplonk::prelude::CustomizedGates;
 use hp_hyperplonk::prelude::MockCircuit;
@@ -31,18 +10,14 @@ use hp_subroutines::MultilinearKzgPCS;
 use hp_subroutines::MultilinearUniversalParams;
 use hp_subroutines::PolyIOP;
 use hp_subroutines::PolynomialCommitmentScheme;
-use num_bigint::BigUint;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::env;
-use std::fmt::format;
 use std::fs::File;
 use std::mem::size_of_val;
 use std::path::Path;
-use std::process::Command;
-use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 macro_rules! bench {
     ($bench_name:ident, $num_invocations:expr, $input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty,$pcs_srs:expr,$jf_gate:expr) => {{
