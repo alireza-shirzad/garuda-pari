@@ -23,6 +23,7 @@ use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
+use core::num;
 use garuda::Garuda;
 use num_bigint::BigUint;
 use rayon::ThreadPoolBuilder;
@@ -75,13 +76,6 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
         let params_g =
             CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();
-        let _ = cs.clone().register_predicate(
-            "XXX",
-            PredicateConstraintSystem::new_polynomial_predicate(
-                2,
-                vec![(F::from(1i8), vec![(0, 5)]), (F::from(-1i8), vec![(1, 1)])],
-            ),
-        );
         let mut input_g = Vec::new();
 
         for elem in self
@@ -154,12 +148,9 @@ macro_rules! bench {
             inst,
             assignment_vars,
             assignment_inputs,
-        ) = arkwork_r1cs_adapter(
-            cs.to_matrices().unwrap()[R1CS_PREDICATE_LABEL].clone(),
-            cs.num_constraints(),
-            cs.instance_assignment().as_ref().unwrap(),
-            cs.witness_assignment().as_ref().unwrap(),
-        );
+        ) = arkwork_r1cs_adapter(cs);
+        // let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+
         // let (mut pk, mut vk) =
         //     Garuda::<$bench_pairing_engine, StdRng>::keygen(setup_circuit, &mut rng);
         // for _ in 0..$num_keygen_iterations {
@@ -247,59 +238,40 @@ use libspartan::{InputsAssignment, Instance, SNARK, SNARKGens, VarsAssignment};
 use rand::rngs::OsRng;
 
 fn arkwork_r1cs_adapter<F: PrimeField>(
-    ark_amtrices: Vec<Matrix<F>>,
-    num_cons: usize,
-    instance_assignment: &[F],
-    witness_assignment: &[F],
+    cs: ConstraintSystemRef<F>,
 ) -> (
     usize,
     usize,
     usize,
     usize,
-    Instance,
-    VarsAssignment,
-    InputsAssignment,
+    Instance<F>,
+    VarsAssignment<F>,
+    InputsAssignment<F>,
 ) {
-    // We will use the following example, but one could construct any R1CS instance.
-    // Our R1CS instance is three constraints over five variables and two public inputs
-    // (Z0 + Z1) * I0 - Z2 = 0
-    // (Z0 + I1) * Z2 - Z3 = 0
-    // Z4 * 1 - 0 = 0
-
-    // parameters of the R1CS instance rounded to the nearest power of two
-    let num_inputs = instance_assignment.len();
-    let num_vars = witness_assignment.len();
+    assert!(cs.is_satisfied().unwrap());
+    assert_eq!(cs.num_predicates(), 1);
+    let ark_amtrices: Vec<Vec<Vec<(F, usize)>>> =
+        cs.to_matrices().unwrap()[R1CS_PREDICATE_LABEL].clone();
+    assert_eq!(ark_amtrices.len(), 3);
+    let instance_assignment = cs.instance_assignment().unwrap();
+    let witness_assignment = cs.witness_assignment().unwrap();
+    let num_cons = cs.num_constraints();
+    let num_inputs = cs.num_instance_variables();
+    let num_vars = cs.num_witness_variables();
+    assert_eq!(num_vars, witness_assignment.len());
+    assert_eq!(num_inputs, instance_assignment.len());
     let num_non_zero_entries = 5;
 
-    // We will encode the above constraints into three matrices, where
-    // the coefficients in the matrix are in the little-endian byte order
-    let mut A: Vec<(usize, usize, [u8; 32])> = Vec::new();
-    let mut B: Vec<(usize, usize, [u8; 32])> = Vec::new();
-    let mut C: Vec<(usize, usize, [u8; 32])> = Vec::new();
+    let mut A: Vec<(usize, usize, F)> = Vec::new();
+    let mut B: Vec<(usize, usize, F)> = Vec::new();
+    let mut C: Vec<(usize, usize, F)> = Vec::new();
 
-    // The constraint system is defined over a finite field, which in our case is
-    // the scalar field of ristreeto255/curve25519 i.e., p =  2^{252}+27742317777372353535851937790883648493
-    // To construct these matrices, we will use `curve25519-dalek` but one can use any other method.
-
-    // a variable that holds a byte representation of 1
-    let one = Scalar::ONE.to_bytes();
-
-    // R1CS is a set of three sparse matrices A B C, where is a row for every
-    // constraint and a column for every entry in z = (vars, 1, inputs)
-    // An R1CS instance is satisfiable iff:
-    // Az \circ Bz = Cz, where z = (vars, 1, inputs)
-
-    // constraint 0 entries in (A,B,C)
-    // constraint 0 is (Z0 + Z1) * I0 - Z2 = 0.
-    // We set 1 in matrix A for columns that correspond to Z0 and Z1
-    // We set 1 in matrix B for column that corresponds to I0
-    // We set 1 in matrix C for column that corresponds to Z2
     ark_amtrices[0]
         .iter()
         .enumerate()
         .for_each(|(row_num, row)| {
             row.iter().for_each(|(entry, col_num)| {
-                A.push((row_num, *col_num, ff_to_scalar(*entry).to_bytes()));
+                A.push((row_num, *col_num, *entry));
             });
         });
 
@@ -308,7 +280,7 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
         .enumerate()
         .for_each(|(row_num, row)| {
             row.iter().for_each(|(entry, col_num)| {
-                B.push((row_num, *col_num, ff_to_scalar(*entry).to_bytes()));
+                B.push((row_num, *col_num, *entry));
             });
         });
 
@@ -317,26 +289,12 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
         .enumerate()
         .for_each(|(row_num, row)| {
             row.iter().for_each(|(entry, col_num)| {
-                C.push((row_num, *col_num, ff_to_scalar(*entry).to_bytes()));
+                C.push((row_num, *col_num, *entry));
             });
         });
     let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
-
-    // create a VarsAssignment
-    let mut vars = vec![Scalar::ZERO.to_bytes(); num_vars];
-    for i in 0..num_vars {
-        vars[i] = ff_to_scalar(witness_assignment[i]).to_bytes();
-    }
-    let assignment_vars = VarsAssignment::new(&vars).unwrap();
-
-    // create an InputsAssignment
-    let mut inputs = vec![Scalar::ZERO.to_bytes(); num_inputs];
-    for i in 0..num_inputs {
-        inputs[i] = ff_to_scalar(instance_assignment[i]).to_bytes();
-    }
-    let assignment_inputs = InputsAssignment::new(&inputs).unwrap();
-
-    // check if the instance we created is satisfiable
+    let assignment_vars = VarsAssignment::new(&witness_assignment).unwrap();
+    let assignment_inputs = InputsAssignment::new(&instance_assignment).unwrap();
     let res = inst.is_sat(&assignment_vars, &assignment_inputs);
     assert!(res.unwrap());
 
@@ -349,20 +307,4 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
         assignment_vars,
         assignment_inputs,
     )
-}
-
-fn ff_to_scalar<F: PrimeField>(field_element: F) -> Scalar {
-    // Convert the field element to a big integer representation
-    let big_int = field_element.into_bigint();
-
-    // Convert the big integer to bytes (Little-endian representation)
-    let mut bytes = [0u8; 32]; // Curve25519 uses 32-byte scalars
-    let field_bytes = big_int.to_bytes_le();
-
-    // Ensure proper length
-    let len = field_bytes.len().min(32);
-    bytes[..len].copy_from_slice(&field_bytes[..len]);
-
-    // Convert to Dalek Scalar
-    Scalar::from_bytes_mod_order(bytes)
 }

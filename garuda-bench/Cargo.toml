@@ -21,7 +21,7 @@ rayon = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
 ark-bls12-377 = { workspace = true }
-spartan = "0.9.0"
+ark-spartan = {git = "https://github.com/alireza-shirzad/spartan"}
 
 
 # These are for the hyperplonk benches

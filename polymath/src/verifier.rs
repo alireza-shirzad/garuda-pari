@@ -1,104 +1,84 @@
 use crate::utils::compute_chall;
+use crate::GAMMA;
 use crate::{
+    Polymath,
     data_structures::{Proof, VerifyingKey},
-    Pari,
 };
 use ark_ec::AffineRepr;
-use ark_ec::{pairing::Pairing, VariableBaseMSM};
+use ark_ec::{VariableBaseMSM, pairing::Pairing};
 use ark_ff::PrimeField;
 use ark_ff::{BigInteger, FftField, Field, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{end_timer, ops::Neg, start_timer};
 
-impl<E: Pairing> Pari<E> {
+impl<E: Pairing> Polymath<E> {
     pub fn verify(proof: &Proof<E>, vk: &VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
     where
         <E::G1Affine as AffineRepr>::BaseField: PrimeField,
         E::G1Affine: Neg<Output = E::G1Affine>,
     {
         let timer_verify =
-            start_timer!(|| format!("Verification (|x|= {})", vk.succinct_index.instance_len));
-        debug_assert_eq!(public_input.len(), vk.succinct_index.instance_len - 1);
-        let Proof { t_g, u_g, v_a, v_b } = proof;
+            start_timer!(|| format!("Verification (|x|= {})", vk.succinct_index.num_instance));
+        debug_assert_eq!(public_input.len(), vk.succinct_index.num_instance - 1);
+        let Proof { a_x_1, a, c, d } = proof;
 
         /////////////////////// Challenge Computation ///////////////////////
         let timer_transcript_init = start_timer!(|| "Computing Challenge");
-        let challenge = compute_chall::<E>(vk, public_input, t_g);
+        let x_1 = compute_chall::<E>(&vk, public_input, &a, &c, None);
         end_timer!(timer_transcript_init);
+        let x_2 = compute_chall::<E>(&vk, public_input, &a, &c, Some((x_1, *a_x_1)));
+        end_timer!(timer_transcript_init);
+
+        /////////////////////// Some variables ///////////////////////
+
+        let n = vk.domain.size();
+        let sigma = n + 3;
+        let y_1 = x_1.pow([sigma as u64]);
+        let y1_to_gamma = y_1.pow([GAMMA as u64]);
+
         /////////////////////// Computing polynomials x_A ///////////////////////
 
         let timer_x_poly = start_timer!(|| "Compute x_a polynomial");
-        let instance_size = vk.succinct_index.instance_len;
-        let mut px_evaluations = Vec::with_capacity(instance_size);
-        let r1cs_orig_num_cnstrs = vk.succinct_index.num_constraints - instance_size;
+        let mut px_evaluations = Vec::with_capacity(vk.succinct_index.num_instance);
+        let r1cs_orig_num_cnstrs = vk.succinct_index.num_constraints - vk.succinct_index.num_instance;
 
         px_evaluations.push(E::ScalarField::ONE);
-        px_evaluations.extend_from_slice(&public_input[..(instance_size - 1)]);
+        px_evaluations.extend_from_slice(&public_input[..(vk.succinct_index.num_instance - 1)]);
         let lag_coeffs_time = start_timer!(|| "Computing last lagrange coefficients");
         let (lagrange_coeffs, vanishing_poly_at_chall_inv) =
             Self::eval_last_lagrange_coeffs::<E::ScalarField>(
                 &vk.domain,
-                challenge,
+                x_1,
                 r1cs_orig_num_cnstrs,
-                vk.succinct_index.instance_len,
+                vk.succinct_index.num_instance,
             );
         end_timer!(lag_coeffs_time);
-        #[cfg(feature = "sol")]
-        {
-            use crate::solidity::Solidifier;
-            let mut solidifier = Solidifier::<E>::new();
-            solidifier.set_vk(&vk);
-            solidifier.set_proof(&proof);
-            solidifier.set_input(public_input);
-            let (_, neg_h_i, nom_i) = Self::eval_last_lagrange_coeffs_traced::<E::ScalarField>(
-                &vk.domain,
-                challenge,
-                r1cs_orig_num_cnstrs,
-                vk.succinct_index.instance_len,
-            );
-            solidifier.coset_size = Some(vk.domain.size());
-            solidifier.coset_offset = Some(vk.domain.coset_offset());
-            solidifier.neg_h_gi = Some(neg_h_i);
-            solidifier.nom_i = Some(nom_i);
-            solidifier.minus_coset_offset_to_coset_size =
-                Some(-(vk.domain.coset_offset().pow([vk.domain.size() as u64])));
-            solidifier.coset_offset_to_coset_size_inverse =
-                Some(E::ScalarField::ONE / vk.domain.evaluate_vanishing_polynomial(challenge));
-            solidifier.solidify();
-        }
+
         let x_a = lagrange_coeffs
             .into_iter()
             .zip(px_evaluations)
             .fold(E::ScalarField::zero(), |acc, (x, d)| acc + x * d);
-        let z_a = x_a + v_a;
+        let pi_x1 = x_a * y1_to_gamma;
         end_timer!(timer_x_poly);
 
-        /////////////////////// Computing the quotient evaluation///////////////////////
+        /////////////////////////////// C_x1 ///////////////////////
 
-        let timer_q = start_timer!(|| "Computing the quotient evaluation");
+        let z_h_over_k: E::ScalarField = todo!();
+        let c_x1 = (*a_x_1 + y1_to_gamma) * a_x_1 - pi_x1;
 
-        let v_q = (z_a * z_a - v_b) * vanishing_poly_at_chall_inv;
-        end_timer!(timer_q);
         /////////////////////// Final Pairing///////////////////////
 
-        let timer_scalar_mul = start_timer!(|| "Scalar mul");
-        let right_second_left = msm_bigint_wnaf::<E::G1>(
-            &[vk.alpha_g, vk.beta_g, vk.g, -*u_g],
-            &[(*v_a).into(), (*v_b).into(), v_q.into(), challenge.into()],
-        )
-        .into();
+        let first_left = (*a) + (*c) * x_2 - vk.g * ((*a_x_1) + x_2 * c_x1);
+        let second_right = vk.x_h - vk.h * x_1;
 
-        end_timer!(timer_scalar_mul);
+        
+
 
         let timer_pairing = start_timer!(|| "Final Pairing");
-        let right = E::multi_pairing(
-            [t_g, u_g, &right_second_left.into()],
-            [
-                vk.delta_two_h_prep.clone(),
-                vk.tau_h_prep.clone(),
-                vk.h_prep.clone(),
-            ],
-        );
+        let right = E::multi_pairing([first_left, (*d).into_group()], [
+            vk.z_h, 
+            second_right.into()
+        ]);
         assert!(right.is_zero());
         end_timer!(timer_pairing);
         end_timer!(timer_verify);

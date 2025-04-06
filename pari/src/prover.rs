@@ -231,7 +231,7 @@ impl<E: Pairing> Pari<E> {
             .zip(&mut z_b[..num_constraints])
             .zip(a_mat)
             .zip(b_mat)
-            .for_each(|(((a, b), at_i), bt_i)| {
+            .for_each(|(((mut a, mut b), at_i), bt_i)| {
                 *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(at_i, &assignment);
                 *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(bt_i, &assignment);
             });
@@ -243,7 +243,7 @@ impl<E: Pairing> Pari<E> {
             .zip(&mut w_b[..num_constraints])
             .zip(a_mat)
             .zip(b_mat)
-            .for_each(|(((a, b), at_i), bt_i)| {
+            .for_each(|(((mut a, mut b), at_i), bt_i)| {
                 *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
                     at_i,
                     &punctured_assignment,
