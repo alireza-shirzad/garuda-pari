@@ -6,7 +6,7 @@ use crate::{
 };
 use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
 use ark_ff::{Field, Zero};
-use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain, Radix2EvaluationDomain};
 use ark_relations::{
     gr1cs::{
         self, ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError,
@@ -48,14 +48,15 @@ impl<E: Pairing> Polymath<E> {
 
         /////////////////////// Computing the FFT domain ///////////////////////
         let timer_fft_domain = start_timer!(|| "Computing the FFT domain");
-        let domain = Radix2EvaluationDomain::new(num_constraints).unwrap();
+        let h_domain = GeneralEvaluationDomain::new(num_constraints).unwrap();
+        let k_domain = GeneralEvaluationDomain::new(num_instance).unwrap();
         end_timer!(timer_fft_domain);
         /////////////////////// Trapdoor and parameter generation ///////////////////////
 
-        let x: E::ScalarField = domain.sample_element_outside_domain(rng);
-        let z: E::ScalarField = domain.sample_element_outside_domain(rng);
-        let z_h_x = domain.evaluate_vanishing_polynomial(x);
-        let n = domain.size();
+        let x: E::ScalarField = h_domain.sample_element_outside_domain(rng);
+        let z: E::ScalarField = h_domain.sample_element_outside_domain(rng);
+        let z_h_x = h_domain.evaluate_vanishing_polynomial(x);
+        let n = h_domain.size();
         let m = num_total_variables;
         let m0 = cs.num_instance_variables();
         let bnd_a: usize = 1;
@@ -108,7 +109,7 @@ impl<E: Pairing> Polymath<E> {
         /////////////////////// Computing u_w_g1_vec ////////////////////////
         // Exponents: ((uj(x)y^γ + wj(x))/y^α)
         let timer_u_w_g1_vec = start_timer!(|| "Computing u_w_g1_vec");
-        let (ui_vec, wi_vec) = Self::compute_ui_wi_at_x(x, &cs, domain).unwrap();
+        let (ui_vec, wi_vec) = Self::compute_ui_wi_at_x(x, &cs, h_domain).unwrap();
 
         let u_w_vec = ui_vec[num_instance..]
             .par_iter()
@@ -170,7 +171,8 @@ impl<E: Pairing> Polymath<E> {
             x_h: x_h.into(),
             z_h: z_h.into(),
             h: h.into(),
-            domain,
+            h_domain,
+            k_domain,
             succinct_index,
         };
 
@@ -221,7 +223,7 @@ impl<E: Pairing> Polymath<E> {
     fn compute_ui_wi_at_x(
         x: E::ScalarField,
         new_cs: &ConstraintSystem<E::ScalarField>,
-        domain: Radix2EvaluationDomain<E::ScalarField>,
+        domain: GeneralEvaluationDomain<E::ScalarField>,
     ) -> Result<(Vec<E::ScalarField>, Vec<E::ScalarField>), SynthesisError> {
         // Compute all the lagrange polynomials
         let timer_eval_all_lagrange_polys = start_timer!(|| "Evaluating all Lagrange polys");

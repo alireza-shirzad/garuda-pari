@@ -10,6 +10,7 @@ mod prover;
 // mod solidity;
 mod utils;
 mod verifier;
+mod shared;
 
 #[cfg(test)]
 mod test;

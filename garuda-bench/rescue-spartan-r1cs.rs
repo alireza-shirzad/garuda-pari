@@ -237,11 +237,11 @@ fn main() {
     // bench_smart_contract();
 
     /////////// Benchmark Pari for different input sizes ///////////
-    // let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
-    // for i in 0..num_inputs.len() {
-    //     let _ = bench::<Bls12_381>("bench", 1, num_inputs[i], 1, 1, 100, num_thread)
-    //         .save_to_csv("spartan-gr1cs.csv", true);
-    // }
+    let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
+    for i in 0..num_inputs.len() {
+        let _ = bench::<Bls12_381>("bench", 1, num_inputs[i], 1, 1, 100, num_thread)
+            .save_to_csv("spartan-gr1cs.csv", true);
+    }
 
     /////////// Benchmark Pari for different circuit sizes ///////////
     const MAX_LOG2_NUM_INVOCATIONS: usize = 30;

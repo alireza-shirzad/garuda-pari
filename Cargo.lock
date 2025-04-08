@@ -160,6 +160,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "rayon",
  "zeroize",
 ]
 
@@ -314,12 +315,13 @@ dependencies = [
 [[package]]
 name = "ark-relations"
 version = "0.5.1"
-source = "git+https://github.com/alireza-shirzad/snark.git#7979d1e34f01ce0a4b9b565e170ea0514e873944"
+source = "git+https://github.com/alireza-shirzad/snark.git#c1cfd3193ecc3c6113f1f7c6a579a865cb55c966"
 dependencies = [
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
+ "rayon",
  "tracing",
  "tracing-subscriber",
 ]
@@ -375,7 +377,7 @@ dependencies = [
 [[package]]
 name = "ark-snark"
 version = "0.5.1"
-source = "git+https://github.com/alireza-shirzad/snark.git#7979d1e34f01ce0a4b9b565e170ea0514e873944"
+source = "git+https://github.com/alireza-shirzad/snark.git#c1cfd3193ecc3c6113f1f7c6a579a865cb55c966"
 dependencies = [
  "ark-ff 0.5.0",
  "ark-relations",

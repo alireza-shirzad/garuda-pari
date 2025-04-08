@@ -4,11 +4,11 @@ use ark_bn254::Bn254;
 // use ark_bls::{Bls12_381, Fr as Bls12_381_Fr};
 // use ark_bn254::{Bn254, Fr as Bn254_Fr};
 use crate::{
-    data_structures::{Proof, ProvingKey, VerifyingKey},
     Polymath,
+    data_structures::{Proof, ProvingKey, VerifyingKey},
 };
-use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
+use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_ff::{Field, UniformRand};
 use ark_relations::gr1cs::ConstraintSystemRef;
@@ -40,10 +40,11 @@ where
         a: Some(a_val),
         b: Some(b_val),
     };
-    let (pk, vk): (ProvingKey<E>, VerifyingKey<E>) = Polymath::<E>::keygen(circuit.clone(), &mut rng);
-    // let proof: Proof<E> = Polymath::prove(circuit.clone(), &pk).unwrap();
-    // let input_assignment = [a_val * b_val];
-    // assert!(Polymath::<E>::verify(&proof, &vk, &input_assignment));
+    let (pk, vk): (ProvingKey<E>, VerifyingKey<E>) =
+        Polymath::<E>::keygen(circuit.clone(), &mut rng);
+    let proof: Proof<E> = Polymath::<E>::prove(circuit.clone(), &pk, &mut rng).unwrap();
+    let input_assignment = [a_val * b_val];
+    assert!(Polymath::<E>::verify(&proof, &vk, &input_assignment));
 }
 
 #[derive(Clone)]

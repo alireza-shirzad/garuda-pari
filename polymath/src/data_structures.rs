@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_poly::Radix2EvaluationDomain;
+use ark_poly::{GeneralEvaluationDomain, Radix2EvaluationDomain};
 use ark_serialize::CanonicalSerialize;
 
 /// The proving key for Pari
@@ -29,7 +29,8 @@ pub struct VerifyingKey<E: Pairing> {
     pub z_h: E::G2Affine,
     pub h: E::G2Affine,
     //TODO: Should the domain be in vk?
-    pub domain: Radix2EvaluationDomain<E::ScalarField>,
+    pub h_domain: GeneralEvaluationDomain<E::ScalarField>,
+    pub k_domain: GeneralEvaluationDomain<E::ScalarField>,
 }
 
 // impl<E: Pairing> CanonicalSerialize for VerifyingKey<E> {

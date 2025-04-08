@@ -1,4 +1,4 @@
-use std::{cell::Ref, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
     arithmetic::{DenseMultilinearExtension, VirtualPolynomial},
@@ -19,21 +19,27 @@ use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::{
     multivariate::{SparsePolynomial, SparseTerm},
-    MultilinearExtension, Polynomial,
+    Polynomial,
 };
 use ark_relations::gr1cs::{
     self,
     instance_outliner::{outline_r1cs, InstanceOutliner},
     mat_vec_mul,
     predicate::PredicateType,
-    ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Matrix, OptimizationGoal,
-    SynthesisError, R1CS_PREDICATE_LABEL,
+    ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
+    R1CS_PREDICATE_LABEL,
 };
-use ark_std::{end_timer, iterable::Iterable, rand::RngCore, start_timer, sync::Arc};
+use ark_std::{
+    cfg_into_iter, cfg_iter, end_timer, iterable::Iterable, rand::RngCore, start_timer, sync::Arc,
+};
 use shared_utils::transcript::IOPTranscript;
+
+use rayon::iter::IntoParallelIterator;
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 impl<E, R> Garuda<E, R>
 where
-    E: Pairing,
+    E: Pairing + Send + Sync,
     R: RngCore,
 {
     pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
@@ -214,25 +220,21 @@ where
         E::ScalarField: Field,
     {
         let stacked_matrices: Vec<Matrix<E::ScalarField>> = stack_matrices(index);
-        let mut pz: Vec<DenseMultilinearExtension<E::ScalarField>> = Vec::new();
-        let mut pw: Vec<DenseMultilinearExtension<E::ScalarField>> = Vec::new();
-        for matrix in stacked_matrices {
-            let mz: Vec<E::ScalarField> = mat_vec_mul(&matrix, z_assignment);
-            //TODO: Check this might be wrong
-            let mut w_assignment: Vec<E::ScalarField> =
-                vec![E::ScalarField::zero(); z_assignment.len()];
-            w_assignment[index.instance_len..].copy_from_slice(&z_assignment[index.instance_len..]);
-            let mw: Vec<E::ScalarField> = mat_vec_mul(&matrix, &w_assignment);
-            pw.push(DenseMultilinearExtension::from_evaluations_vec(
-                index.log_num_constraints,
-                mw,
-            ));
-            pz.push(DenseMultilinearExtension::from_evaluations_vec(
-                index.log_num_constraints,
-                mz,
-            ));
-        }
-        (pw, pz)
+
+        cfg_iter!(stacked_matrices)
+            .map(|matrix| {
+                let mz: Vec<E::ScalarField> = mat_vec_mul(matrix, z_assignment);
+                let mut w_assignment: Vec<E::ScalarField> =
+                    vec![E::ScalarField::zero(); z_assignment.len()];
+                w_assignment[index.instance_len..]
+                    .copy_from_slice(&z_assignment[index.instance_len..]);
+                let mw: Vec<E::ScalarField> = mat_vec_mul(matrix, &w_assignment);
+                (
+                    DenseMultilinearExtension::from_evaluations_vec(index.log_num_constraints, mw),
+                    DenseMultilinearExtension::from_evaluations_vec(index.log_num_constraints, mz),
+                )
+            })
+            .unzip()
     }
 
     // A helper function to build the grand polynomial
@@ -285,36 +287,64 @@ where
         target_virtual_poly
     }
 
-    fn build_grand_poly_single_pred(
+    pub fn build_grand_poly_single_pred(
         predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm>,
         witness_poly_arcs: &[Arc<DenseMultilinearExtension<E::ScalarField>>],
         virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
-        for (coeff, term) in predicate_poly.terms {
-            let mut mle_list: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = Vec::new();
-            for (var, exponent) in term.iter() {
-                for _ in 0..*exponent {
-                    mle_list.push(Arc::clone(&witness_poly_arcs[*var]));
-                }
-            }
+        // 1.  Compute each (coeff, mle_list) pair in parallel (or serial).
+        let contributions: Vec<(
+            Vec<Arc<DenseMultilinearExtension<E::ScalarField>>>,
+            E::ScalarField,
+        )> = cfg_into_iter!(predicate_poly.terms) // parallel ↔ serial switch
+            .map(|(coeff, term)| {
+                // Re‑create the list of MLEs for this monomial.
+                let mle_list: Vec<_> = term
+                    .iter()
+                    .flat_map(|(var, exponent)| {
+                        std::iter::repeat_with(|| Arc::clone(&witness_poly_arcs[*var]))
+                            .take(*exponent)
+                    })
+                    .collect();
+                (mle_list, coeff)
+            })
+            .collect();
+
+        // 2.  Feed the results into `virtual_poly` (sequential – cheap).
+        for (mle_list, coeff) in contributions {
             let _ = virtual_poly.add_mle_list(mle_list, coeff);
         }
     }
 
-    fn build_grand_poly_multi_pred(
+    pub fn build_grand_poly_multi_pred(
         predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm>,
         selector_poly: &Arc<DenseMultilinearExtension<E::ScalarField>>,
         witness_poly_arcs: &[Arc<DenseMultilinearExtension<E::ScalarField>>],
         virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
-        for (coeff, term) in predicate_poly.terms {
-            let mut mle_list: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = Vec::new();
-            mle_list.push(Arc::clone(selector_poly));
-            for (var, exponent) in term.iter() {
-                for _ in 0..*exponent {
-                    mle_list.push(Arc::clone(&witness_poly_arcs[*var]));
-                }
-            }
+        // -------- phase 1: compute each (mle_list, coeff) in parallel --------
+        let contributions: Vec<(
+            Vec<Arc<DenseMultilinearExtension<E::ScalarField>>>,
+            E::ScalarField,
+        )> = cfg_into_iter!(predicate_poly.terms) // ⇢ `.into_par_iter()` when parallel
+            .map(|(coeff, term)| {
+                // Build the list of MLEs for this monomial.
+                let mut mle_list = Vec::with_capacity(1 + term.len()); // 1 for selector
+                mle_list.push(Arc::clone(selector_poly));
+
+                term.iter().for_each(|(var, exponent)| {
+                    mle_list.extend(
+                        std::iter::repeat_with(|| Arc::clone(&witness_poly_arcs[*var]))
+                            .take(*exponent),
+                    );
+                });
+
+                (mle_list, coeff)
+            })
+            .collect();
+
+        // -------- phase 2: mutate `virtual_poly` sequentially --------
+        for (mle_list, coeff) in contributions {
             let _ = virtual_poly.add_mle_list(mle_list, coeff);
         }
     }

@@ -71,6 +71,7 @@ std = [
 print-trace = ["ark-std/print-trace", "ark-spartan/profile"]
 parallel = [
     "std",
+    "ark-ec/parallel",
     "ark-ff/parallel",
     "garuda/parallel",
     "ark-poly/parallel",
