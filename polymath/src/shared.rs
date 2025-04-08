@@ -3,7 +3,7 @@ use std::ops::Neg;
 use crate::{Polymath, data_structures::VerifyingKey};
 use ark_ec::{AffineRepr, pairing::Pairing};
 use ark_ff::{Field, PrimeField};
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
 use ark_relations::gr1cs::ConstraintSynthesizer;
 use ark_std::Zero;
 use ark_std::rand::RngCore;
@@ -13,42 +13,18 @@ impl<E: Pairing> Polymath<E> {
         y1_gamma: E::ScalarField,
         y1_alpha: E::ScalarField,
         a_at_x1: E::ScalarField,
-        pi_at_x1: E::ScalarField,
-    ) -> E::ScalarField {
-        ((a_at_x1 + y1_gamma) * a_at_x1 - pi_at_x1) / y1_alpha
-    }
-
-    fn compute_z_of_h_over_k_of_x1(
-        h_domain: GeneralEvaluationDomain<E::ScalarField>,
-        k_domain: GeneralEvaluationDomain<E::ScalarField>,
+        full_public_input: &[E::ScalarField],
         x1: E::ScalarField,
-    ) -> E::ScalarField {
-        h_domain.evaluate_vanishing_polynomial(x1) / k_domain.evaluate_vanishing_polynomial(x1)
-    }
-
-    pub(crate) fn compute_pi_at_x1(
         vk: &VerifyingKey<E>,
-        public_inputs: &[E::ScalarField],
-        x1: E::ScalarField,
-        y1_gamma: E::ScalarField,
     ) -> E::ScalarField {
-        let mut sum = E::ScalarField::zero();
-
-        let mut lagrange_i_at_x1_numerator =
-            (x1.pow([vk.n as u64]) - E::ScalarField::ONE) / &E::ScalarField::from(vk.n as u64);
-        let mut omega_exp_i = E::ScalarField::ONE;
-
-        let m0 = public_inputs.len();
-
-        for i in 0..m0 * 2 {
-            let lagrange_i_at_x1 = lagrange_i_at_x1_numerator / (x1 - omega_exp_i);
-            let to_add = Self::z_tilde_i(public_inputs, i) * lagrange_i_at_x1;
-            lagrange_i_at_x1_numerator *= vk.omega;
-            omega_exp_i *= vk.omega;
-            sum += to_add;
-        }
-
-        sum * y1_gamma
+        let pi_poly =
+            Evaluations::from_vec_and_domain(full_public_input.to_vec(), vk.k_domain).interpolate();
+        let pi_at_x1 = pi_poly.evaluate(&x1);
+        let n_field = E::ScalarField::from(vk.n as u64);
+        let m0_field = E::ScalarField::from(vk.m0 as u64);
+        let z_h_over_k = vk.h_domain.evaluate_vanishing_polynomial(x1)
+            / vk.k_domain.evaluate_vanishing_polynomial(x1);
+        ((a_at_x1 + y1_gamma) * a_at_x1 - pi_at_x1 * z_h_over_k * m0_field / n_field) / y1_alpha
     }
 
     fn z_tilde_i(public_inputs: &[E::ScalarField], i: usize) -> E::ScalarField {

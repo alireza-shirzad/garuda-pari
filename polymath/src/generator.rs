@@ -49,6 +49,7 @@ impl<E: Pairing> Polymath<E> {
         /////////////////////// Computing the FFT domain ///////////////////////
         let timer_fft_domain = start_timer!(|| "Computing the FFT domain");
         let h_domain = GeneralEvaluationDomain::new(num_constraints).unwrap();
+        let k_domain = GeneralEvaluationDomain::new(num_instance).unwrap();
         end_timer!(timer_fft_domain);
         /////////////////////// Trapdoor and parameter generation ///////////////////////
 
@@ -171,10 +172,11 @@ impl<E: Pairing> Polymath<E> {
             z_h: z_h.into(),
             h: h.into(),
             succinct_index,
-            omega: h_domain.group_gen(),
             m0,
             n,
             sigma,
+            h_domain,
+            k_domain,
         };
 
         let pk = ProvingKey {
@@ -185,7 +187,6 @@ impl<E: Pairing> Polymath<E> {
             u_w_g1_vec,
             x_zh_over_y_alpha_g1_vec,
             x_z_g1_vec,
-            h_domain,
         };
 
         (pk, vk)

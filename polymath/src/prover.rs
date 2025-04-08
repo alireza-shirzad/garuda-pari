@@ -83,10 +83,13 @@ impl<E: Pairing> Polymath<E> {
         end_timer!(timer_compute_za_zb_wa_wb);
         //////////////////////// Interpolating polynomials ///////////////////////
         let timer_interp = start_timer!(|| "Interpolating z_u, z_w, w_u, w_w polynomials");
-        let z_u_hat = Evaluations::from_vec_and_domain(z_u, pk.h_domain).interpolate();
-        let z_w_hat = Evaluations::from_vec_and_domain(z_w, pk.h_domain).interpolate();
-        let w_u_hat = Evaluations::from_vec_and_domain(w_u, pk.h_domain).interpolate();
-        let w_w_hat = Evaluations::from_vec_and_domain(w_w, pk.h_domain).interpolate();
+        let z_u_hat = Evaluations::from_vec_and_domain(z_u, pk.vk.h_domain).interpolate();
+        let z_w_hat = Evaluations::from_vec_and_domain(z_w, pk.vk.h_domain).interpolate();
+        let pi_poly =
+            Evaluations::from_vec_and_domain(cs.instance_assignment.to_vec(), pk.vk.k_domain)
+                .interpolate();
+        let w_u_hat = &z_u_hat - &pi_poly;
+        let w_w_hat = &z_w_hat - &pi_poly;
         debug_assert!(z_u_hat.degree() < pk.vk.n);
         end_timer!(timer_interp);
 
@@ -98,7 +101,7 @@ impl<E: Pairing> Polymath<E> {
         end_timer!(timer_interp);
         /////////////////////// Computing h(X) ///////////////////////
         let timer_h = start_timer!(|| "Computing h(X)");
-        let (h, rem) = (&z_u_hat * &z_u_hat - &z_w_hat).divide_by_vanishing_poly(pk.h_domain);
+        let (h, rem) = (&z_u_hat * &z_u_hat - &z_w_hat).divide_by_vanishing_poly(pk.vk.h_domain);
         debug_assert!(rem.is_zero());
         end_timer!(timer_h);
         /////////////////////// Computing ra(X) of degree bnd_a=1 ///////////////////////
@@ -138,7 +141,7 @@ impl<E: Pairing> Polymath<E> {
         end_timer!(timer_r);
         /////////////////////// Computing C(X) and [c]_1 ///////////////////////
         let timer_c = start_timer!(|| "Computing C(X) and [C(X)]_1");
-        let zh_poly = pk.h_domain.vanishing_polynomial();
+        let zh_poly = pk.vk.h_domain.vanishing_polynomial();
 
         let u_w_g1: E::G1Affine = Self::msm(&cs.witness_assignment, &pk.u_w_g1_vec).into();
 
@@ -175,9 +178,14 @@ impl<E: Pairing> Polymath<E> {
         end_timer!(timer_x2);
 
         ///////////////////////////// Computing PI(X) ///////////////////////
-        let pi_at_x1 = Self::compute_pi_at_x1(&pk.vk, &cs.instance_assignment, x_1, y1_to_gamma);
-        let y1_to_alpha = y1.pow([MINUS_ALPHA as u64]).inverse().unwrap();
-        let c_x_1 = Self::compute_c_at_x1(y1_to_gamma, y1_to_alpha, a_x_1, pi_at_x1);
+        let c_at_x1 = Self::compute_c_at_x1(
+            y1_to_gamma,
+            y1_to_alpha,
+            a_x_1,
+            &cs.instance_assignment,
+            x_1,
+            &pk.vk,
+        );
         ///////////////////// Computing D(X) ///////////////////////
 
         let a_over_y_to_gamma_poly =
@@ -201,7 +209,7 @@ impl<E: Pairing> Polymath<E> {
                 + r_over_y_to_gamma_poly;
 
         let d_right_coeff_poly =
-            SparsePolynomial::from_coefficients_vec(vec![(0, a_x_1 + x_2 * c_x_1)]);
+            SparsePolynomial::from_coefficients_vec(vec![(0, a_x_1 + x_2 * c_at_x1)]);
         let d_over_y_to_gamma_nom_poly: DenseOrSparsePolynomial<E::ScalarField> =
             DenseOrSparsePolynomial::from(
                 (a_over_y_to_gamma_poly + &c_over_y_to_gamma_poly * x_2)

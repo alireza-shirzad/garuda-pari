@@ -28,15 +28,16 @@ impl<E: Pairing> Polymath<E> {
         let x2 = compute_chall::<E>(&vk, public_input, &a, &c, Some((x1, *a_x_1)));
         end_timer!(timer_transcript_init);
 
-        let public_inputs = &[&[E::ScalarField::ONE], public_input].concat();
+        let full_public_input = [&[E::ScalarField::ONE], public_input].concat();
 
         let y_1 = x1.pow([vk.sigma as u64]);
         let y1_gamma = y_1.pow([MINUS_GAMMA as u64]).inverse().unwrap();
-        let pi_at_x1 = Self::compute_pi_at_x1(vk, public_inputs, x1, y1_gamma);
+
         let y1_alpha = y_1.pow([MINUS_ALPHA as u64]).inverse().unwrap();
 
         // compute c_at_x1
-        let c_at_x1 = Self::compute_c_at_x1(y1_gamma, y1_alpha, proof.a_x_1, pi_at_x1);
+        let c_at_x1 =
+            Self::compute_c_at_x1(y1_gamma, y1_alpha, proof.a_x_1, &full_public_input, x1, vk);
         let commitments_minus_evals_in_g1 = E::G1::msm_unchecked(
             &[proof.a, proof.c, vk.g],
             &[E::ScalarField::ONE, x2, -(proof.a_x_1 + x2 * c_at_x1)],
