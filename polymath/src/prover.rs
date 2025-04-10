@@ -61,18 +61,19 @@ impl<E: Pairing> Polymath<E> {
         /////////////////////// Extract the constraint system  information ///////////////////////
         let timer_extract_info = start_timer!(|| "Extract constraint system information");
         let num_witness_vars = cs.num_witness_variables();
+        let r1cs_orig_num_cnstrs = pk.vk.succinct_index.num_constraints - pk.vk.m0;
+        let domain_ratio = pk.vk.h_domain.size() / pk.vk.k_domain.size();
         let matrices = &cs.to_matrices().unwrap()[SR1CS_PREDICATE_LABEL];
         // Make sure the extracted information is consistent with each other
-        debug_assert_eq!(pk.vk.m0, cs.instance_assignment.len());
-        debug_assert_eq!(num_witness_vars, cs.witness_assignment.len());
-        debug_assert_eq!(matrices.len(), 2);
-        debug_assert_eq!(matrices[0].len().next_power_of_two(), pk.vk.n);
-        debug_assert_eq!(matrices[1].len().next_power_of_two(), pk.vk.n);
+        assert_eq!(pk.vk.m0, cs.instance_assignment.len());
+        assert_eq!(num_witness_vars, cs.witness_assignment.len());
+        assert_eq!(matrices.len(), 2);
+        assert_eq!(matrices[0].len().next_power_of_two(), pk.vk.n);
+        assert_eq!(matrices[1].len().next_power_of_two(), pk.vk.n);
         end_timer!(timer_extract_info);
-
         /////////////////////// Computing (z_u, z_w), (w_u, w_w) polynomials  ///////////////////////
-        let timer_compute_za_zb_wa_wb = start_timer!(|| "Computing vectors z_U, z_U, w_W, w_W");
-        let ((z_u, z_w), (w_u, w_w)) = Self::compute_zu_zw_wu_ww(
+        let (xu_vec, (mut wu_vec, ww_vec)) = Self::compute_xu_wu_ww(
+            pk.vk.n,
             &matrices[0],
             &matrices[1],
             &cs.instance_assignment,
@@ -80,29 +81,49 @@ impl<E: Pairing> Polymath<E> {
             pk.vk.n,
         )
         .unwrap();
-        end_timer!(timer_compute_za_zb_wa_wb);
+        let zu_vec = xu_vec
+            .iter()
+            .zip(wu_vec.iter())
+            .map(|(a, b)| *a + *b)
+            .collect::<Vec<E::ScalarField>>();
+        let wu_clone = wu_vec.clone();
+        let w_leftover = &wu_clone[r1cs_orig_num_cnstrs..r1cs_orig_num_cnstrs + pk.vk.m0];
+        let x_leftover = &xu_vec[r1cs_orig_num_cnstrs..r1cs_orig_num_cnstrs + pk.vk.m0];
+        Self::zero_tail(&mut wu_vec, r1cs_orig_num_cnstrs);
+        let xu_reshaped_vec = Self::fragment_with_separator(
+            &vec![E::ScalarField::zero(); wu_vec.len()],
+            domain_ratio,
+            Some(x_leftover),
+        );
+        let wu_reshaped_vec =
+            Self::fragment_with_separator(&wu_vec, domain_ratio, Some(w_leftover));
+        let zu_reshaped_vec = Self::fragment_with_separator(&zu_vec, domain_ratio, None);
+        let w_reshaped_vec = Self::fragment_with_separator(&ww_vec, domain_ratio, None);
         //////////////////////// Interpolating polynomials ///////////////////////
         let timer_interp = start_timer!(|| "Interpolating z_u, z_w, w_u, w_w polynomials");
-        let z_u_hat = Evaluations::from_vec_and_domain(z_u, pk.vk.h_domain).interpolate();
-        let z_w_hat = Evaluations::from_vec_and_domain(z_w, pk.vk.h_domain).interpolate();
-        let pi_poly =
-            Evaluations::from_vec_and_domain(cs.instance_assignment.to_vec(), pk.vk.k_domain)
-                .interpolate();
-        let w_u_hat = &z_u_hat - &pi_poly;
-        let w_w_hat = &z_w_hat - &pi_poly;
-        debug_assert!(z_u_hat.degree() < pk.vk.n);
+        let xu_dense_poly =
+            Evaluations::from_vec_and_domain(xu_reshaped_vec, pk.vk.h_domain).interpolate();
+        let wu_dense_poly =
+            Evaluations::from_vec_and_domain(wu_reshaped_vec, pk.vk.h_domain).interpolate();
+        let u_dense_poly =
+            Evaluations::from_vec_and_domain(zu_reshaped_vec.clone(), pk.vk.h_domain).interpolate();
+        let w_dense_poly =
+            Evaluations::from_vec_and_domain(w_reshaped_vec.clone(), pk.vk.h_domain).interpolate();
+        assert_eq!(&xu_dense_poly + &wu_dense_poly, u_dense_poly);
+        // Check if the hadamard product of z_u_reshaped_vec and z_u_reshaped_vec is equal to zw_reshaped_vec
+
         end_timer!(timer_interp);
 
         let timer_interp = start_timer!(|| "Sparcifying z_u, z_w, w_u, w_w polynomials");
-        let z_u_hat_sparse = SparsePolynomial::from(z_u_hat.clone());
-        let w_u_hat_sparse = SparsePolynomial::from(w_u_hat.clone());
-        let w_w_hat_sparse = SparsePolynomial::from(w_w_hat.clone());
-        debug_assert!(z_u_hat_sparse.degree() < pk.vk.n);
+        let u_sparse_poly = SparsePolynomial::from(u_dense_poly.clone());
+        let w_sparse_poly = SparsePolynomial::from(w_dense_poly.clone());
+        assert!(u_sparse_poly.degree() < pk.vk.n);
         end_timer!(timer_interp);
         /////////////////////// Computing h(X) ///////////////////////
         let timer_h = start_timer!(|| "Computing h(X)");
-        let (h, rem) = (&z_u_hat * &z_u_hat - &z_w_hat).divide_by_vanishing_poly(pk.vk.h_domain);
-        debug_assert!(rem.is_zero());
+        let (h, rem) = (&u_dense_poly * &u_dense_poly - &w_dense_poly)
+            .divide_by_vanishing_poly(pk.vk.h_domain);
+        assert!(rem.is_zero());
         end_timer!(timer_h);
         /////////////////////// Computing ra(X) of degree bnd_a=1 ///////////////////////
         let timer_ra = start_timer!(|| "Computing ra(X) of degree bnd_a=1");
@@ -112,21 +133,54 @@ impl<E: Pairing> Polymath<E> {
         ]);
 
         let ra_dense_poly = DensePolynomial::from(ra_sparse_poly.clone());
-        debug_assert!(ra_dense_poly.degree() <= BND_A);
-        debug_assert!(ra_sparse_poly.degree() <= BND_A);
+        assert!(ra_dense_poly.degree() <= BND_A);
+        assert!(ra_sparse_poly.degree() <= BND_A);
         end_timer!(timer_ra);
         /////////////////////// Computing A(X) and [a]_1 ///////////////////////
         let timer_a = start_timer!(|| "Computing A(X) and [a]_1");
-        let u_at_x_g1: E::G1Affine = Self::msm(&z_u_hat.coeffs, &pk.x_to_j_g1_vec).into();
-        let ra_of_x_y_to_alpha_g1: E::G1Affine =
+        let u_at_x_g1: E::G1Affine = Self::msm(&u_dense_poly.coeffs, &pk.x_to_j_g1_vec).into();
+        let uu = u_dense_poly.evaluate(&pk.vk.x);
+        let uuu = pk.vk.g * uu;
+        assert!(u_at_x_g1 == uuu.into());
+        let ra_at_x_y_to_alpha_g1: E::G1Affine =
             Self::msm(&ra_dense_poly.coeffs, &pk.x_to_i_y_to_alpha_g1_vec).into();
-        let a: <E as Pairing>::G1Affine = (u_at_x_g1 + ra_of_x_y_to_alpha_g1).into();
-
+        let a: <E as Pairing>::G1Affine = (u_at_x_g1 + ra_at_x_y_to_alpha_g1).into();
+        let u_over_y_gamma_poly = Self::mul_by_x_power(&u_sparse_poly, pk.vk.sigma * MINUS_GAMMA);
+        let uuu = pk.vk.g * uu * pk.vk.y.pow([MINUS_GAMMA as u64]);
+        assert!(pk.vk.g * u_over_y_gamma_poly.evaluate(&pk.vk.x) == uuu);
+        let ra_y_to_alpha_minus_gamma_poly =
+            Self::mul_by_x_power(&ra_sparse_poly, pk.vk.sigma * (MINUS_GAMMA - MINUS_ALPHA));
+        let rr =
+            ra_y_to_alpha_minus_gamma_poly.evaluate(&pk.vk.x) / pk.vk.y.pow([MINUS_GAMMA as u64]);
+        let rrr = pk.vk.g * rr;
+        assert!(ra_at_x_y_to_alpha_g1 == rrr.into());
+        let a_over_y_to_gamma_poly = u_over_y_gamma_poly + ra_y_to_alpha_minus_gamma_poly;
+        let aa = a_over_y_to_gamma_poly.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]));
+        let aaa = pk.vk.g * aa;
+        assert!(a == aaa.into());
         end_timer!(timer_a);
 
         ////////////////////// Computing R(X) and [R(X)]_1 ///////////////////////
         let timer_r = start_timer!(|| "Computing R(X) and [R(X)]_1");
-        let ra_u_poly = &ra_dense_poly + &z_u_hat;
+
+        let r_poly_term_one = &Self::mul_by_x_power(&u_sparse_poly, pk.vk.sigma * MINUS_GAMMA)
+            .mul(&ra_sparse_poly)
+            * E::ScalarField::from(2_u32);
+        let r1_r = r_poly_term_one.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]));
+        let r1_rr = pk.vk.g * r1_r;
+        let r_poly_term_two = Self::mul_by_x_power(
+            &ra_sparse_poly.mul(&ra_sparse_poly),
+            pk.vk.sigma * (MINUS_GAMMA - MINUS_ALPHA),
+        );
+        let r2_r = r_poly_term_two.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]));
+        let r2_rr = pk.vk.g * r2_r;
+
+        let r_over_y_to_gamma_poly = r_poly_term_one + r_poly_term_two + ra_sparse_poly.clone();
+        let r3_r = ra_sparse_poly.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]));
+        let r3_rr = pk.vk.g * r3_r;
+        let rr = r_over_y_to_gamma_poly.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]));
+        let rrr = pk.vk.g * rr;
+        let ra_u_poly = &ra_dense_poly * &u_dense_poly;
         let ra_u_g1: E::G1Affine = Self::msm(&ra_u_poly.coeffs, &pk.x_to_j_g1_vec).into();
 
         let ra2_y_poly = &ra_dense_poly * &ra_dense_poly;
@@ -137,79 +191,74 @@ impl<E: Pairing> Polymath<E> {
             Self::msm(&ra_dense_poly.coeffs, &pk.x_to_i_y_to_gamma_g1_vec).into();
 
         let r_x_g1 = ra_u_g1 + ra_u_g1 + r_a2_y_to_alpha_g1 + ra_y_to_gamma_g1;
-
+        assert_eq!(ra_u_g1 + ra_u_g1, r1_rr);
+        assert_eq!(r_a2_y_to_alpha_g1, r2_rr.into());
+        assert_eq!(ra_y_to_gamma_g1, r3_rr.into());
+        assert_eq!(r_x_g1, rrr);
         end_timer!(timer_r);
         /////////////////////// Computing C(X) and [c]_1 ///////////////////////
         let timer_c = start_timer!(|| "Computing C(X) and [C(X)]_1");
+
         let zh_poly = pk.vk.h_domain.vanishing_polynomial();
-
-        let u_w_g1: E::G1Affine = Self::msm(&cs.witness_assignment, &pk.u_w_g1_vec).into();
-
         let zh_poly_dense = DensePolynomial::from(zh_poly.clone());
         let h_zh_poly_sparse = SparsePolynomial::from(&h * &zh_poly_dense);
+
+        let c_poly_term_one = Self::mul_by_x_power(&u_sparse_poly, pk.vk.sigma * MINUS_ALPHA)
+            + Self::mul_by_x_power(&w_sparse_poly, pk.vk.sigma * (MINUS_GAMMA + MINUS_ALPHA));
+        let c1_c = c_poly_term_one.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]));
+        let c1_cc = pk.vk.g * c1_c;
+        let c_over_y_to_gamma_poly: SparsePolynomial<E::ScalarField> = c_poly_term_one
+            + Self::mul_by_x_power(&h_zh_poly_sparse, pk.vk.sigma * (MINUS_GAMMA + MINUS_ALPHA))
+            + r_over_y_to_gamma_poly;
+
+        let cc = c_over_y_to_gamma_poly.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]));
+        let ccc = pk.vk.g * cc;
+        let u_w_g1: E::G1Affine = Self::msm(&cs.witness_assignment, &pk.u_w_g1_vec).into();
 
         let h_zh_x_over_y_to_alpha_g1: E::G1Affine =
             Self::msm(&h.coeffs, &pk.x_zh_over_y_alpha_g1_vec).into();
 
         let c: <E as Pairing>::G1Affine = (u_w_g1 + h_zh_x_over_y_to_alpha_g1 + r_x_g1).into();
+        assert_eq!(c1_cc, u_w_g1.into());
+        assert_eq!(ccc, c.into());
+        
         end_timer!(timer_c);
-        /////////////////////// initilizing the transcript ///////////////////////
-        let timer_x1 = start_timer!(|| "Computing Challenge x_1");
-        let x_1 = compute_chall::<E>(&pk.vk, &cs.instance_assignment[1..], &a, &c, None);
+        /////////////////////// Sampling x1 ///////////////////////
+        let timer_x1 = start_timer!(|| "Computing Challenge x1");
+        let x1 = compute_chall::<E>(&pk.vk, &cs.instance_assignment[1..], &a, &c, None);
         end_timer!(timer_x1);
 
         ///////////////////// Computing y1 , Ax1 ///////////////////////
 
         let timer_ax1 = start_timer!(|| "Computint y1 and Ax1");
-        let y1 = x_1.pow([pk.vk.sigma as u64]);
+        let y1 = x1.pow([pk.vk.sigma as u64]);
         let y1_to_gamma = y1.pow([MINUS_GAMMA as u64]).inverse().unwrap();
         let y1_to_alpha = y1.pow([MINUS_ALPHA as u64]).inverse().unwrap();
-        let a_x_1 = z_u_hat.evaluate(&x_1) + ra_u_poly.evaluate(&x_1) * y1_to_alpha;
+        let a_x1 = u_dense_poly.evaluate(&x1) + ra_u_poly.evaluate(&x1) * y1_to_alpha;
         end_timer!(timer_ax1);
-        //////////////////////// Computing x2 ///////////////////////
+        //////////////////////// Sampling x2 ///////////////////////
         let timer_x2 = start_timer!(|| "Computing x2");
         let x_2 = compute_chall::<E>(
             &pk.vk,
             &cs.instance_assignment[1..],
             &a,
             &c,
-            Some((x_1, a_x_1)),
+            Some((x1, a_x1)),
         );
         end_timer!(timer_x2);
 
         ///////////////////////////// Computing PI(X) ///////////////////////
-        let c_at_x1 = Self::compute_c_at_x1(
-            y1_to_gamma,
-            y1_to_alpha,
-            a_x_1,
-            &cs.instance_assignment,
-            x_1,
-            &pk.vk,
-        );
-        ///////////////////// Computing D(X) ///////////////////////
-
-        let a_over_y_to_gamma_poly =
-            Self::mul_by_x_power(&z_u_hat_sparse, pk.vk.sigma * MINUS_GAMMA)
-                + Self::mul_by_x_power(&ra_sparse_poly, pk.vk.sigma * (MINUS_GAMMA - MINUS_ALPHA));
-        let r_poly_term_one = &Self::mul_by_x_power(&z_u_hat_sparse, pk.vk.sigma * MINUS_GAMMA)
-            .mul(&ra_sparse_poly)
-            * E::ScalarField::from(2_i32);
-        let r_poly_term_two = Self::mul_by_x_power(
-            &ra_sparse_poly.mul(&ra_sparse_poly),
-            pk.vk.sigma * (MINUS_GAMMA - MINUS_ALPHA),
-        );
-        let r_over_y_to_gamma_poly = r_poly_term_one + r_poly_term_two + ra_sparse_poly;
-        let c_over_y_to_gamma_poly: SparsePolynomial<E::ScalarField> =
-            Self::mul_by_x_power(&w_u_hat_sparse, pk.vk.sigma * MINUS_ALPHA)
-                + Self::mul_by_x_power(&w_w_hat_sparse, pk.vk.sigma * (MINUS_GAMMA + MINUS_ALPHA))
-                + Self::mul_by_x_power(
-                    &h_zh_poly_sparse,
-                    pk.vk.sigma * (MINUS_GAMMA + MINUS_ALPHA),
-                )
-                + r_over_y_to_gamma_poly;
+        let c_at_x1 =
+            Self::compute_c_at_x1(y1_to_gamma, y1_to_alpha, a_x1, x1, &pk.vk, &xu_dense_poly);
+        // ///////////////////// Computing D(X) ///////////////////////
 
         let d_right_coeff_poly =
-            SparsePolynomial::from_coefficients_vec(vec![(0, a_x_1 + x_2 * c_at_x1)]);
+            SparsePolynomial::from_coefficients_vec(vec![(0, a_x1 + x_2 * c_at_x1)]);
+        // let temp1 = (a_over_y_to_gamma_poly + &c_over_y_to_gamma_poly * x_2);
+        // let temp2 = (-Self::mul_by_x_power(&d_right_coeff_poly, pk.vk.sigma * MINUS_GAMMA));
+        // dbg!(temp1.evaluate(&x1));
+        // dbg!(temp2.evaluate(&x1));
+        // todo!();
         let d_over_y_to_gamma_nom_poly: DenseOrSparsePolynomial<E::ScalarField> =
             DenseOrSparsePolynomial::from(
                 (a_over_y_to_gamma_poly + &c_over_y_to_gamma_poly * x_2)
@@ -217,7 +266,7 @@ impl<E: Pairing> Polymath<E> {
             );
         let d_denom_poly =
             DenseOrSparsePolynomial::from(DensePolynomial::from_coefficients_slice(&[
-                -x_1,
+                -x1,
                 E::ScalarField::ONE,
             ]));
 
@@ -229,16 +278,17 @@ impl<E: Pairing> Polymath<E> {
             d_over_y_to_gamma_poly.degree()
                 <= 2 * (pk.vk.n - 1) + (pk.vk.sigma * (MINUS_ALPHA + MINUS_GAMMA))
         );
-        debug_assert!(d_rem_poly.is_zero());
+        assert!(d_rem_poly.is_zero());
 
         let d = Self::msm(&d_over_y_to_gamma_poly.coeffs, &pk.x_z_g1_vec);
 
         /////////////////////////////// Assembling the proof ///////////////////////
+
         let output = Ok(Proof {
             a,
             c,
             d: d.into(),
-            a_x_1,
+            a_x_1: a_x1.into(),
         });
 
         end_timer!(timer_p);
@@ -276,56 +326,58 @@ impl<E: Pairing> Polymath<E> {
     }
 
     #[allow(clippy::type_complexity)]
-    fn compute_zu_zw_wu_ww(
-        a_mat: &Matrix<E::ScalarField>,
-        b_mat: &Matrix<E::ScalarField>,
+    fn compute_xu_wu_ww(
+        n: usize,
+        u_mat: &Matrix<E::ScalarField>,
+        w_mat: &Matrix<E::ScalarField>,
         instance_assignment: &[E::ScalarField],
         witness_assignment: &[E::ScalarField],
         num_constraints: usize,
     ) -> Result<
         (
-            (Vec<E::ScalarField>, Vec<E::ScalarField>),
+            Vec<E::ScalarField>,
             (Vec<E::ScalarField>, Vec<E::ScalarField>),
         ),
         SynthesisError,
     > {
-        let mut assignment: Vec<E::ScalarField> = instance_assignment.to_vec();
-        let mut punctured_assignment: Vec<E::ScalarField> =
-            vec![E::ScalarField::zero(); assignment.len()];
-        assignment.extend_from_slice(witness_assignment);
-        punctured_assignment.extend_from_slice(witness_assignment);
+        let mut x_punctured_assignment: Vec<E::ScalarField> = instance_assignment.to_vec();
+        let mut w_punctured_assignment: Vec<E::ScalarField> =
+            vec![E::ScalarField::zero(); x_punctured_assignment.len()];
+        x_punctured_assignment
+            .extend_from_slice(&vec![E::ScalarField::zero(); witness_assignment.len()]);
+        w_punctured_assignment.extend_from_slice(witness_assignment);
 
-        let mut z_a = vec![E::ScalarField::zero(); num_constraints];
-        let mut z_b = vec![E::ScalarField::zero(); num_constraints];
+        let mut x_u = vec![E::ScalarField::zero(); n];
 
-        cfg_iter_mut!(z_a[..num_constraints])
-            .zip(&mut z_b[..num_constraints])
-            .zip(a_mat)
-            .zip(b_mat)
-            .for_each(|(((mut a, mut b), at_i), bt_i)| {
-                *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(at_i, &assignment);
-                *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(bt_i, &assignment);
-            });
-
-        let mut w_a = vec![E::ScalarField::zero(); num_constraints];
-        let mut w_b = vec![E::ScalarField::zero(); num_constraints];
-
-        cfg_iter_mut!(w_a[..num_constraints])
-            .zip(&mut w_b[..num_constraints])
-            .zip(a_mat)
-            .zip(b_mat)
-            .for_each(|(((mut a, mut b), at_i), bt_i)| {
-                *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
-                    at_i,
-                    &punctured_assignment,
-                );
-                *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
-                    bt_i,
-                    &punctured_assignment,
+        cfg_iter_mut!(x_u[..num_constraints])
+            .zip(u_mat)
+            .zip(w_mat)
+            .for_each(|((mut u, ut_i), wt_i)| {
+                *u = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
+                    ut_i,
+                    &x_punctured_assignment,
                 );
             });
 
-        Ok(((z_a, z_b), (w_a, w_b)))
+        let mut w_u = vec![E::ScalarField::zero(); n];
+        let mut w_w = vec![E::ScalarField::zero(); n];
+
+        cfg_iter_mut!(w_u[..num_constraints])
+            .zip(&mut w_w[..num_constraints])
+            .zip(u_mat)
+            .zip(w_mat)
+            .for_each(|(((mut u, mut w), ut_i), wt_i)| {
+                *u = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
+                    ut_i,
+                    &w_punctured_assignment,
+                );
+                *w = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
+                    wt_i,
+                    &w_punctured_assignment,
+                );
+            });
+
+        Ok((x_u, (w_u, w_w)))
     }
     fn mul_by_x_power(
         poly: &SparsePolynomial<E::ScalarField>,
@@ -338,7 +390,44 @@ impl<E: Pairing> Polymath<E> {
 
     #[inline]
     fn msm(scalars: &Vec<E::ScalarField>, g1_elems: &Vec<E::G1Affine>) -> E::G1 {
-        debug_assert!(scalars.len() <= g1_elems.len());
+        assert!(scalars.len() <= g1_elems.len());
         E::G1::msm_unchecked(g1_elems.as_slice(), scalars.as_slice())
+    }
+
+    pub(crate) fn fragment_with_separator(
+        v: &[E::ScalarField],
+        k: usize,
+        separator: Option<&[E::ScalarField]>,
+    ) -> Vec<E::ScalarField> {
+        assert!(k >= 1, "k must be at least 1");
+
+        let sep_slice = separator.unwrap_or(&[]);
+        let mut sep_iter = sep_slice.iter();
+
+        let mut result = Vec::with_capacity(v.len() + (v.len() + k - 1) / k); // estimate max size
+        let mut data_iter = v.into_iter();
+
+        let mut index = 0;
+        loop {
+            if index % k == 0 {
+                // insert separator
+                let sep = sep_iter.next().cloned().unwrap_or(E::ScalarField::zero());
+                result.push(sep);
+            } else if let Some(val) = data_iter.next() {
+                result.push(*val);
+            } else {
+                break;
+            }
+            index += 1;
+        }
+
+        result
+    }
+    fn zero_tail(v: &mut [E::ScalarField], k: usize) {
+        assert!(k <= v.len(), "Index k out of bounds");
+
+        for elem in &mut v[k..] {
+            *elem = E::ScalarField::zero();
+        }
     }
 }

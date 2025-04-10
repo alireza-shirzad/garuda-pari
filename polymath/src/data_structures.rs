@@ -17,7 +17,6 @@ where
     pub u_w_g1_vec: Vec<E::G1Affine>,
     pub x_zh_over_y_alpha_g1_vec: Vec<E::G1Affine>,
     pub x_z_g1_vec: Vec<E::G1Affine>,
-
     pub vk: VerifyingKey<E>,
 }
 
@@ -34,6 +33,10 @@ pub struct VerifyingKey<E: Pairing> {
     pub h: E::G2Affine,
     pub h_domain: GeneralEvaluationDomain<E::ScalarField>,
     pub k_domain: GeneralEvaluationDomain<E::ScalarField>,
+    // TODO: Remove these
+    pub x: E::ScalarField,
+    pub y: E::ScalarField,
+    pub z: E::ScalarField,
 }
 
 // impl<E: Pairing> CanonicalSerialize for VerifyingKey<E> {

@@ -134,20 +134,20 @@ where
     let prover_circuit = circuit.clone();
     let mut proof = Polymath::<E>::prove(prover_circuit, &pk, &mut rng).unwrap();
     for _ in 0..num_prover_iterations {
-        let prover_circuit = circuit.clone();
-        let start = ark_std::time::Instant::now();
-        proof = Polymath::<E>::prove(prover_circuit, &pk, &mut rng).unwrap();
-        prover_time += start.elapsed();
+        // let prover_circuit = circuit.clone();
+        // let start = ark_std::time::Instant::now();
+        // proof = Polymath::<E>::prove(prover_circuit, &pk, &mut rng).unwrap();
+        // prover_time += start.elapsed();
     }
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
     let proof_size = 5;
     let start = ark_std::time::Instant::now();
-    // for _ in 0..num_verifier_iterations {
-    //     assert!(Polymath::verify(&proof, &vk, &vec![
-    //         expected_image;
-    //         input_size - 1
-    //     ],));
-    // }
+    for _ in 0..num_verifier_iterations {
+        assert!(Polymath::verify(&proof, &vk, &vec![
+            expected_image;
+            input_size - 1
+        ],));
+    }
     verifier_time += start.elapsed();
     let cs = gr1cs::ConstraintSystem::new_ref();
     cs.set_instance_outliner(InstanceOutliner {
@@ -186,6 +186,7 @@ fn main() {
         .num_threads(num_thread)
         .build_global()
         .unwrap();
+    let _ = bench::<Bls12_381>("bench", 1, 3, 1, 1, 1, num_thread);
 
     // bench_smart_contract();
 
@@ -197,14 +198,14 @@ fn main() {
     // }
 
     /////////// Benchmark Polymath for different circuit sizes ///////////
-    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
-    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
-        .map(|i| 2_usize.pow(i as u32))
-        .collect();
-    for i in 0..num_invocations.len() {
-        let _ = bench::<Bls12_381>("bench", num_invocations[i], 20, 1, 1, 100, num_thread)
-            .save_to_csv("polymath.csv", true);
-    }
+    // const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    // let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+    //     .map(|i| 2_usize.pow(i as u32))
+    //     .collect();
+    // for i in 0..num_invocations.len() {
+    //     let _ = bench::<Bls12_381>("bench", num_invocations[i], 20, 1, 1, 100, num_thread)
+    //         .save_to_csv("polymath.csv", true);
+    // }
 }
 
 fn bench_smart_contract() {
