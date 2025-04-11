@@ -6,7 +6,9 @@ use crate::{
 };
 use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
 use ark_ff::{Field, Zero};
-use ark_poly::{domain, EvaluationDomain, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain};
+use ark_poly::{
+    EvaluationDomain, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain, domain,
+};
 use ark_relations::{
     gr1cs::{
         self, ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
@@ -48,10 +50,8 @@ impl<E: Pairing> Polymath<E> {
         let num_constraints = cs.num_constraints();
 
         /////////////////////// Computing the FFT domain ///////////////////////
-        let timer_fft_domain = start_timer!(|| "Computing the FFT domain");
         let h_domain = GeneralEvaluationDomain::new(num_constraints).unwrap();
         let k_domain = GeneralEvaluationDomain::new(num_instance).unwrap();
-        end_timer!(timer_fft_domain);
         /////////////////////// Trapdoor and parameter generation ///////////////////////
 
         let x: E::ScalarField = h_domain.sample_element_outside_domain(rng);
@@ -70,18 +70,15 @@ impl<E: Pairing> Polymath<E> {
         let x_h = h * x;
         let z_h = h * z;
         let max_degree: usize = d_max;
-        let y_to_alpha = y.inverse().unwrap().pow([MINUS_ALPHA as u64]);
-        let y_to_minus_alpha = y_to_alpha.inverse().unwrap();
+        let y_to_minus_alpha = y.pow([MINUS_ALPHA as u64]);
+        let y_to_alpha = y_to_minus_alpha.inverse().unwrap();
         let y_to_gamma = y.inverse().unwrap().pow([MINUS_GAMMA as u64]);
 
         ///////////////////////////////////// Computing the batch mul prep ///////////////////////
-        let timer_batch_mul_prep = start_timer!(|| "Batch Mul Preprocessing startup");
         let table = BatchMulPreprocessing::new(g, max_degree + 1);
-        end_timer!(timer_batch_mul_prep);
 
         /////////////////////////////////// Producing x_to_j_g1_vec ///////////////////////////////
         // Exponents: (x^j)_{j=0}^{n+bnd_a-1}
-        let timer_x_vec = start_timer!(|| "Computing powers of x_to_j_g1_vec");
         let mut x_vec = Vec::with_capacity(n + bnd_a);
         let mut cur = E::ScalarField::ONE;
         for _ in 0..=(n + bnd_a - 1) {
@@ -89,11 +86,9 @@ impl<E: Pairing> Polymath<E> {
             cur *= &x;
         }
         let x_to_j_g1_vec = table.batch_mul(&x_vec);
-        end_timer!(timer_x_vec);
         ///////////////////////////// Producing x_y_alpha_vec ///////////////////////
         // Exponents: (x^i.y^α)_{i=0}^{2*bnd_a}
 
-        let timer_x_y_alpha_vec = start_timer!(|| "Computing powers of x_to_i_y_to_alpha_g1_vec");
         let mut x_y_alpha_vec = Vec::with_capacity(2 * bnd_a + 1);
         let mut cur = E::ScalarField::ONE;
         for _ in 0..=(2 * bnd_a) {
@@ -101,24 +96,19 @@ impl<E: Pairing> Polymath<E> {
             cur *= &x;
         }
         let x_to_i_y_to_alpha_g1_vec = table.batch_mul(&x_y_alpha_vec);
-        end_timer!(timer_x_y_alpha_vec);
 
         /////////////////////// Computing u_w_g1_vec ////////////////////////
         // Exponents: ((uj(x)y^γ + wj(x))/y^α)
-        let timer_u_w_g1_vec = start_timer!(|| "Computing u_w_g1_vec");
         let (ui_vec, wi_vec) = Self::compute_ui_wi_at_x(x, &cs, h_domain, k_domain).unwrap();
 
-        let u_w_vec = ui_vec[num_instance..]
+        let u_w_vec = ui_vec
             .par_iter()
-            .zip(&wi_vec[num_instance..])
+            .zip(&wi_vec)
             .map(|(u_i, w_i)| (*u_i * y_to_gamma + *w_i) * y_to_minus_alpha)
             .collect::<Vec<_>>();
         let u_w_g1_vec = table.batch_mul(&u_w_vec);
 
-        end_timer!(timer_u_w_g1_vec);
-
         /////////////////////// Computing x_zh_over_y_alpha_g1_vec ////////////////////////
-        let timer_x_zh_over_y_alpha_g1_vec = start_timer!(|| "Computing x_zh_over_y_alpha_g1_vec");
 
         let mut x_zh_over_y_alpha_vec = vec![E::ScalarField::ONE];
         let mut cur = x;
@@ -128,10 +118,7 @@ impl<E: Pairing> Polymath<E> {
         }
         let x_zh_over_y_alpha_g1_vec = table.batch_mul(&x_zh_over_y_alpha_vec);
 
-        end_timer!(timer_x_zh_over_y_alpha_g1_vec);
-
         /////////////////////// Computing x_y_gamma_vec ////////////////////////
-        let timer_x_to_i_y_to_gamma_g1_vec = start_timer!(|| "Computing x_to_i_y_to_gamma_g1_vec");
 
         let mut x_y_gamma_vec = Vec::with_capacity(bnd_a + 1);
         let mut cur = E::ScalarField::ONE;
@@ -140,10 +127,8 @@ impl<E: Pairing> Polymath<E> {
             cur *= &x;
         }
         let x_to_i_y_to_gamma_g1_vec = table.batch_mul(&x_y_gamma_vec);
-        end_timer!(timer_x_to_i_y_to_gamma_g1_vec);
 
         /////////////////////// Computing x_z_vec ////////////////////////
-        let timer_compute_x_z = start_timer!(|| "Computing x_z");
         let mut x_z_vec = vec![E::ScalarField::ONE];
         let mut cur = x;
         for _ in d_min..=((d_max - 1) as isize) {
@@ -151,16 +136,12 @@ impl<E: Pairing> Polymath<E> {
             cur *= &x;
         }
         let x_z_g1_vec = table.batch_mul(&x_z_vec);
-        end_timer!(timer_compute_x_z);
 
         /////////////////////// Succinct Index ///////////////////////
-        let timer_succinct_index = start_timer!(|| "Generating Succinct Index");
-        let num_public_inputs = cs.num_instance_variables();
         let succinct_index = SuccinctIndex {
             num_constraints,
             num_instance,
         };
-        end_timer!(timer_succinct_index);
 
         /////////////////////////////////////////////////////////////////
         let vk = VerifyingKey {
@@ -202,7 +183,6 @@ impl<E: Pairing> Polymath<E> {
         E::ScalarField: std::convert::From<i32>,
     {
         // Start up the constraint System and synthesize the circuit
-        let timer_cs_startup = start_timer!(|| "Constraint System Startup");
         let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
         cs.set_mode(SynthesisMode::Setup);
         cs.set_optimization_goal(OptimizationGoal::Constraints);
@@ -213,13 +193,8 @@ impl<E: Pairing> Polymath<E> {
             pred_label: SR1CS_PREDICATE_LABEL.to_string(),
             func: Rc::new(outline_sr1cs),
         });
-        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
-        end_timer!(timer_synthesize_circuit);
 
-        let timer_inlining = start_timer!(|| "Inlining constraints");
         sr1cs_cs.finalize();
-        end_timer!(timer_inlining);
-        end_timer!(timer_cs_startup);
         Ok(sr1cs_cs.into_inner().unwrap())
     }
 
@@ -231,48 +206,48 @@ impl<E: Pairing> Polymath<E> {
         k_domain: GeneralEvaluationDomain<E::ScalarField>,
     ) -> Result<(Vec<E::ScalarField>, Vec<E::ScalarField>), SynthesisError> {
         // Compute all the lagrange polynomials
-        let timer_eval_all_lagrange_polys = start_timer!(|| "Evaluating all Lagrange polys");
         let domain_ratio = h_domain.size() / k_domain.size();
         let h_lagrange_polys_at_x = h_domain.evaluate_all_lagrange_coefficients(x);
-        let wittness_lagrange_polys_at_x =
-            Self::remove_every_kth(&h_lagrange_polys_at_x, domain_ratio);
-            let normalizer_poly = Self::domain_normalizer(&h_domain, &k_domain);
-        let k_lagrange_polys_at_x = k_domain
-            .evaluate_all_lagrange_coefficients(x)
-            .iter()
-            .map(|l| (*l) * normalizer_poly.evaluate(&x))
-            .collect::<Vec<_>>();
-        assert!(
-            k_lagrange_polys_at_x
-                .iter()
-                .all(|item| h_lagrange_polys_at_x.contains(item))
-        );
-
-        end_timer!(timer_eval_all_lagrange_polys);
-
         let num_instance = new_cs.num_instance_variables();
         let num_witness = new_cs.num_witness_variables();
         let num_constraints = new_cs.num_constraints();
-        let num_vars = new_cs.num_variables();
-        let mut matrices = new_cs.to_matrices().unwrap()[SR1CS_PREDICATE_LABEL].clone();
-        Self::reshape_mat_inplace(&mut matrices[0], num_witness, num_instance, domain_ratio);
-        Self::reshape_mat_inplace(&mut matrices[1], num_witness, num_instance, domain_ratio);
-        let mut u = vec![E::ScalarField::zero(); num_vars];
-        let mut w = vec![E::ScalarField::zero(); num_vars];
-        let timer_compute_a_b = start_timer!(|| "Compute a_i(tau)'s and z_i(tau)'s");
+        let matrices = new_cs.to_matrices().unwrap()[SR1CS_PREDICATE_LABEL].clone();
+        let u_mat = Self::reshape_matrix(&matrices[0], num_witness, num_instance, domain_ratio);
+        let w_mat = Self::reshape_matrix(&matrices[1], num_witness, num_instance, domain_ratio);
+        let new_num_vars = max(
+            (num_witness / (domain_ratio - 1)) * domain_ratio
+                + num_witness % (domain_ratio - 1)
+                + 1,
+            (num_instance - 1) * domain_ratio + 1,
+        );
+        let mut u = vec![E::ScalarField::zero(); new_num_vars];
+        let mut w = vec![E::ScalarField::zero(); new_num_vars];
         for (i, l_i) in h_lagrange_polys_at_x
             .iter()
             .enumerate()
             .take(num_constraints)
         {
-            for &(ref coeff, index) in &matrices[0][i] {
+            for &(ref coeff, index) in &u_mat[i] {
                 u[index] += &(*l_i * coeff);
             }
-            for &(ref coeff, index) in &matrices[1][i] {
+            for &(ref coeff, index) in &w_mat[i] {
                 w[index] += &(*l_i * coeff);
             }
         }
-        end_timer!(timer_compute_a_b);
-        Ok((u, w))
+        let uu: Vec<E::ScalarField> = u
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % domain_ratio != 0)
+            .map(|(_, val)| *val)
+            .take(num_witness)
+            .collect();
+        let ww: Vec<E::ScalarField> = w
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % domain_ratio != 0)
+            .map(|(_, val)| *val)
+            .take(num_witness)
+            .collect();
+        Ok((uu, ww))
     }
 }

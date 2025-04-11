@@ -39,15 +39,12 @@ impl<E: Pairing> Polymath<E> {
         let y1_gamma = y_1.pow([MINUS_GAMMA as u64]).inverse().unwrap();
 
         let y1_alpha = y_1.pow([MINUS_ALPHA as u64]).inverse().unwrap();
-        //////////////////////////////////// Computing PI(x) ///////////////////////
-        let r1cs_orig_num_cnstrs = vk.succinct_index.num_constraints - vk.m0;
-        let domain_ratio = vk.h_domain.size() / vk.k_domain.size();
 
         //////////////////////// Computing c_x1 ///////////////////////
-        let xu_dense_poly =
-        Evaluations::from_vec_and_domain(full_public_input, vk.k_domain).interpolate();
+        let xu_dense_poly = Evaluations::from_vec_and_domain(full_public_input, vk.k_domain)
+            .interpolate()
+            * Self::domain_normalizer(&vk.h_domain, &vk.k_domain);
         let pi_at_x1 = xu_dense_poly.evaluate(&x1);
-        dbg!(pi_at_x1);
         let n_field = E::ScalarField::from(vk.n as u64);
         let c_at_x1 = ((proof.a_x_1 + y1_gamma) * proof.a_x_1 - pi_at_x1 / n_field) / y1_alpha;
         let commitments_minus_evals_in_g1 = E::G1::msm_unchecked(
@@ -66,8 +63,7 @@ impl<E: Pairing> Polymath<E> {
                 <E::G2 as Into<E::G2Prepared>>::into(x_minus_x1_in_g2),
             ],
         );
-        dbg!(pairing_output);
-        // assert!(pairing_output.0.is_one());
+        assert!(pairing_output.0.is_one());
         end_timer!(timer_verify);
         true
     }
