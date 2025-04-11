@@ -16,6 +16,7 @@ use ark_std::{One, end_timer, ops::Neg, start_timer};
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
+use shared_utils::msm_bigint_wnaf;
 impl<E: Pairing> Polymath<E> {
     pub fn verify(proof: &Proof<E>, vk: &VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
     where
@@ -45,25 +46,28 @@ impl<E: Pairing> Polymath<E> {
             .interpolate()
             * Self::domain_normalizer(&vk.h_domain, &vk.k_domain);
         let pi_at_x1 = xu_dense_poly.evaluate(&x1);
+
         let n_field = E::ScalarField::from(vk.n as u64);
-        let c_at_x1 = ((proof.a_x_1 + y1_gamma) * proof.a_x_1 - pi_at_x1 / n_field) / y1_alpha;
-        let commitments_minus_evals_in_g1 = E::G1::msm_unchecked(
-            &[proof.a, proof.c, vk.g],
-            &[E::ScalarField::ONE, x2, -(proof.a_x_1 + x2 * c_at_x1)],
+
+        let c_at_x1 = ((*a_x_1 + y1_gamma) * a_x_1 - pi_at_x1 / n_field) / y1_alpha;
+        let commitments_minus_evals_in_g1 = proof.a + msm_bigint_wnaf::<E::G1>(
+            &[proof.c, vk.g],
+            &[x2.into(), (-(*a_x_1 + x2 * c_at_x1)).into()],
         );
-        let x_minus_x1_in_g2 = E::G2::msm_unchecked(&[vk.x_h, vk.h], &[E::ScalarField::ONE, -x1]);
 
         let pairing_output = E::multi_pairing(
             [
-                <E::G1 as Into<E::G1Prepared>>::into(commitments_minus_evals_in_g1),
-                <E::G1 as Into<E::G1Prepared>>::into(proof.d * (-E::ScalarField::ONE)),
+                E::G1Prepared::from(commitments_minus_evals_in_g1),
+                E::G1Prepared::from(proof.d * x1),
+                E::G1Prepared::from(-proof.d),
             ],
             [
-                <E::G2 as Into<E::G2Prepared>>::into(vk.z_h.into()),
-                <E::G2 as Into<E::G2Prepared>>::into(x_minus_x1_in_g2),
+                vk.z_h_prep.clone(),
+                vk.h_prep.clone(),
+                vk.x_h_prep.clone(),
             ],
         );
-        assert!(pairing_output.0.is_one());
+        assert!(pairing_output.is_zero());
         end_timer!(timer_verify);
         true
     }

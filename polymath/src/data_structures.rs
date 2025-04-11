@@ -29,11 +29,14 @@ pub struct VerifyingKey<E: Pairing> {
     pub succinct_index: SuccinctIndex,
     pub g: E::G1Affine,
     pub x_h: E::G2Affine,
+    pub x_h_prep: E::G2Prepared,
     pub z_h: E::G2Affine,
+    pub z_h_prep: E::G2Prepared,
     pub h: E::G2Affine,
+    pub h_prep: E::G2Prepared,
     pub h_domain: GeneralEvaluationDomain<E::ScalarField>,
     pub k_domain: GeneralEvaluationDomain<E::ScalarField>,
-    // TODO: Remove these
+    // TODO: Remove these for security!
     pub x: E::ScalarField,
     pub y: E::ScalarField,
     pub z: E::ScalarField,

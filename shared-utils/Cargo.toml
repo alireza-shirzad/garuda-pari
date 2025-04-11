@@ -10,5 +10,6 @@ serde_json = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 ark-ff = { workspace = true }
+ark-ec = { workspace = true }
 merlin = { workspace = true }
 displaydoc = { workspace = true }

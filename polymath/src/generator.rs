@@ -142,13 +142,20 @@ impl<E: Pairing> Polymath<E> {
             num_constraints,
             num_instance,
         };
+        let g = g.into();
+        let h = h.into();
+        let x_h = x_h.into();
+        let z_h = z_h.into();
 
         /////////////////////////////////////////////////////////////////
         let vk = VerifyingKey {
-            g: g.into(),
-            x_h: x_h.into(),
-            z_h: z_h.into(),
-            h: h.into(),
+            g,
+            x_h,
+            z_h,
+            h,
+            h_prep: h.into(),
+            x_h_prep: x_h.into(),
+            z_h_prep: z_h.into(),
             succinct_index,
             m0,
             n,
