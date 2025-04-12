@@ -171,7 +171,7 @@ impl<E: Pairing> Polymath<E> {
             Self::msm(&h.coeffs, &pk.x_zh_over_y_alpha_g1_vec).into();
 
         let c: <E as Pairing>::G1Affine = (u_w_g1 + h_zh_x_over_y_to_alpha_g1 + r_x_g1).into();
-        assert_eq!(
+        debug_assert_eq!(
             pk.vk.g * (c_poly_term_one.evaluate(&pk.vk.x) / (pk.vk.y.pow([MINUS_GAMMA as u64]))),
             u_w_g1.into()
         );

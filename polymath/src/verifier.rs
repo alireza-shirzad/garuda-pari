@@ -37,19 +37,24 @@ impl<E: Pairing> Polymath<E> {
         let full_public_input = [&[E::ScalarField::ONE], public_input].concat();
 
         let y_1 = x1.pow([vk.sigma as u64]);
-        let y1_gamma = y_1.pow([MINUS_GAMMA as u64]).inverse().unwrap();
+        let y_1_inverse = y_1.inverse().unwrap();
+        let y1_gamma = y_1_inverse.pow([MINUS_GAMMA as u64]).inverse().unwrap();
 
-        let y1_alpha = y_1.pow([MINUS_ALPHA as u64]).inverse().unwrap();
+        let y1_inverse_alpha = y_1.pow([MINUS_ALPHA as u64]).inverse().unwrap();
 
         //////////////////////// Computing c_x1 ///////////////////////
-        let xu_dense_poly = Evaluations::from_vec_and_domain(full_public_input, vk.k_domain)
-            .interpolate()
-            * Self::domain_normalizer(&vk.h_domain, &vk.k_domain);
-        let pi_at_x1 = xu_dense_poly.evaluate(&x1);
-
-        let n_field = E::ScalarField::from(vk.n as u64);
-
-        let c_at_x1 = ((*a_x_1 + y1_gamma) * a_x_1 - pi_at_x1 / n_field) / y1_alpha;
+        let pi_at_x1 = {
+            let lagrange_coeffs = vk.k_domain.evaluate_all_lagrange_coefficients(x1);
+            lagrange_coeffs
+                .into_iter()
+                .zip(full_public_input)
+                .map(|(l_i, pi_i)| l_i * pi_i)
+                .sum::<E::ScalarField>()
+                * y1_gamma
+        };
+        let filter_at_x1 = vk.h_domain.evaluate_filter_polynomial(&vk.k_domain, x1);
+        
+        let c_at_x1 = ((*a_x_1 + y1_gamma) * a_x_1 - pi_at_x1 * filter_at_x1) * y1_inverse_alpha;
         let commitments_minus_evals_in_g1 = proof.a + msm_bigint_wnaf::<E::G1>(
             &[proof.c, vk.g],
             &[x2.into(), (-(*a_x_1 + x2 * c_at_x1)).into()],
@@ -57,9 +62,9 @@ impl<E: Pairing> Polymath<E> {
 
         let pairing_output = E::multi_pairing(
             [
-                E::G1Prepared::from(commitments_minus_evals_in_g1),
-                E::G1Prepared::from(proof.d * x1),
-                E::G1Prepared::from(-proof.d),
+                commitments_minus_evals_in_g1,
+                *d * x1,
+                E::G1::from(-*d),
             ],
             [
                 vk.z_h_prep.clone(),

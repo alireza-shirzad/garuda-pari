@@ -34,6 +34,7 @@ pub struct VerifyingKey<E: Pairing> {
     pub z_h_prep: E::G2Prepared,
     pub h: E::G2Affine,
     pub h_prep: E::G2Prepared,
+    pub n_inv: E::ScalarField,
     pub h_domain: GeneralEvaluationDomain<E::ScalarField>,
     pub k_domain: GeneralEvaluationDomain<E::ScalarField>,
     // TODO: Remove these for security!

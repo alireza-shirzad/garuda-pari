@@ -153,6 +153,7 @@ impl<E: Pairing> Polymath<E> {
             x_h,
             z_h,
             h,
+            n_inv: E::ScalarField::from(n as u64).inverse().unwrap(),
             h_prep: h.into(),
             x_h_prep: x_h.into(),
             z_h_prep: z_h.into(),
