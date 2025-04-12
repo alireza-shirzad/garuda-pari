@@ -1,7 +1,7 @@
 mod bench;
 pub mod transcript;
 use ark_ec::VariableBaseMSM;
-use ark_ff::{BigInteger, PrimeField};
+use ark_ff::{BigInteger, Field, PrimeField};
 pub use bench::BenchResult;
 
 /// Takes as input a struct, and converts them to a series of bytes. All traits
@@ -104,4 +104,44 @@ fn make_digits<const W: usize>(
         }
         digit
     })
+}
+
+/// Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}.
+/// This method is explicitly single-threaded.
+pub fn batch_inversion_and_mul<F: Field>(v: &mut [F], coeff: &F) {
+    // Montgomery’s Trick and Fast Implementation of Masked AES
+    // Genelle, Prouff and Quisquater
+    // Section 3.2
+    // but with an optimization to multiply every element in the returned vector by
+    // coeff
+
+    // First pass: compute [a, ab, abc, ...]
+    let mut prod = Vec::with_capacity(v.len());
+    let mut tmp = F::one();
+    for f in v.iter().filter(|f| !f.is_zero()) {
+        tmp *= f;
+        prod.push(tmp);
+    }
+
+    // Invert `tmp`.
+    tmp = tmp.inverse().unwrap(); // Guaranteed to be nonzero.
+
+    // Multiply product by coeff, so all inverses will be scaled by coeff
+    tmp *= coeff;
+
+    // Second pass: iterate backwards to compute inverses
+    for (mut f, s) in v
+        .iter_mut()
+        // Backwards
+        .rev()
+        // Ignore normalized elements
+        .filter(|f| !f.is_zero())
+        // Backwards, skip last element, fill in one for last term.
+        .zip(prod.into_iter().rev().skip(1).chain(Some(F::one())))
+    {
+        // tmp := tmp * f; f := tmp * s = 1/f
+        let new_tmp = tmp * *f;
+        *f = tmp * &s;
+        tmp = new_tmp;
+    }
 }

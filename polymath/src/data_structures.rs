@@ -37,6 +37,7 @@ pub struct VerifyingKey<E: Pairing> {
     pub n_inv: E::ScalarField,
     pub h_domain: GeneralEvaluationDomain<E::ScalarField>,
     pub k_domain: GeneralEvaluationDomain<E::ScalarField>,
+    pub k_domain_size_by_h_domain_size: E::ScalarField,
     // TODO: Remove these for security!
     pub x: E::ScalarField,
     pub y: E::ScalarField,

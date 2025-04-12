@@ -157,6 +157,9 @@ impl<E: Pairing> Polymath<E> {
         let h = h.into();
         let x_h = x_h.into();
         let z_h = z_h.into();
+        
+        let k_domain_size_by_h_domain_size = k_domain.size_as_field_element()
+                / h_domain.size_as_field_element();
 
         /////////////////////////////////////////////////////////////////
         let vk = VerifyingKey {
@@ -168,6 +171,7 @@ impl<E: Pairing> Polymath<E> {
             h_prep: h.into(),
             x_h_prep: x_h.into(),
             z_h_prep: z_h.into(),
+            k_domain_size_by_h_domain_size,
             succinct_index,
             m0,
             n,

@@ -9,7 +9,7 @@ use ark_ff::PrimeField;
 use ark_ff::{FftField, Field, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{end_timer, ops::Neg, start_timer};
-use shared_utils::msm_bigint_wnaf;
+use shared_utils::{batch_inversion_and_mul, msm_bigint_wnaf};
 
 impl<E: Pairing> Pari<E> {
     pub fn verify(proof: &Proof<E>, vk: &VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
@@ -169,45 +169,5 @@ impl<E: Pairing> Pari<E> {
         }
         batch_inversion_and_mul(lagrange_coefficients_inverse.as_mut_slice(), &start_gen);
         (lagrange_coefficients_inverse, z_h_at_tau_inv)
-    }
-}
-
-/// Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}.
-/// This method is explicitly single-threaded.
-fn batch_inversion_and_mul<F: Field>(v: &mut [F], coeff: &F) {
-    // Montgomery’s Trick and Fast Implementation of Masked AES
-    // Genelle, Prouff and Quisquater
-    // Section 3.2
-    // but with an optimization to multiply every element in the returned vector by
-    // coeff
-
-    // First pass: compute [a, ab, abc, ...]
-    let mut prod = Vec::with_capacity(v.len());
-    let mut tmp = F::one();
-    for f in v.iter().filter(|f| !f.is_zero()) {
-        tmp *= f;
-        prod.push(tmp);
-    }
-
-    // Invert `tmp`.
-    tmp = tmp.inverse().unwrap(); // Guaranteed to be nonzero.
-
-    // Multiply product by coeff, so all inverses will be scaled by coeff
-    tmp *= coeff;
-
-    // Second pass: iterate backwards to compute inverses
-    for (mut f, s) in v
-        .iter_mut()
-        // Backwards
-        .rev()
-        // Ignore normalized elements
-        .filter(|f| !f.is_zero())
-        // Backwards, skip last element, fill in one for last term.
-        .zip(prod.into_iter().rev().skip(1).chain(Some(F::one())))
-    {
-        // tmp := tmp * f; f := tmp * s = 1/f
-        let new_tmp = tmp * *f;
-        *f = tmp * &s;
-        tmp = new_tmp;
     }
 }
