@@ -327,7 +327,7 @@ impl<E: Pairing, R: RngCore> MultilinearEPC<E, R> {
             .map(|comm| E::G1Prepared::from(comm.g_product))
             .collect();
         let pairing_rights: Vec<E::G2Prepared> =
-            vk.consistency_vk.iter().map(E::G2Prepared::from).collect();
+            vk.consistency_vk.iter().copied().map(E::G2Prepared::from).collect();
         let right: PairingOutput<E> = E::multi_pairing(pairing_lefts, pairing_rights);
         if left != right {
             panic!("consistency check failed");
