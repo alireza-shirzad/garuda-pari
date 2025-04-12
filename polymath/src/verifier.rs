@@ -1,18 +1,18 @@
 use crate::utils::compute_chall;
-use crate::{GAMMA, MINUS_ALPHA, MINUS_GAMMA};
+use crate::{MINUS_ALPHA, MINUS_GAMMA};
 use crate::{
     Polymath,
     data_structures::{Proof, VerifyingKey},
 };
 use ark_ec::AffineRepr;
-use ark_ec::{VariableBaseMSM, pairing::Pairing};
+use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_ff::{BigInteger, FftField, Field, Zero};
-use ark_poly::{EvaluationDomain, Evaluations, Polynomial, Radix2EvaluationDomain};
+use ark_ff::{Field, Zero};
+use ark_poly::EvaluationDomain;
 use ark_relations::gr1cs::{Matrix, SynthesisError};
 use ark_relations::sr1cs::Sr1csAdapter;
 use ark_std::cfg_iter_mut;
-use ark_std::{One, end_timer, ops::Neg, start_timer};
+use ark_std::{end_timer, ops::Neg, start_timer};
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;

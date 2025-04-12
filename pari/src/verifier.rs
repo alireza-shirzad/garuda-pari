@@ -4,9 +4,9 @@ use crate::{
     Pari,
 };
 use ark_ec::AffineRepr;
-use ark_ec::{pairing::Pairing, VariableBaseMSM};
+use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_ff::{BigInteger, FftField, Field, Zero};
+use ark_ff::{FftField, Field, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{end_timer, ops::Neg, start_timer};
 use shared_utils::msm_bigint_wnaf;
@@ -93,7 +93,7 @@ impl<E: Pairing> Pari<E> {
 
         let timer_pairing = start_timer!(|| "Final Pairing");
         let right = E::multi_pairing(
-            [t_g, u_g, &right_second_left.into()],
+            [*t_g, *u_g, right_second_left.into()],
             [
                 vk.delta_two_h_prep.clone(),
                 vk.tau_h_prep.clone(),
