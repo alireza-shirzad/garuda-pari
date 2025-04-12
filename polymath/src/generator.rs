@@ -48,10 +48,21 @@ impl<E: Pairing> Polymath<E> {
         let num_witness = cs.num_witness_variables();
         let num_total_variables = num_instance + num_witness;
         let num_constraints = cs.num_constraints();
-
+        dbg!(
+            "num_instance: {}, num_witness: {}, num_total_variables: {}, num_constraints: {}",
+            num_instance,
+            num_witness,
+            num_total_variables,
+            num_constraints
+        );
         /////////////////////// Computing the FFT domain ///////////////////////
         let h_domain = GeneralEvaluationDomain::new(num_constraints).unwrap();
         let k_domain = GeneralEvaluationDomain::new(num_instance).unwrap();
+        dbg!(
+            "h_domain size: {}, k_domain size: {}",
+            h_domain.size(),
+            k_domain.size()
+        );
         /////////////////////// Trapdoor and parameter generation ///////////////////////
 
         let x: E::ScalarField = h_domain.sample_element_outside_domain(rng);

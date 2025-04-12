@@ -93,14 +93,14 @@ dependencies = [
 [[package]]
 name = "ark-crypto-primitives"
 version = "0.5.0"
-source = "git+https://github.com/alireza-shirzad/crypto-primitives.git#48bd818bb5b31f8f198d44688bbb908fc0f6ac66"
+source = "git+https://github.com/alireza-shirzad/crypto-primitives.git#f42c033906cd78d311ff112dbd6cf26d0e1063c0"
 dependencies = [
  "ahash",
  "ark-crypto-primitives-macros",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
- "ark-r1cs-std",
- "ark-relations",
+ "ark-r1cs-std 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-relations 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ark-serialize 0.5.0",
  "ark-snark",
  "ark-std 0.5.0",
@@ -117,7 +117,7 @@ dependencies = [
 [[package]]
 name = "ark-crypto-primitives-macros"
 version = "0.5.0"
-source = "git+https://github.com/alireza-shirzad/crypto-primitives.git#48bd818bb5b31f8f198d44688bbb908fc0f6ac66"
+source = "git+https://github.com/alireza-shirzad/crypto-primitives.git#f42c033906cd78d311ff112dbd6cf26d0e1063c0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -261,7 +261,7 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
- "ark-relations",
+ "ark-relations 0.5.1 (git+https://github.com/alireza-shirzad/snark.git)",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
 ]
@@ -299,17 +299,46 @@ dependencies = [
 [[package]]
 name = "ark-r1cs-std"
 version = "0.5.0"
-source = "git+https://github.com/alireza-shirzad/r1cs-std.git#ca5708dbefc0679177bac9dc955a1b5e83276822"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "941551ef1df4c7a401de7068758db6503598e6f01850bdb2cfdb614a1f9dbea1"
 dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
- "ark-relations",
+ "ark-relations 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ark-std 0.5.0",
  "educe",
  "num-bigint",
  "num-integer",
  "num-traits",
  "tracing",
+]
+
+[[package]]
+name = "ark-r1cs-std"
+version = "0.5.0"
+source = "git+https://github.com/alireza-shirzad/r1cs-std.git#ce625d63c33481ba9d67103f5ad5e68ad772e455"
+dependencies = [
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-relations 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-std 0.5.0",
+ "educe",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "tracing",
+]
+
+[[package]]
+name = "ark-relations"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec46ddc93e7af44bcab5230937635b06fb5744464dd6a7e7b083e80ebd274384"
+dependencies = [
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
+ "tracing",
+ "tracing-subscriber 0.2.25",
 ]
 
 [[package]]
@@ -323,7 +352,7 @@ dependencies = [
  "ark-std 0.5.0",
  "rayon",
  "tracing",
- "tracing-subscriber",
+ "tracing-subscriber 0.3.19",
 ]
 
 [[package]]
@@ -377,10 +406,11 @@ dependencies = [
 [[package]]
 name = "ark-snark"
 version = "0.5.1"
-source = "git+https://github.com/alireza-shirzad/snark.git#c1cfd3193ecc3c6113f1f7c6a579a865cb55c966"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d368e2848c2d4c129ce7679a7d0d2d612b6a274d3ea6a13bad4445d61b381b88"
 dependencies = [
  "ark-ff 0.5.0",
- "ark-relations",
+ "ark-relations 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
 ]
@@ -677,7 +707,7 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
- "ark-relations",
+ "ark-relations 0.5.1 (git+https://github.com/alireza-shirzad/snark.git)",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
  "displaydoc",
@@ -699,8 +729,8 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
- "ark-r1cs-std",
- "ark-relations",
+ "ark-r1cs-std 0.5.0 (git+https://github.com/alireza-shirzad/r1cs-std.git)",
+ "ark-relations 0.5.1 (git+https://github.com/alireza-shirzad/snark.git)",
  "ark-serialize 0.4.2",
  "ark-serialize 0.5.0",
  "ark-spartan",
@@ -841,9 +871,9 @@ checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 
 [[package]]
 name = "log"
-version = "0.4.26"
+version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
+checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "memchr"
@@ -903,9 +933,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.21.1"
+version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d75b0bedcc4fe52caa0e03d9f1151a323e4aa5e2d78ba3580400cd3c9e2bc4bc"
+checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "opaque-debug"
@@ -930,7 +960,7 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
- "ark-relations",
+ "ark-relations 0.5.1 (git+https://github.com/alireza-shirzad/snark.git)",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
  "displaydoc",
@@ -955,8 +985,8 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-groth16",
  "ark-poly 0.5.0",
- "ark-r1cs-std",
- "ark-relations",
+ "ark-r1cs-std 0.5.0 (git+https://github.com/alireza-shirzad/r1cs-std.git)",
+ "ark-relations 0.5.1 (git+https://github.com/alireza-shirzad/snark.git)",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
  "displaydoc",
@@ -992,7 +1022,7 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
- "ark-relations",
+ "ark-relations 0.5.1 (git+https://github.com/alireza-shirzad/snark.git)",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
  "displaydoc",
@@ -1011,7 +1041,7 @@ version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
- "zerocopy 0.8.23",
+ "zerocopy 0.8.24",
 ]
 
 [[package]]
@@ -1255,9 +1285,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.14.0"
+version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fcf8323ef1faaee30a44a340193b1ac6814fd9b7b4e88e9d4519a3e4abe1cfd"
+checksum = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9"
 
 [[package]]
 name = "subroutines"
@@ -1387,6 +1417,15 @@ checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
 dependencies = [
  "log",
  "once_cell",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-subscriber"
+version = "0.2.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
+dependencies = [
  "tracing-core",
 ]
 
@@ -1566,11 +1605,11 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.23"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd97444d05a4328b90e75e503a34bad781f14e28a823ad3557f0750df1ebcbc6"
+checksum = "2586fea28e186957ef732a5f8b3be2da217d65c5969d4b1e17f973ebbe876879"
 dependencies = [
- "zerocopy-derive 0.8.23",
+ "zerocopy-derive 0.8.24",
 ]
 
 [[package]]
@@ -1586,9 +1625,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.23"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6352c01d0edd5db859a63e2605f4ea3183ddbd15e2c4a9e7d32184df75e4f154"
+checksum = "a996a8f63c5c4448cd959ac1bab0aaa3306ccfd060472f85943ee0750f0169be"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -186,7 +186,7 @@ fn main() {
         .num_threads(num_thread)
         .build_global()
         .unwrap();
-    let _ = bench::<Bls12_381>("bench", 1, 3, 1, 1, 1, num_thread);
+    let _ = bench::<Bls12_381>("bench", 1, 2, 1, 1, 1, num_thread);
 
     // bench_smart_contract();
 
