@@ -249,7 +249,7 @@ impl<E: Pairing> Polymath<E> {
         circuit.generate_constraints(cs.clone())?;
         cs.finalize();
         let sr1cs_cs =
-            Sr1csAdapter::r1cs_to_sr1cs_with_assgnmnt(&mut cs.into_inner().unwrap()).unwrap();
+            Sr1csAdapter::r1cs_to_sr1cs_with_assignment(&mut cs.into_inner().unwrap()).unwrap();
         sr1cs_cs.set_instance_outliner(InstanceOutliner {
             pred_label: SR1CS_PREDICATE_LABEL.to_string(),
             func: Rc::new(outline_sr1cs),
