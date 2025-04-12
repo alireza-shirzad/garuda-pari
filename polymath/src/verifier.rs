@@ -9,13 +9,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
 use ark_poly::EvaluationDomain;
-use ark_relations::gr1cs::{Matrix, SynthesisError};
-use ark_relations::sr1cs::Sr1csAdapter;
-use ark_std::cfg_iter_mut;
 use ark_std::{end_timer, ops::Neg, start_timer};
-use rayon::iter::IndexedParallelIterator;
-use rayon::iter::IntoParallelRefMutIterator;
-use rayon::iter::ParallelIterator;
 use shared_utils::{batch_inversion_and_mul, msm_bigint_wnaf};
 
 impl<E: Pairing> Polymath<E> {
@@ -90,37 +84,5 @@ impl<E: Pairing> Polymath<E> {
         assert!(pairing_output.is_zero());
         end_timer!(timer_verify);
         true
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn compute_xu_xw(
-        n: usize,
-        u_mat: &Matrix<E::ScalarField>,
-        w_mat: &Matrix<E::ScalarField>,
-        instance_assignment: &[E::ScalarField],
-        num_constraints: usize,
-    ) -> Result<(Vec<E::ScalarField>, Vec<E::ScalarField>), SynthesisError> {
-        let mut x_punctured_assignment: Vec<E::ScalarField> = instance_assignment.to_vec();
-        x_punctured_assignment.extend_from_slice(&vec![E::ScalarField::zero(); n]);
-
-        let mut x_u = vec![E::ScalarField::zero(); n];
-        let mut x_w = vec![E::ScalarField::zero(); n];
-
-        cfg_iter_mut!(x_u[..num_constraints])
-            .zip(&mut x_w[..num_constraints])
-            .zip(u_mat)
-            .zip(w_mat)
-            .for_each(|(((mut u, mut w), ut_i), wt_i)| {
-                *u = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
-                    ut_i,
-                    &x_punctured_assignment,
-                );
-                *w = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
-                    wt_i,
-                    &x_punctured_assignment,
-                );
-            });
-
-        Ok((x_u, x_w))
     }
 }
