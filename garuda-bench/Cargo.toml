@@ -53,6 +53,12 @@ path = "./rescue-spartan-r1cs.rs"
 harness = false
 
 [[bench]]
+name = "rescue-spartan-ccs"
+path = "./rescue-spartan-ccs.rs"
+harness = false
+
+
+[[bench]]
 name = "rescue-hyperplonk"
 path = "./rescue-hyperplonk.rs"
 harness = false
@@ -82,10 +88,3 @@ parallel = [
 
 r1cs = ["ark-crypto-primitives/r1cs"]
 gr1cs = ["ark-crypto-primitives/gr1cs"]
-
-# Plots for the paper:
-# Remove constraints plot
-# Prover time (NUM_THREAD = 1,4) for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk
-# VErifier time for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk
-# Proof size for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk
-# PK and VK size for Garuda GR1CS, Garuda R1CS, Spartan CCS, Spartan R1CS, Hyperplonk

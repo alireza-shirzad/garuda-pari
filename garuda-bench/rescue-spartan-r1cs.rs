@@ -267,9 +267,9 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
 ) {
     assert!(cs.is_satisfied().unwrap());
     assert_eq!(cs.num_predicates(), 1);
-    let ark_amtrices: Vec<Vec<Vec<(F, usize)>>> =
+    let ark_matrices: Vec<Vec<Vec<(F, usize)>>> =
         cs.to_spartan_matrices().unwrap()[R1CS_PREDICATE_LABEL].clone();
-    assert_eq!(ark_amtrices.len(), 3);
+    assert_eq!(ark_matrices.len(), 3);
     let instance_assignment = cs.instance_assignment().unwrap();
     let witness_assignment = cs.witness_assignment().unwrap();
     let num_cons = cs.num_constraints();
@@ -281,7 +281,7 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
     let mut A: Vec<(usize, usize, F)> = Vec::new();
     let mut B: Vec<(usize, usize, F)> = Vec::new();
     let mut C: Vec<(usize, usize, F)> = Vec::new();
-    ark_amtrices[0]
+    ark_matrices[0]
         .iter()
         .enumerate()
         .for_each(|(row_num, row)| {
@@ -289,7 +289,7 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
                 A.push((row_num, *col_num, *entry));
             });
         });
-    ark_amtrices[1]
+    ark_matrices[1]
         .iter()
         .enumerate()
         .for_each(|(row_num, row)| {
@@ -298,7 +298,7 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
             });
         });
 
-    ark_amtrices[2]
+    ark_matrices[2]
         .iter()
         .enumerate()
         .for_each(|(row_num, row)| {
@@ -306,7 +306,7 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
                 C.push((row_num, *col_num, *entry));
             });
         });
-    let num_non_zero_entries = ark_amtrices.iter().map(|x| x.len()).sum();
+    let num_non_zero_entries = ark_matrices.iter().map(|x| x.len()).sum();
     let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
     let assignment_vars = VarsAssignment::new(&witness_assignment).unwrap();
     let assignment_inputs = InputsAssignment::new(&instance_assignment[1..]).unwrap();
