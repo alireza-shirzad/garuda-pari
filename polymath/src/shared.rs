@@ -77,7 +77,7 @@ impl<E: Pairing> Polymath<E> {
             (k_domain.size(), E::ScalarField::ONE),
         ]));
 
-        let (q, r) = num.divide_with_q_and_r(&den).unwrap();
+        let (q, _) = num.divide_with_q_and_r(&den).unwrap();
         q * E::ScalarField::from(domain_ratio as u64).inverse().unwrap()
     }
 
