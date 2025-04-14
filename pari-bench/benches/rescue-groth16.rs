@@ -201,7 +201,7 @@ fn main() {
     let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
     for i in 0..num_inputs.len() {
         let _ = bench::<Bls12_381>("bench", 1, num_inputs[i], 1, 1, 1000, num_thread)
-            .save_to_csv("groth16.csv", true);
+            .save_to_csv("groth16.csv");
     }
 
     /////////// Benchmark Groth16 for different circuit sizes ///////////
@@ -211,6 +211,6 @@ fn main() {
         .collect();
     for i in 0..num_invocations.len() {
         let _ = bench::<Bls12_381>("bench", num_invocations[i], 20, 1, 1, 100, num_thread)
-            .save_to_csv("groth16.csv", true);
+            .save_to_csv("groth16.csv");
     }
 }

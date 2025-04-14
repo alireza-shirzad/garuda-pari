@@ -1,11 +1,14 @@
-use ark_bls12_381_v4::{Bls12_381, Fr as Bls12_381_Fr};
+use ark_bls12_381_v4::Bls12_381;
+use ark_crypto_primitives_v4::sponge::Absorb;
+use ark_ec_v4::pairing::Pairing;
+use ark_ec_v4::AffineRepr;
+use ark_ff_v4::PrimeField;
 use ark_serialize_v4::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::collections::BTreeMap;
 use ark_std::log2;
 use ark_std::test_rng;
-use hp_hyperplonk::HyperPlonkSNARK;
 use hp_hyperplonk::prelude::CustomizedGates;
 use hp_hyperplonk::prelude::MockCircuit;
+use hp_hyperplonk::HyperPlonkSNARK;
 use hp_subroutines::MultilinearKzgPCS;
 use hp_subroutines::MultilinearUniversalParams;
 use hp_subroutines::PolyIOP;
@@ -13,86 +16,98 @@ use hp_subroutines::PolynomialCommitmentScheme;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
-use std::mem::size_of_val;
+use std::ops::Neg;
 use std::path::Path;
 use std::time::Duration;
 
-macro_rules! bench {
-    ($bench_name:ident, $num_invocations:expr, $input_size:expr, $num_keygen_iterations:expr, $num_prover_iterations:expr, $num_verifier_iterations:expr, $num_thread:expr, $bench_pairing_engine:ty, $bench_field:ty,$pcs_srs:expr,$jf_gate:expr) => {{
-        let mut prover_time = Duration::new(0, 0);
-        let mut keygen_time = Duration::new(0, 0);
-        let mut verifier_time = Duration::new(0, 0);
-        let nv = log2(num_constr_from_num_invoc($num_invocations)) as usize;
-        let circuit = MockCircuit::<$bench_field>::new(1 << nv, $jf_gate);
-        assert!(circuit.is_satisfied());
-        let index = circuit.index.clone();
-        let (mut pk, mut vk) = <PolyIOP<$bench_field> as HyperPlonkSNARK<
-            $bench_pairing_engine,
-            MultilinearKzgPCS<$bench_pairing_engine>,
-        >>::preprocess(&index, $pcs_srs)
+fn bench<E: Pairing>(
+    num_invocations: usize,
+    input_size: usize,
+    num_keygen_iterations: u32,
+    num_prover_iterations: u32,
+    num_verifier_iterations: u32,
+    num_thread: usize,
+    jf_gate: &CustomizedGates,
+    pcs_srs: &MultilinearUniversalParams<E>,
+) -> BenchResult
+where
+    E::ScalarField: PrimeField + Absorb,
+    E::G1Affine: Neg<Output = E::G1Affine>,
+    <E::G1Affine as AffineRepr>::BaseField: PrimeField,
+    num_bigint::BigUint: From<<E::ScalarField as PrimeField>::BigInt>,
+{
+    let mut prover_time = Duration::new(0, 0);
+    let mut keygen_time = Duration::new(0, 0);
+    let mut verifier_time = Duration::new(0, 0);
+    let nv = log2(num_constr_from_num_invoc(num_invocations)) as usize;
+    let circuit = MockCircuit::<E::ScalarField>::new(1 << nv, jf_gate);
+    assert!(circuit.is_satisfied());
+    let index = circuit.index.clone();
+    let (mut pk, mut vk) =
+        <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, MultilinearKzgPCS<E>>>::preprocess(
+            &index, pcs_srs,
+        )
         .unwrap();
 
-        for _ in 0..$num_keygen_iterations {
-            // let setup_circuit = circuit.clone();
-            let start = ark_std::time::Instant::now();
-            (pk, vk) = <PolyIOP<$bench_field> as HyperPlonkSNARK<
-                $bench_pairing_engine,
-                MultilinearKzgPCS<$bench_pairing_engine>,
-            >>::preprocess(&index, $pcs_srs)
-            .unwrap();
-            keygen_time += start.elapsed();
-        }
-
-        let pk_size = size_of_val(&pk);
-        let vk_size = size_of_val(&vk);
-        // let prover_circuit = circuit.clone();
-        let mut proof = <PolyIOP<$bench_field> as HyperPlonkSNARK<
-            $bench_pairing_engine,
-            MultilinearKzgPCS<$bench_pairing_engine>,
-        >>::prove(&pk, &circuit.public_inputs, &circuit.witnesses)
-        .unwrap();
-        for _ in 0..$num_keygen_iterations {
-            let start = ark_std::time::Instant::now();
-            proof = <PolyIOP<$bench_field> as HyperPlonkSNARK<
-                $bench_pairing_engine,
-                MultilinearKzgPCS<$bench_pairing_engine>,
-            >>::prove(&pk, &circuit.public_inputs, &circuit.witnesses)
-            .unwrap();
-            prover_time += start.elapsed();
-        }
-        let proof_size = size_of_val(&proof);
+    for _ in 0..num_keygen_iterations {
+        // let setup_circuit = circuit.clone();
         let start = ark_std::time::Instant::now();
-        for _ in 0..$num_verifier_iterations {
-            let verify = <PolyIOP<$bench_field> as HyperPlonkSNARK<
-                Bls12_381,
-                MultilinearKzgPCS<Bls12_381>,
-            >>::verify(&vk, &circuit.public_inputs, &proof)
+        (pk, vk) =
+            <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, MultilinearKzgPCS<E>>>::preprocess(
+                &index, pcs_srs,
+            )
             .unwrap();
-            assert!(verify);
-        }
-        verifier_time += start.elapsed();
+        keygen_time += start.elapsed();
+    }
 
-        let bench_result = BenchResult {
-            curve: type_name::<$bench_pairing_engine>().to_string(),
-            num_constraints: 1 << nv,
-            predicate_constraints: BTreeMap::new(),
-            num_invocations: $num_invocations,
-            input_size: $input_size,
-            num_thread: $num_thread,
-            num_keygen_iterations: $num_keygen_iterations,
-            num_prover_iterations: $num_prover_iterations,
-            num_verifier_iterations: $num_verifier_iterations,
-            pk_size,
-            vk_size,
-            proof_size,
-            prover_time: (prover_time / $num_prover_iterations),
-            verifier_time: (verifier_time / $num_verifier_iterations),
-            keygen_time: (keygen_time / $num_keygen_iterations),
-        };
-        bench_result
-    }};
+    let mut proof = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, MultilinearKzgPCS<E>>>::prove(
+        &pk,
+        &circuit.public_inputs,
+        &circuit.witnesses,
+    )
+    .unwrap();
+    for _ in 0..num_keygen_iterations {
+        let start = ark_std::time::Instant::now();
+        proof = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, MultilinearKzgPCS<E>>>::prove(
+            &pk,
+            &circuit.public_inputs,
+            &circuit.witnesses,
+        )
+        .unwrap();
+        prover_time += start.elapsed();
+    }
+    let start = ark_std::time::Instant::now();
+    for _ in 0..num_verifier_iterations {
+        let verify = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, MultilinearKzgPCS<E>>>::verify(
+            &vk,
+            &circuit.public_inputs,
+            &proof,
+        )
+        .unwrap();
+        assert!(verify);
+    }
+    verifier_time += start.elapsed();
+
+    BenchResult {
+        curve: type_name::<E>().to_string(),
+        num_constraints: 1 << nv,
+        predicate_constraints: BTreeMap::new(),
+        num_invocations,
+        input_size,
+        num_thread,
+        num_keygen_iterations: num_keygen_iterations as usize,
+        num_prover_iterations: num_prover_iterations as usize,
+        num_verifier_iterations: num_verifier_iterations as usize,
+        pk_size: 0,
+        vk_size: 0,
+        proof_size: 0,
+        prover_time: (prover_time / num_prover_iterations),
+        verifier_time: (verifier_time / num_verifier_iterations),
+        keygen_time: (keygen_time / num_keygen_iterations),
+    }
 }
 
 fn num_constr_from_num_invoc(num_invocations: usize) -> usize {
@@ -111,118 +126,41 @@ fn main() {
         .unwrap();
 
     const MAX_LOG_VAR: usize = 25;
+    let jf_gate = CustomizedGates::jellyfish_turbo_plonk_gate();
     let srs_file_path: String = format!("srs_{}.bin", MAX_LOG_VAR);
     let mut rng = test_rng();
-    let jf_gate = CustomizedGates::jellyfish_turbo_plonk_gate();
     let pcs_srs: MultilinearUniversalParams<Bls12_381> = if Path::new(&srs_file_path).exists() {
-        dbg!("File exists");
+        println!("File exists");
         // The file exists; read and print its contents
-        let mut file = File::open(&srs_file_path).unwrap();
-        let mut reader = std::io::BufReader::new(file);
+        let file = File::open(&srs_file_path).unwrap();
+        let reader = std::io::BufReader::new(file);
         MultilinearUniversalParams::<Bls12_381>::deserialize_uncompressed_unchecked(reader).unwrap()
     } else {
-        dbg!("File does not exist");
+        println!("File does not exist");
         // The file does not exist; create it and write some content
-        let mut file = File::create(&srs_file_path).unwrap();
-        let mut writer = std::io::BufWriter::new(file);
+        let file = File::create(&srs_file_path).unwrap();
+        let writer = std::io::BufWriter::new(file);
         let pcs_srs =
             MultilinearKzgPCS::<Bls12_381>::gen_srs_for_testing(&mut rng, MAX_LOG_VAR).unwrap();
         pcs_srs.serialize_uncompressed(writer).unwrap();
         pcs_srs
     };
-    let _ = bench!(
-        bench,
-        72,
-        0,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr,
-        &pcs_srs,
-        &jf_gate
-    )
-    .save_to_csv("hyperplonk.csv", false);
-    bench!(
-        bench,
-        144,
-        0,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr,
-        &pcs_srs,
-        &jf_gate
-    )
-    .save_to_csv("hyperplonk.csv", true);
-    bench!(
-        bench,
-        288,
-        0,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr,
-        &pcs_srs,
-        &jf_gate
-    )
-    .save_to_csv("hyperplonk.csv", true);
-    bench!(
-        bench,
-        577,
-        0,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr,
-        &pcs_srs,
-        &jf_gate
-    )
-    .save_to_csv("hyperplonk.csv", true);
-    bench!(
-        bench,
-        1154,
-        0,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr,
-        &pcs_srs,
-        &jf_gate
-    )
-    .save_to_csv("hyperplonk.csv", true);
-    bench!(
-        bench,
-        2309,
-        0,
-        1,
-        2,
-        100,
-        num_thread,
-        Bls12_381,
-        Bls12_381_Fr,
-        &pcs_srs,
-        &jf_gate
-    )
-    .save_to_csv("hyperplonk.csv", true);
-    // // bench!(bench, 4619, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // // bench!(bench, 9238, 1, num_thread, Bls12_381, BlsFr12_381_Fr).save_to_csv(true);
-    // // bench!(
-    // //     bench,
-    // //     18477,
-    // //     1,
-    // //     num_thread,
-    // //     Bls12_381,
-    // //     BlsFr12_381_Fr
-    // // )
-    // // .save_to_csv(true);
+    /////////// Benchmark Pari for different circuit sizes ///////////
+    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    for num_invocation in &num_invocations {
+        let _ = bench::<Bls12_381>(
+            *num_invocation,
+            20,
+            1,
+            1,
+            100,
+            num_thread,
+            &jf_gate,
+            &pcs_srs,
+        )
+        .save_to_csv("hyperplonk.csv");
+    }
 }

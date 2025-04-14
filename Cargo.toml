@@ -1,8 +1,7 @@
 [workspace]
 members = [ "shared-utils","garuda", "garuda-bench", "pari", "pari-bench", "polymath"]
-
 resolver = "2"  # Recommended for workspaces to avoid dependency resolution issues
-
+package.edition = "2021"
 
 
 [workspace.dependencies]

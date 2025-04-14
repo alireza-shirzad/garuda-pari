@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, time::Duration};
 
 use csv::Writer;
 use std::error::Error;
-use std::fs::OpenOptions;
+use std::fs::{metadata, OpenOptions};
 
 #[derive(Debug)]
 pub struct BenchResult {
@@ -24,20 +24,19 @@ pub struct BenchResult {
 }
 
 impl BenchResult {
-    pub fn save_to_csv(&self, filename: &str, append: bool) -> Result<(), Box<dyn Error>> {
-        // Configure file mode based on `append` flag
+    pub fn save_to_csv(&self, filename: &str) -> Result<(), Box<dyn Error>> {
+        let file_exists = metadata(filename).is_ok();
+
         let file = OpenOptions::new()
             .create(true)
-            .append(append)
-            .write(true)
-            .truncate(!append) // If not appending, truncate the file (overwrite it)
+            .append(true)
             .open(filename)?;
 
         let mut writer = Writer::from_writer(file);
 
-        // If creating a new file, write the headers
-        if !append {
-            writer.write_record(&[
+        // If the file is newly created, write headers
+        if !file_exists {
+            writer.write_record([
                 "Curve",
                 "Num Threads",
                 "Num Invocations",
@@ -46,54 +45,66 @@ impl BenchResult {
                 "Predicate Constraints",
                 "Num KeyGen Iterations",
                 "Setup Time (s)",
-                "PK Size",
-                "VK Size",
+                "PK Size (bytes)",
+                "VK Size (bytes)",
                 "Num Prover Iterations",
                 "Prover Time (s)",
-                "Proof Size",
+                "Proof Size (bytes)",
                 "Num Verifier Iterations",
                 "Verifier Time (ms)",
             ])?;
         }
 
-        // Convert BTreeMap predicate constraints to a JSON-like string
+        // Serialize data
         let predicate_constraints_str = serde_json::to_string(&self.predicate_constraints)?;
-
-        // Convert durations to milliseconds
         let keygen_time_ms = self.keygen_time.as_secs_f64();
         let prover_time_ms = self.prover_time.as_secs_f64();
         let verifier_time_ms = self.verifier_time.as_secs_f64() * 1000.0;
 
-        // Write the benchmark results as a row
         writer.write_record(&[
-            &self.curve,
-            &self.num_thread.to_string(),
-            &self.num_invocations.to_string(),
-            &self.input_size.to_string(),
-            &self.num_constraints.to_string(),
-            &predicate_constraints_str,
-            &self.num_keygen_iterations.to_string(),
-            &keygen_time_ms.to_string(),
-            &self.pk_size.to_string(),
-            &self.vk_size.to_string(),
-            &self.num_prover_iterations.to_string(),
-            &prover_time_ms.to_string(),
-            &self.proof_size.to_string(),
-            &self.num_verifier_iterations.to_string(),
-            &verifier_time_ms.to_string(),
+            Self::extract_curve_name(&self.curve).unwrap_or("-".to_string()),
+            self.num_thread.to_string(),
+            self.num_invocations.to_string(),
+            self.input_size.to_string(),
+            self.num_constraints.to_string(),
+            predicate_constraints_str,
+            self.num_keygen_iterations.to_string(),
+            keygen_time_ms.to_string(),
+            match self.pk_size {
+                0 => "-".to_string(),
+                _ => self.pk_size.to_string(),
+            },
+            match self.vk_size {
+                0 => "-".to_string(),
+                _ => self.vk_size.to_string(),
+            },
+            self.num_prover_iterations.to_string(),
+            prover_time_ms.to_string(),
+            match self.proof_size {
+                0 => "-".to_string(),
+                _ => self.proof_size.to_string(),
+            },
+            self.num_verifier_iterations.to_string(),
+            verifier_time_ms.to_string(),
         ])?;
 
-        writer.flush()?; // Ensure data is written
+        writer.flush()?;
 
-        println!(
-            "✅ Benchmark result {} to {filename}",
-            if append {
-                "appended"
-            } else {
-                "saved (overwritten)"
-            },
-        );
-
+        println!("✅ Benchmark result saved to {filename}");
         Ok(())
+    }
+
+    fn extract_curve_name(input: &str) -> Option<String> {
+        // Find the start and end of the first angle bracket pair
+        let start = input.find('<')?;
+        let end = input.find('>')?;
+
+        // Slice the content inside the angle brackets
+        let inside = &input[start + 1..end];
+
+        // Split by "::" and take the first part
+        let first_part = inside.split("::").next()?.to_string();
+
+        Some(first_part)
     }
 }

@@ -1,7 +1,7 @@
 [package]
 name = "garuda-bench"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 garuda = { path = "../garuda" }
@@ -20,7 +20,7 @@ tracing = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
-ark-spartan = { git = "https://github.com/alireza-shirzad/spartan", default-features = false }
+ark-spartan = { path = "../../spartan", default-features = false }
 
 
 # These are for the hyperplonk benches
@@ -29,7 +29,12 @@ hp-subroutines = { package = "subroutines", git = "https://github.com/EspressoSy
 ark-bls12-381-v4 = { package = "ark-bls12-381", version = "0.4.0", default-features = false, features = [
     "curve",
 ] }
+ark-ff-v4 = { package = "ark-ff", version = "0.4.0" }
 ark-ec-v4 = { package = "ark-ec", version = "0.4.0" }
+ark-crypto-primitives-v4 = { package = "ark-crypto-primitives", version = "0.4.0", features = [
+    "snark",
+    "crh",
+] }
 ark-serialize-v4 = { package = "ark-serialize", version = "0.4.0" }
 rand = "0.8.5"
 
@@ -81,6 +86,8 @@ parallel = [
     "garuda/parallel",
     "ark-poly/parallel",
     "ark-std/parallel",
+    "hp-hyperplonk/parallel",
+    "hp-subroutines/parallel",
     "ark-spartan/multicore",
     "rayon",
 ]

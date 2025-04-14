@@ -112,8 +112,7 @@ where
 
         let timer_eval_polys = start_timer!(|| "Evaluate Polynomials");
         let timer_eval_mw_polys = start_timer!(|| "Evaluate M.w Polynomials");
-        let w_poly_evals: Vec<E::ScalarField> = mw_polys
-            .iter()
+        let w_poly_evals: Vec<E::ScalarField> = cfg_iter!(mw_polys)
             .map(|witness| witness.evaluate(&zero_check_proof.point))
             .collect();
         end_timer!(timer_eval_mw_polys);
@@ -122,8 +121,7 @@ where
         let sel_poly_evals: Option<Vec<E::ScalarField>> = match index.num_predicates {
             1 => None,
             _ => pk.sel_polys.as_ref().map(|sel_polys| {
-                sel_polys
-                    .iter()
+                cfg_iter!(sel_polys)
                     .map(|selector| selector.evaluate(&zero_check_proof.point))
                     .collect()
             }),
@@ -134,21 +132,18 @@ where
         // Construct the set of all polynomials the corresponding commitments to be opened
         // We will batch-open these commitments
         // Note that selector polynomials are only present when there are more than one predicate
-        let comms_to_be_opened: Vec<MLCommitment<E>> = w_batched_comm
-            .individual_comms
-            .clone()
-            .into_iter()
-            .chain(match pk.verifying_key.sel_batched_comm.clone() {
-                Some(sel_comms) => sel_comms.individual_comms,
-                None => Vec::with_capacity(0),
-            })
-            .collect();
+        let comms_to_be_opened: Vec<MLCommitment<E>> =
+            cfg_into_iter!(w_batched_comm.individual_comms.clone())
+                .chain(match pk.verifying_key.sel_batched_comm.clone() {
+                    Some(sel_comms) => sel_comms.individual_comms,
+                    None => Vec::with_capacity(0),
+                })
+                .collect();
 
-        let polys_to_be_opened: Vec<DenseMultilinearExtension<<E>::ScalarField>> = mw_polys
-            .clone()
-            .into_iter()
-            .chain(pk.sel_polys.clone().unwrap_or(Vec::with_capacity(0)))
-            .collect();
+        let polys_to_be_opened: Vec<DenseMultilinearExtension<<E>::ScalarField>> =
+            cfg_into_iter!(mw_polys.clone())
+                .chain(pk.sel_polys.clone().unwrap_or(Vec::with_capacity(0)))
+                .collect();
 
         // open the commitments
         // Line 8 and 9 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
@@ -248,8 +243,9 @@ where
         E: Pairing,
         E::ScalarField: Field,
     {
-        let z_arcs: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> =
-            z_polys.iter().map(|item| Arc::new(item.clone())).collect();
+        let z_arcs: Vec<Arc<DenseMultilinearExtension<E::ScalarField>>> = cfg_iter!(z_polys)
+            .map(|item| Arc::new(item.clone()))
+            .collect();
         let mut target_virtual_poly: VirtualPolynomial<E::ScalarField> =
             VirtualPolynomial::new(index.log_num_constraints);
         // If there is only one predicate, The virtual poly is just L(mle(M_1z), mle(M_2z), ..., mle(M_tz)) without any selector

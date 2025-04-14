@@ -1,112 +1,32 @@
 use ark_bls12_381::Bls12_381;
 use ark_crypto_primitives::crh::rescue::CRH;
-use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
-use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
+use ark_crypto_primitives::crh::CRHScheme;
 use ark_crypto_primitives::sponge::Absorb;
-use ark_crypto_primitives::sponge::rescue::RescueConfig;
-use ark_ec::AffineRepr;
 use ark_ec::pairing::Pairing;
+use ark_ec::AffineRepr;
 use ark_ff::PrimeField;
-use ark_r1cs_std::alloc::AllocVar;
-use ark_r1cs_std::eq::EqGadget;
-use ark_r1cs_std::fields::fp::FpVar;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_relations::gr1cs::OptimizationGoal;
-use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
-use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef};
+use ark_serialize::CanonicalSerialize;
 use ark_std::UniformRand;
 use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
-use libspartan::{InputsAssignment, Instance, SNARK, SNARKGens, VarsAssignment};
+use garuda_bench::{create_test_rescue_parameter, RescueDemo, WIDTH};
+use libspartan::{InputsAssignment, Instance, SNARKGens, VarsAssignment, SNARK};
 use merlin::Transcript;
-use num_bigint::BigUint;
 use rand::rngs::StdRng;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
+use std::cmp::max;
 use std::env;
 use std::ops::Neg;
-use std::str::FromStr;
 use std::time::Duration;
-const RESCUE_ROUNDS: usize = 12;
 
-/// This is our demo circuit for proving knowledge of the
-/// preimage of a Rescue hash invocation.
-#[derive(Clone)]
-struct RescueDemo<F: PrimeField> {
-    input: Option<Vec<F>>,
-    image: Option<F>,
-    num_instances: usize,
-    config: RescueConfig<F>,
-    num_invocations: usize,
-}
-
-pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
-    rng: &mut impl Rng,
-) -> RescueConfig<F> {
-    let mut mds = vec![vec![]; 4];
-    for i in 0..4 {
-        for _ in 0..4 {
-            mds[i].push(F::rand(rng));
-        }
-    }
-
-    let mut ark = vec![vec![]; 25];
-    for i in 0..(2 * RESCUE_ROUNDS + 1) {
-        for _ in 0..4 {
-            ark[i].push(F::rand(rng));
-        }
-    }
-    let alpha_inv: BigUint = BigUint::from_str(
-        "20974350070050476191779096203274386335076221000211055129041463479975432473805",
-    )
-    .unwrap();
-    let params = RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1, 1);
-    params
-}
-
-impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
-    ConstraintSynthesizer<F> for RescueDemo<F>
-{
-    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        let params_g =
-            CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();
-        let mut input_g = Vec::new();
-
-        for elem in self
-            .input
-            .clone()
-            .ok_or(SynthesisError::AssignmentMissing)
-            .unwrap()
-        {
-            input_g.push(FpVar::new_witness(cs.clone(), || Ok(elem)).unwrap());
-        }
-
-        let mut crh_a_g: Option<FpVar<F>> =
-            Some(CRHGadget::<F>::evaluate(&params_g, &input_g).unwrap());
-
-        for _ in 0..(self.num_invocations - 1) {
-            crh_a_g =
-                Some(CRHGadget::<F>::evaluate(&params_g, &vec![crh_a_g.unwrap(); 9]).unwrap());
-        }
-
-        for _ in 0..self.num_instances - 1 {
-            let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
-                Ok(self.image.ok_or(SynthesisError::AssignmentMissing).unwrap())
-            })
-            .unwrap();
-
-            if let Some(crh_a_g) = crh_a_g.clone() {
-                let _ = crh_a_g.enforce_equal(&image_instance);
-            }
-        }
-
-        Ok(())
-    }
-}
-
+#[cfg(feature = "gr1cs")]
 fn bench<E: Pairing>(
     _bench_name: &str,
     num_invocations: usize,
@@ -125,22 +45,21 @@ where
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
     let config = create_test_rescue_parameter(&mut rng);
     let mut input = Vec::new();
-    for _ in 0..9 {
+    for _ in 0..WIDTH {
         input.push(<E::ScalarField>::rand(&mut rng));
     }
     let mut expected_image = CRH::<E::ScalarField>::evaluate(&config, input.clone()).unwrap();
 
     for _i in 0..(num_invocations - 1) {
-        let output = vec![expected_image; 9];
+        let output = vec![expected_image; WIDTH];
         expected_image = CRH::<E::ScalarField>::evaluate(&config, output.clone()).unwrap();
     }
 
     let mut prover_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
-    let mut pk_size: usize = 0;
-    let mut vk_size: usize = 0;
-    let mut proof_size: usize = 0;
+    let pk_size: usize = 0;
+    let vk_size: usize = 0;
     let circuit = RescueDemo::<E::ScalarField> {
         input: Some(input.clone()),
         num_instances: input_size,
@@ -164,7 +83,7 @@ where
         keygen_time += start.elapsed();
     }
     // produce a proof of satisfiability
-    let mut prover_transcript = Transcript::new(b"snark_example");
+    let mut prover_transcript = Transcript::new(b"benchmark");
     let mut proof = SNARK::prove(
         &inst,
         &comm,
@@ -174,10 +93,11 @@ where
         &gens,
         &mut prover_transcript,
     );
+    let proof_size = proof.compressed_size();
     for _ in 0..num_prover_iterations {
         let vars = vars.clone();
         let start = ark_std::time::Instant::now();
-        prover_transcript = Transcript::new(b"snark_example");
+        prover_transcript = Transcript::new(b"benchmark");
         proof = SNARK::prove(
             &inst,
             &comm,
@@ -191,12 +111,10 @@ where
     }
     let start = ark_std::time::Instant::now();
     for _ in 0..num_verifier_iterations {
-        let mut verifier_transcript = Transcript::new(b"snark_example");
-        assert!(
-            proof
-                .verify(&comm, &inputs, &mut verifier_transcript, &gens)
-                .is_ok()
-        );
+        let mut verifier_transcript = Transcript::new(b"benchmark");
+        let _ = proof
+            .verify(&comm, &inputs, &mut verifier_transcript, &gens)
+            .is_ok();
     }
     verifier_time += start.elapsed();
 
@@ -237,12 +155,12 @@ fn main() {
 
     /////////// Benchmark Pari for different circuit sizes ///////////
     const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
-    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
-    for i in 0..num_invocations.len() {
-        let _ = bench::<Bls12_381>("bench", num_invocations[i], 20, 1, 1, 100, num_thread)
-            .save_to_csv("spartan-ccs.csv", true);
+    for invocation in &num_invocations {
+        let _ = bench::<Bls12_381>("bench", *invocation, 20, 1, 1, 100, num_thread)
+            .save_to_csv("spartan-ccs.csv");
     }
 }
 
@@ -259,21 +177,23 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
     InputsAssignment<F>,
 ) {
     assert!(cs.is_satisfied().unwrap());
-    assert_eq!(cs.num_predicates(), 1);
-    let ark_matrices: Vec<Vec<Vec<(F, usize)>>> = cs.to_spartan_matrices().unwrap()["XXX"].clone();
-    assert_eq!(ark_matrices.len(), 3);
-    let instance_assignment = cs.instance_assignment().unwrap();
-    let witness_assignment = cs.witness_assignment().unwrap();
+    assert_eq!(cs.num_predicates(), 2);
     let num_cons = cs.num_constraints();
     let num_inputs = cs.num_instance_variables() - 1;
     let num_vars = cs.num_witness_variables();
-    assert_eq!(num_vars, witness_assignment.len());
-    assert_eq!(num_inputs, instance_assignment.len() - 1);
 
-    let num_gr1cs_nonzero_entries = ark_matrices
-        .iter()
-        .map(|matrix| matrix.iter().map(|row| row.len()).sum::<usize>())
-        .sum::<usize>();
+    let instance_assignment = cs.instance_assignment().unwrap();
+    let witness_assignment = cs.witness_assignment().unwrap();
+    let ark_matrices = cs.to_matrices().unwrap();
+    let mut num_gr1cs_nonzero_entries = 0;
+    for (_, matrices) in ark_matrices.iter() {
+        for matrix in matrices.iter() {
+            for row in matrix.iter() {
+                num_gr1cs_nonzero_entries += row.len();
+            }
+        }
+    }
+    num_gr1cs_nonzero_entries = prev_power_of_two(num_gr1cs_nonzero_entries);
 
     let num_a_nonzeros = rng.gen_range(0..=num_gr1cs_nonzero_entries);
     let num_b_nonzeros = rng.gen_range(0..=(num_gr1cs_nonzero_entries - num_a_nonzeros));
@@ -284,29 +204,26 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
     let mut C: Vec<(usize, usize, F)> = Vec::with_capacity(num_c_nonzeros);
     for _ in 0..num_a_nonzeros {
         let row = rng.gen_range(0..num_cons);
-        let col = rng.gen_range(0..num_vars);
+        let col = rng.gen_range(0..num_vars + num_inputs + 1);
         let value = F::rand(&mut rng);
-        A.push((col, row, value));
+        A.push((row, col, value));
     }
     for _ in 0..num_b_nonzeros {
         let row = rng.gen_range(0..num_cons);
-        let col = rng.gen_range(0..num_vars);
+        let col = rng.gen_range(0..num_vars + num_inputs + 1);
         let value = F::rand(&mut rng);
-        B.push((col, row, value));
+        B.push((row, col, value));
     }
     for _ in 0..num_c_nonzeros {
         let row = rng.gen_range(0..num_cons);
-        let col = rng.gen_range(0..num_vars);
+        let col = rng.gen_range(0..num_vars + num_inputs + 1);
         let value = F::rand(&mut rng);
-        C.push((col, row, value));
+        C.push((row, col, value));
     }
-    let num_non_zero_entries = ark_matrices.iter().map(|x| x.len()).sum();
     let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
     let assignment_vars = VarsAssignment::new(&witness_assignment).unwrap();
     let assignment_inputs = InputsAssignment::new(&instance_assignment[1..]).unwrap();
-    let res = inst.is_sat(&assignment_vars, &assignment_inputs);
-    assert!(res.unwrap());
-
+    let num_non_zero_entries = max(A.len(), max(B.len(), C.len()));
     (
         num_cons,
         num_vars,
@@ -316,4 +233,11 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
         assignment_vars,
         assignment_inputs,
     )
+}
+fn prev_power_of_two(n: usize) -> usize {
+    if n == 0 {
+        0
+    } else {
+        1 << (usize::BITS - n.leading_zeros() - 1)
+    }
 }

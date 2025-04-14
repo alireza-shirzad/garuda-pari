@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{iter::repeat_n, rc::Rc};
 
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
@@ -20,13 +20,16 @@ use crate::{
 use ark_relations::gr1cs::{
     self,
     instance_outliner::{outline_r1cs, InstanceOutliner},
-    transpose, Constraint, ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Label,
-    Matrix, OptimizationGoal, SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
+    transpose, ConstraintSynthesizer, ConstraintSystem, Label, Matrix, OptimizationGoal,
+    SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
 };
 use ark_std::{
-    collections::BTreeMap, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand,
+    cfg_into_iter, cfg_iter, collections::BTreeMap, end_timer, rand::RngCore, start_timer,
+    vec::Vec, UniformRand,
 };
-
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 impl<E, R> Garuda<E, R>
 where
     E: Pairing,
@@ -140,21 +143,30 @@ where
         E: Pairing,
         E::ScalarField: Field,
     {
-        let mut sel_polynomials: Vec<DenseMultilinearExtension<E::ScalarField>> = Vec::new();
+        let domain_size = 1 << num_vars; // 2^num_vars
+        let mut offsets_and_counts = Vec::with_capacity(predicate_num_constraints.len());
+
+        // First, calculate (offset, count) pairs sequentially
         let mut m_count = 0;
-        for m in predicate_num_constraints.values() {
-            let evaluations: Vec<E::ScalarField> = std::iter::repeat(E::ScalarField::zero())
-                .take(m_count)
-                .chain(std::iter::repeat(E::ScalarField::ONE).take(*m))
-                .chain(
-                    std::iter::repeat(E::ScalarField::zero())
-                        .take(2_usize.pow(num_vars as u32) - m_count - m),
-                )
-                .collect();
-            let sel_poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
-            sel_polynomials.push(sel_poly);
-            m_count += m;
+        for &count in predicate_num_constraints.values() {
+            offsets_and_counts.push((m_count, count));
+            m_count += count;
         }
+
+        // Now build the polynomials in parallel
+        let sel_polynomials: Vec<_> = cfg_into_iter!(offsets_and_counts)
+            .map(|(offset, count)| {
+                let evaluations: Vec<_> = repeat_n(E::ScalarField::zero(), offset)
+                    .chain(repeat_n(E::ScalarField::ONE, count))
+                    .chain(repeat_n(
+                        E::ScalarField::zero(),
+                        domain_size - offset - count,
+                    ))
+                    .collect();
+
+                DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations)
+            })
+            .collect();
 
         sel_polynomials
     }
@@ -169,21 +181,18 @@ where
         let mut equifficient_constraints: Vec<Vec<SparseMultilinearExtension<E::ScalarField>>> =
             Vec::new();
         let stacked_matrices: Vec<Matrix<E::ScalarField>> = stack_matrices(index);
-        let transposed_stacked_matrices: Vec<Matrix<E::ScalarField>> = stacked_matrices
-            .iter()
+        let transposed_stacked_matrices: Vec<Matrix<E::ScalarField>> = cfg_iter!(stacked_matrices)
             .map(|matrix| transpose(matrix, index.total_variables_len))
             .map(|matrix| matrix[index.instance_len..].to_vec())
             .collect();
-        for matrix in transposed_stacked_matrices {
-            let mut equifficient_constraint: Vec<SparseMultilinearExtension<E::ScalarField>> =
-                Vec::new();
-            for col in matrix {
-                let evals: Vec<(usize, E::ScalarField)> =
-                    col.iter().map(|(value, row)| (*row, *value)).collect();
-                let col_poly: SparseMultilinearExtension<E::ScalarField> =
-                    SparseMultilinearExtension::from_evaluations(index.log_num_constraints, &evals);
-                equifficient_constraint.push(col_poly);
-            }
+        for matrix in transposed_stacked_matrices.into_iter() {
+            let equifficient_constraint: Vec<_> = cfg_iter!(matrix)
+                .map(|col| {
+                    let evals: Vec<_> = cfg_iter!(col).map(|(value, row)| (*row, *value)).collect();
+                    SparseMultilinearExtension::from_evaluations(index.log_num_constraints, &evals)
+                })
+                .collect();
+
             equifficient_constraints.push(equifficient_constraint);
         }
         equifficient_constraints
