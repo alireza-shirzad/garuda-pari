@@ -1,6 +1,4 @@
 use ark_ec::pairing::Pairing;
-use ark_poly::Polynomial;
-use ark_relations::gr1cs::Field;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 #[allow(type_alias_bounds)]
 /// Evaluations over {0,1}^n for G1

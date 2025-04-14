@@ -40,7 +40,7 @@ pub trait EPC<R: RngCore> {
         comm: &Self::Commitment,
     ) -> Self::OpeningProof;
 
-    fn BatchOpen(
+    fn batch_open(
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         points: &Self::EvaluationPoint,
@@ -55,7 +55,7 @@ pub trait EPC<R: RngCore> {
         proof: &Self::OpeningProof,
     ) -> bool;
 
-    fn BatchVerify(
+    fn batch_verify(
         vk: &Self::VerifyingKey,
         comm: &Self::BatchedCommitment,
         point: &Self::EvaluationPoint,

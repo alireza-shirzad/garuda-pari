@@ -32,6 +32,7 @@ pub trait SumCheck<F: PrimeField> {
     type SumCheckSubClaim: Clone + Debug + Default + PartialEq;
 
     /// Extract sum from the proof
+    #[cfg(test)]
     fn extract_sum(proof: &Self::SumCheckProof) -> F;
 
     /// Initialize the system with a transcript
@@ -40,6 +41,7 @@ pub trait SumCheck<F: PrimeField> {
     /// an building block for a more complex protocol, the transcript
     /// may be initialized by this complex protocol, and passed to the
     /// SumCheck prover/verifier.
+    #[cfg(test)]
     fn init_transcript() -> Self::Transcript;
 
     /// Generate proof of the sum of polynomial over {0,1}^`num_vars`
@@ -137,6 +139,7 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
     type SumCheckSubClaim = SumCheckSubClaim<F>;
     type Transcript = IOPTranscript<F>;
 
+    #[cfg(test)]
     fn extract_sum(proof: &Self::SumCheckProof) -> F {
         let start = start_timer!(|| "extract sum");
         let res = proof.proofs[0].evaluations[0] + proof.proofs[0].evaluations[1];
@@ -144,6 +147,7 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         res
     }
 
+    #[cfg(test)]
     fn init_transcript() -> Self::Transcript {
         let start = start_timer!(|| "init transcript");
         let res = IOPTranscript::<F>::new(b"Initializing SumCheck transcript");

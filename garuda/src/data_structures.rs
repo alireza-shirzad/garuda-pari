@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
+use hashbrown::HashMap;
 
 use crate::{
     arithmetic::DenseMultilinearExtension,
-    epc::data_structures::{MLBatchedCommitment, MLCommitment, MLCommitmentKey, MLVerifyingKey},
+    epc::data_structures::{MLBatchedCommitment, MLCommitmentKey, MLVerifyingKey},
     piop::prelude::IOPProof,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_relations::gr1cs::{
-    predicate::PredicateType, ConstraintSystem, ConstraintSystemRef, Label, Matrix,
+    predicate::Predicate, ConstraintSystem, Label, Matrix,
 };
 use ark_serialize::CanonicalSerialize;
 use ark_std::log2;
@@ -54,7 +55,7 @@ pub struct SuccinctIndex<E: Pairing> {
     /// The length of the instance variables
     pub instance_len: usize,
     /// The predicate types
-    pub predicate_types: BTreeMap<Label, PredicateType<E::ScalarField>>,
+    pub predicate_types: BTreeMap<Label, Predicate<E::ScalarField>>,
     /// The number of r1cs constraints
     pub r1cs_num_constraints: usize,
 }
@@ -89,11 +90,11 @@ pub(crate) struct Index<F: Field> {
     /// The maximum degree of the predicates, assuming that all the predicate are polynomial predicates
     pub predicate_max_deg: usize,
     /// The individual number of constraints of the predicates
-    pub predicate_num_constraints: BTreeMap<Label, usize>,
+    pub predicate_num_constraints: HashMap<Label, usize>,
     /// The matrices of the predicates
     pub predicate_matrices: BTreeMap<Label, Vec<Matrix<F>>>,
     /// The types of the predicates
-    pub predicate_types: BTreeMap<Label, PredicateType<F>>,
+    pub predicate_types: BTreeMap<Label, Predicate<F>>,
 }
 
 impl<F: Field> Index<F> {
@@ -118,11 +119,11 @@ impl<F: Field> Index<F> {
         }
     }
 
-    fn get_max_degree(predicate_types: &BTreeMap<Label, PredicateType<F>>) -> usize {
+    fn get_max_degree(predicate_types: &BTreeMap<Label, Predicate<F>>) -> usize {
         let mut predicates_max_degree: usize = 0;
         for predicate_type in predicate_types.values() {
             let predicate_degree: usize = match predicate_type {
-                PredicateType::Polynomial(ref poly) => poly.degree(),
+                Predicate::Polynomial(ref poly) => poly.degree(),
                 _ => panic!("Only polynomial predicates are supported"),
             };
             predicates_max_degree = ark_std::cmp::max(predicates_max_degree, predicate_degree);

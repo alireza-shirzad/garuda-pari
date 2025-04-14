@@ -356,13 +356,14 @@ dependencies = [
 [[package]]
 name = "ark-relations"
 version = "0.5.1"
-source = "git+https://github.com/arkworks-rs/snark.git#c64e5f4ebe49a10246cb4de6b10bda8597e98df3"
 dependencies = [
  "ark-ff 0.5.0",
  "ark-poly 0.5.0",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
+ "hashbrown 0.15.2",
  "rayon",
+ "smallvec",
  "tracing",
  "tracing-subscriber 0.3.19",
 ]
@@ -812,6 +813,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
 name = "garuda"
 version = "0.1.0"
 dependencies = [
@@ -824,6 +831,7 @@ dependencies = [
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
  "displaydoc",
+ "hashbrown 0.15.2",
  "merlin",
  "rayon",
  "shared-utils",
@@ -851,6 +859,7 @@ dependencies = [
  "ark-std 0.5.0",
  "displaydoc",
  "garuda",
+ "hashbrown 0.15.2",
  "hyperplonk",
  "merlin",
  "num-bigint",
@@ -924,6 +933,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 dependencies = [
  "allocator-api2",
+ "foldhash",
 ]
 
 [[package]]
@@ -1520,6 +1530,7 @@ dependencies = [
  "ark-std 0.5.0",
  "csv",
  "displaydoc",
+ "hashbrown 0.15.2",
  "merlin",
  "serde",
  "serde_json",

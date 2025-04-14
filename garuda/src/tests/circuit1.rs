@@ -94,7 +94,7 @@ impl<F: Field + core::convert::From<i8>> ConstraintSynthesizer<F> for Circuit1<F
 
         //  predicate declarations -> Polynomial predicates
 
-        let predicate_a = PredicateConstraintSystem::new_polynomial_predicate(
+        let predicate_a = PredicateConstraintSystem::new_polynomial_predicate_cs(
             4,
             vec![
                 (F::from(1u8), vec![(0, 1), (1, 1)]),
@@ -102,7 +102,7 @@ impl<F: Field + core::convert::From<i8>> ConstraintSynthesizer<F> for Circuit1<F
                 (F::from(-1i8), vec![(3, 1)]),
             ],
         );
-        let predicate_b = PredicateConstraintSystem::new_polynomial_predicate(
+        let predicate_b = PredicateConstraintSystem::new_polynomial_predicate_cs(
             3,
             vec![
                 (F::from(7u8), vec![(1, 1)]),
@@ -111,7 +111,7 @@ impl<F: Field + core::convert::From<i8>> ConstraintSynthesizer<F> for Circuit1<F
             ],
         );
 
-        let predicate_c = PredicateConstraintSystem::new_polynomial_predicate(
+        let predicate_c = PredicateConstraintSystem::new_polynomial_predicate_cs(
             3,
             vec![
                 (F::from(1u8), vec![(0, 1), (1, 1)]),

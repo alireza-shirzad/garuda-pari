@@ -7,11 +7,8 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
-use ark_poly::{MultilinearExtension, Polynomial, SparseMultilinearExtension};
-use ark_relations::gr1cs::{
-    predicate::{polynomial_constraint::PolynomialPredicate, PredicateType},
-    R1CS_PREDICATE_LABEL,
-};
+use ark_poly::{Polynomial, SparseMultilinearExtension};
+use ark_relations::gr1cs::predicate::{polynomial_constraint::PolynomialPredicate, Predicate};
 use ark_std::{end_timer, marker::PhantomData, rand::RngCore, start_timer};
 use shared_utils::transcript::IOPTranscript;
 
@@ -117,7 +114,7 @@ where
             .chain(proof.clone().sel_poly_evals.unwrap_or_default())
             .collect();
 
-        if !MultilinearEPC::<E, R>::BatchVerify(
+        if !MultilinearEPC::<E, R>::batch_verify(
             &vk.epc_vk,
             &batched_comm,
             &zero_check_subclaim.point,
@@ -148,7 +145,7 @@ where
             .predicate_types
             .values()
             .map(|pred| match pred {
-                PredicateType::Polynomial(poly_predicate) => poly_predicate,
+                Predicate::Polynomial(poly_predicate) => poly_predicate,
                 _ => panic!("Invalid predicate type"),
             })
             .collect();

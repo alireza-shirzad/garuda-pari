@@ -16,7 +16,6 @@ use hp_subroutines::PolynomialCommitmentScheme;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
-use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::ops::Neg;
@@ -95,7 +94,7 @@ where
     BenchResult {
         curve: type_name::<E>().to_string(),
         num_constraints: 1 << nv,
-        predicate_constraints: BTreeMap::new(),
+        predicate_constraints: hashbrown::HashMap::new(),
         num_invocations,
         input_size,
         num_thread,

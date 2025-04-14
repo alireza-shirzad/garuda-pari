@@ -13,6 +13,7 @@ use crate::piop::{errors::PolyIOPErrors, sum_check::SumCheck, PolyIOP};
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use ark_std::{end_timer, start_timer};
+#[cfg(test)]
 use shared_utils::transcript::IOPTranscript;
 
 /// A zero check IOP subclaim for `f(x)` consists of the following:
@@ -42,6 +43,8 @@ pub trait ZeroCheck<F: PrimeField>: SumCheck<F> {
     /// an building block for a more complex protocol, the transcript
     /// may be initialized by this complex protocol, and passed to the
     /// ZeroCheck prover/verifier.
+
+    #[cfg(test)]
     fn init_transcript() -> Self::Transcript;
 
     /// initialize the prover to argue for the sum of polynomial over
@@ -63,6 +66,7 @@ impl<F: PrimeField> ZeroCheck<F> for PolyIOP<F> {
     type ZeroCheckSubClaim = ZeroCheckSubClaim<F>;
     type ZeroCheckProof = Self::SumCheckProof;
 
+    #[cfg(test)]
     fn init_transcript() -> Self::Transcript {
         IOPTranscript::<F>::new(b"Initializing ZeroCheck transcript")
     }

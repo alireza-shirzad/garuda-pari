@@ -25,12 +25,12 @@ use ark_relations::gr1cs::{
     self,
     instance_outliner::{outline_r1cs, InstanceOutliner},
     mat_vec_mul,
-    predicate::PredicateType,
+    predicate::Predicate,
     ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
     R1CS_PREDICATE_LABEL,
 };
 use ark_std::{
-    cfg_into_iter, cfg_iter, end_timer, iterable::Iterable, rand::RngCore, start_timer, sync::Arc,
+    cfg_into_iter, cfg_iter, end_timer, rand::RngCore, start_timer, sync::Arc,
 };
 use shared_utils::transcript::IOPTranscript;
 
@@ -56,8 +56,8 @@ where
         // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
         let timer_extract_i_x_w =
             start_timer!(|| "Extract NP index, intance, witness and extended witness");
-        let x_assignment: &[E::ScalarField] = &cs.instance_assignment;
-        let w_assignment: &[E::ScalarField] = &cs.witness_assignment;
+        let x_assignment: &[E::ScalarField] = &cs.assignments.instance_assignment;
+        let w_assignment: &[E::ScalarField] = &cs.assignments.witness_assignment;
         let z_assignment: Vec<E::ScalarField> = [x_assignment, w_assignment].concat();
         let index: Index<E::ScalarField> = Index::new(&cs);
         end_timer!(timer_extract_i_x_w);
@@ -149,7 +149,7 @@ where
         // Line 8 and 9 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
 
         let timer_open_comms = start_timer!(|| "Open Commitments");
-        let opening_proof: Vec<E::G1Affine> = MultilinearEPC::<E, R>::BatchOpen(
+        let opening_proof: Vec<E::G1Affine> = MultilinearEPC::<E, R>::batch_open(
             &pk.epc_ck,
             &polys_to_be_opened,
             &zero_check_proof.point,
@@ -174,6 +174,7 @@ where
 
         result
     }
+
     fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
     ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
@@ -186,6 +187,10 @@ where
         let timer_cs_startup = start_timer!(|| "Building Constraint System");
         let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
+        cs.set_mode(gr1cs::SynthesisMode::Prove {
+            construct_matrices: true,
+            generate_lc_assignments: false,
+        });
         cs.set_instance_outliner(InstanceOutliner {
             pred_label: R1CS_PREDICATE_LABEL.to_string(),
             func: Rc::new(outline_r1cs),
@@ -251,7 +256,7 @@ where
         // If there is only one predicate, The virtual poly is just L(mle(M_1z), mle(M_2z), ..., mle(M_tz)) without any selector
         if index.num_predicates == 1 {
             let predicate_poly = match index.predicate_types.values().next().unwrap().clone() {
-                PredicateType::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
+                Predicate::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
                 _ => unimplemented!("Only polynomial predicates are supported"),
             };
             Self::build_grand_poly_single_pred(predicate_poly, &z_arcs, &mut target_virtual_poly);
@@ -270,7 +275,7 @@ where
             let predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm> = match predicate_type
                 .clone()
             {
-                PredicateType::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
+                Predicate::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
                 _ => unimplemented!("Only polynomial predicates are supported"),
             };
             Self::build_grand_poly_multi_pred(

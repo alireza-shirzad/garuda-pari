@@ -65,8 +65,8 @@ impl<E: Pairing> Polymath<E> {
         let num_instance = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
         let num_vars = num_witness + num_instance;
-        let variable_assignment = cfg_iter!(cs.instance_assignment)
-            .chain(cfg_iter!(cs.witness_assignment))
+        let variable_assignment = cfg_iter!(cs.assignments.instance_assignment)
+            .chain(cfg_iter!(cs.assignments.witness_assignment))
             .cloned()
             .collect::<Vec<_>>();
         let domain_ratio = pk.vk.h_domain.size() / pk.vk.k_domain.size();
@@ -94,7 +94,7 @@ impl<E: Pairing> Polymath<E> {
         )
         .unwrap();
         let xu_dense_poly =
-            Evaluations::from_vec_and_domain(cs.instance_assignment.clone(), pk.vk.k_domain)
+            Evaluations::from_vec_and_domain(cs.assignments.instance_assignment.clone(), pk.vk.k_domain)
                 .interpolate()
                 * domain_normalizer_poly;
         let u_dense_poly = Evaluations::from_vec_and_domain(zu_vec, pk.vk.h_domain).interpolate();
@@ -165,7 +165,7 @@ impl<E: Pairing> Polymath<E> {
             + Self::mul_by_x_power(&h_zh_poly_sparse, pk.vk.sigma * (MINUS_GAMMA + MINUS_ALPHA))
             + r_over_y_to_gamma_poly;
 
-        let u_w_g1: E::G1Affine = Self::msm(&cs.witness_assignment, &pk.u_w_g1_vec).into();
+        let u_w_g1: E::G1Affine = Self::msm(&cs.assignments.witness_assignment, &pk.u_w_g1_vec).into();
 
         let h_zh_x_over_y_to_alpha_g1: E::G1Affine =
             Self::msm(&h.coeffs, &pk.x_zh_over_y_alpha_g1_vec).into();
@@ -182,7 +182,7 @@ impl<E: Pairing> Polymath<E> {
         let x1 = sample_x1::<E>(
             &mut transcript,
             &pk.vk,
-            &cs.instance_assignment[1..],
+            &cs.assignments.instance_assignment[1..],
             &a,
             &c,
         );

@@ -1,6 +1,4 @@
 use ark_ec::pairing::Pairing;
-use ark_ff::Field;
-use ark_relations::gr1cs::{ConstraintSynthesizer, LinearCombination, SynthesisError, Variable};
 use ark_std::rand::RngCore;
 
 pub use ark_relations::gr1cs::ConstraintSystemRef;

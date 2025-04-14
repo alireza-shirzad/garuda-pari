@@ -5,6 +5,5 @@
 // along with the HyperPlonk library. If not, see <https://mit-license.org/>.
 
 pub use crate::piop::{
-    errors::PolyIOPErrors, structs::IOPProof, sum_check::SumCheck, utils::*, zero_check::ZeroCheck,
-    PolyIOP,
+    structs::IOPProof, zero_check::ZeroCheck,
 };

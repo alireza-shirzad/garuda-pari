@@ -199,31 +199,31 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
     let num_b_nonzeros = rng.gen_range(0..=(num_gr1cs_nonzero_entries - num_a_nonzeros));
     let num_c_nonzeros = num_gr1cs_nonzero_entries - num_a_nonzeros - num_b_nonzeros;
 
-    let mut A: Vec<(usize, usize, F)> = Vec::with_capacity(num_a_nonzeros);
-    let mut B: Vec<(usize, usize, F)> = Vec::with_capacity(num_b_nonzeros);
-    let mut C: Vec<(usize, usize, F)> = Vec::with_capacity(num_c_nonzeros);
+    let mut a: Vec<(usize, usize, F)> = Vec::with_capacity(num_a_nonzeros);
+    let mut b: Vec<(usize, usize, F)> = Vec::with_capacity(num_b_nonzeros);
+    let mut c: Vec<(usize, usize, F)> = Vec::with_capacity(num_c_nonzeros);
     for _ in 0..num_a_nonzeros {
         let row = rng.gen_range(0..num_cons);
         let col = rng.gen_range(0..num_vars + num_inputs + 1);
         let value = F::rand(&mut rng);
-        A.push((row, col, value));
+        a.push((row, col, value));
     }
     for _ in 0..num_b_nonzeros {
         let row = rng.gen_range(0..num_cons);
         let col = rng.gen_range(0..num_vars + num_inputs + 1);
         let value = F::rand(&mut rng);
-        B.push((row, col, value));
+        b.push((row, col, value));
     }
     for _ in 0..num_c_nonzeros {
         let row = rng.gen_range(0..num_cons);
         let col = rng.gen_range(0..num_vars + num_inputs + 1);
         let value = F::rand(&mut rng);
-        C.push((row, col, value));
+        c.push((row, col, value));
     }
-    let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
+    let inst = Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap();
     let assignment_vars = VarsAssignment::new(&witness_assignment).unwrap();
     let assignment_inputs = InputsAssignment::new(&instance_assignment[1..]).unwrap();
-    let num_non_zero_entries = max(A.len(), max(B.len(), C.len()));
+    let num_non_zero_entries = max(a.len(), max(b.len(), c.len()));
     (
         num_cons,
         num_vars,
