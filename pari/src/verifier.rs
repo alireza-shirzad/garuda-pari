@@ -93,7 +93,7 @@ impl<E: Pairing> Pari<E> {
 
         let timer_pairing = start_timer!(|| "Final Pairing");
         let right = E::multi_pairing(
-            [*t_g, *u_g, right_second_left.into()],
+            [*t_g, *u_g, right_second_left],
             [
                 vk.delta_two_h_prep.clone(),
                 vk.tau_h_prep.clone(),

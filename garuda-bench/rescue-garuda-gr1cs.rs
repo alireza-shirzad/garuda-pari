@@ -131,13 +131,16 @@ fn main() {
         .unwrap();
 
     /////////// Benchmark Pari for different circuit sizes ///////////
-    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
-    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
-        .map(|i| 2_usize.pow(i as u32))
-        .collect();
-    for num_invocation in &num_invocations {
-        let _ = bench::<Bls12_381>("bench", *num_invocation, 20, 1, 1, 100, num_thread)
-            .save_to_csv("garuda-gr1cs.csv");
-    }
-    
+    // const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    // let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+    //     .map(|i| 2_usize.pow(i as u32))
+    //     .collect();
+    // for num_invocation in &num_invocations {
+    //     let _ = bench::<Bls12_381>("bench", *num_invocation, 20, 1, 1, 100, num_thread)
+    //         .save_to_csv("garuda-gr1cs.csv");
+    // }
+
+
+    let _ = bench::<Bls12_381>("bench", 16384, 20, 1, 1, 1, num_thread)
+    .save_to_csv("garuda-gr1cs.csv");
 }

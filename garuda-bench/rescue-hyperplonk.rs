@@ -69,6 +69,7 @@ where
         &circuit.witnesses,
     )
     .unwrap();
+    let proof_size = proof.serialized_size(ark_serialize_v4::Compress::Yes);
     for _ in 0..num_keygen_iterations {
         let start = ark_std::time::Instant::now();
         proof = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, MultilinearKzgPCS<E>>>::prove(
@@ -103,7 +104,7 @@ where
         num_verifier_iterations: num_verifier_iterations as usize,
         pk_size: 0,
         vk_size: 0,
-        proof_size: 0,
+        proof_size,
         prover_time: (prover_time / num_prover_iterations),
         verifier_time: (verifier_time / num_verifier_iterations),
         keygen_time: (keygen_time / num_keygen_iterations),

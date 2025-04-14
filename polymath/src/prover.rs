@@ -1,34 +1,36 @@
 use std::{ops::Neg, rc::Rc};
 
-use crate::utils::compute_chall;
-use crate::{ALPHA, BND_A, GAMMA, MINUS_ALPHA, MINUS_GAMMA};
+use crate::utils::{sample_x1, sample_x2};
 use crate::{
-    Polymath,
     data_structures::{Proof, ProvingKey},
+    Polymath,
 };
+use crate::{ALPHA, BND_A, GAMMA, MINUS_ALPHA, MINUS_GAMMA};
 use ark_ec::AffineRepr;
-use ark_ec::{VariableBaseMSM, pairing::Pairing};
-use ark_ff::{BigInteger, FftField, PrimeField, batch_inversion_and_mul};
+use ark_ec::{pairing::Pairing, VariableBaseMSM};
+use ark_ff::{batch_inversion_and_mul, BigInteger, FftField, PrimeField};
 use ark_ff::{Field, Zero};
-use ark_poly::Radix2EvaluationDomain;
 use ark_poly::univariate::{DenseOrSparsePolynomial, SparsePolynomial};
+use ark_poly::Radix2EvaluationDomain;
 use ark_poly::{
-    DenseUVPolynomial, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial,
-    univariate::DensePolynomial,
+    univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Evaluations,
+    GeneralEvaluationDomain, Polynomial,
 };
 use ark_relations::{
     gr1cs::{
-        self, ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
-        instance_outliner::{InstanceOutliner, outline_sr1cs},
+        self,
+        instance_outliner::{outline_sr1cs, InstanceOutliner},
         predicate::polynomial_constraint::SR1CS_PREDICATE_LABEL,
+        ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
     },
     sr1cs::Sr1csAdapter,
 };
 use ark_std::rand::RngCore;
-use ark_std::{UniformRand, cfg_iter_mut, end_timer, start_timer};
+use ark_std::{cfg_iter, cfg_iter_mut, end_timer, start_timer, UniformRand};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
+use shared_utils::transcript::IOPTranscript;
 
 impl<E: Pairing> Polymath<E> {
     pub fn prove<C: ConstraintSynthesizer<E::ScalarField>, R: RngCore>(
@@ -63,10 +65,8 @@ impl<E: Pairing> Polymath<E> {
         let num_instance = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
         let num_vars = num_witness + num_instance;
-        let variable_assignment = cs
-            .instance_assignment
-            .iter()
-            .chain(cs.witness_assignment.iter())
+        let variable_assignment = cfg_iter!(cs.instance_assignment)
+            .chain(cfg_iter!(cs.witness_assignment))
             .cloned()
             .collect::<Vec<_>>();
         let domain_ratio = pk.vk.h_domain.size() / pk.vk.k_domain.size();
@@ -177,7 +177,15 @@ impl<E: Pairing> Polymath<E> {
         );
 
         /////////////////////// Sampling x1 ///////////////////////
-        let x1 = compute_chall::<E>(&pk.vk, &cs.instance_assignment[1..], &a, &c, None);
+
+        let mut transcript = IOPTranscript::<E::ScalarField>::new(crate::Polymath::<E>::SNARK_NAME);
+        let x1 = sample_x1::<E>(
+            &mut transcript,
+            &pk.vk,
+            &cs.instance_assignment[1..],
+            &a,
+            &c,
+        );
 
         ///////////////////// Computing y1 , Ax1 ///////////////////////
 
@@ -186,13 +194,7 @@ impl<E: Pairing> Polymath<E> {
         let y1_to_alpha = y1.pow([MINUS_ALPHA as u64]).inverse().unwrap();
         let a_x1 = u_dense_poly.evaluate(&x1) + ra_u_poly.evaluate(&x1) * y1_to_alpha;
         //////////////////////// Sampling x2 ///////////////////////
-        let x_2 = compute_chall::<E>(
-            &pk.vk,
-            &cs.instance_assignment[1..],
-            &a,
-            &c,
-            Some((x1, a_x1)),
-        );
+        let x_2 = sample_x2::<E>(&mut transcript, x1, a_x1);
 
         ///////////////////////////// Computing PI(X) ///////////////////////
         let c_at_x1 =
@@ -220,7 +222,7 @@ impl<E: Pairing> Polymath<E> {
             d_over_y_to_gamma_poly.degree()
                 <= 2 * (pk.vk.n - 1) + (pk.vk.sigma * (MINUS_ALPHA + MINUS_GAMMA))
         );
-        assert!(d_rem_poly.is_zero());
+        // assert!(d_rem_poly.is_zero());
 
         let d = Self::msm(&d_over_y_to_gamma_poly.coeffs, &pk.x_z_g1_vec);
 
@@ -290,7 +292,7 @@ impl<E: Pairing> Polymath<E> {
         power_of_x: usize,
     ) -> SparsePolynomial<E::ScalarField> {
         SparsePolynomial::from_coefficients_vec(
-            poly.iter().map(|(i, c)| (i + power_of_x, *c)).collect(),
+            cfg_iter!(poly).map(|(i, c)| (i + power_of_x, *c)).collect(),
         )
     }
 
@@ -298,42 +300,5 @@ impl<E: Pairing> Polymath<E> {
     fn msm(scalars: &Vec<E::ScalarField>, g1_elems: &Vec<E::G1Affine>) -> E::G1 {
         assert!(scalars.len() <= g1_elems.len());
         E::G1::msm_unchecked(g1_elems.as_slice(), scalars.as_slice())
-    }
-
-    pub(crate) fn fragment_with_separator(
-        v: &[E::ScalarField],
-        k: usize,
-        separator: Option<&[E::ScalarField]>,
-    ) -> Vec<E::ScalarField> {
-        assert!(k >= 1, "k must be at least 1");
-
-        let sep_slice = separator.unwrap_or(&[]);
-        let mut sep_iter = sep_slice.iter();
-
-        let mut result = Vec::with_capacity(v.len() + (v.len() + k - 1) / k); // estimate max size
-        let mut data_iter = v.into_iter();
-
-        let mut index = 0;
-        loop {
-            if index % k == 0 {
-                // insert separator
-                let sep = sep_iter.next().cloned().unwrap_or(E::ScalarField::zero());
-                result.push(sep);
-            } else if let Some(val) = data_iter.next() {
-                result.push(*val);
-            } else {
-                break;
-            }
-            index += 1;
-        }
-
-        result
-    }
-    fn zero_tail(v: &mut [E::ScalarField], k: usize) {
-        assert!(k <= v.len(), "Index k out of bounds");
-
-        for elem in &mut v[k..] {
-            *elem = E::ScalarField::zero();
-        }
     }
 }

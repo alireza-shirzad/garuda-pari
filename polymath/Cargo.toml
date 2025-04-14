@@ -34,6 +34,7 @@ print-trace = ["ark-std/print-trace"]
 parallel = [
     "std",
     "ark-ff/parallel",
+    "ark-ec/parallel",
     "ark-poly/parallel",
     "ark-std/parallel",
     "rayon",

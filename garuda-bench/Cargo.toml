@@ -20,12 +20,12 @@ tracing = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
-ark-spartan = { path = "../../spartan", default-features = false }
+ark-spartan = { git = "https://github.com/alireza-shirzad/spartan.git", default-features = false }
 
 
 # These are for the hyperplonk benches
-hp-hyperplonk = { package = "hyperplonk", git = "https://github.com/EspressoSystems/hyperplonk.git" }
-hp-subroutines = { package = "subroutines", git = "https://github.com/EspressoSystems/hyperplonk.git" }
+hp-hyperplonk = { package = "hyperplonk", git = "https://github.com/alireza-shirzad/hyperplonk" }
+hp-subroutines = { package = "subroutines", git = "https://github.com/alireza-shirzad/hyperplonk" }
 ark-bls12-381-v4 = { package = "ark-bls12-381", version = "0.4.0", default-features = false, features = [
     "curve",
 ] }

@@ -47,7 +47,7 @@ dependencies = [
 [[package]]
 name = "arithmetic"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hyperplonk.git#2a3b55c97ad8a5d6627108a2e7def2aeccb7f3b9"
+source = "git+https://github.com/alireza-shirzad/hyperplonk#8de31874a0021a8d2837740b555b6a9c56f93078"
 dependencies = [
  "ark-bls12-381 0.4.0",
  "ark-ff 0.4.2",
@@ -142,6 +142,7 @@ dependencies = [
  "fnv",
  "merlin",
  "num-bigint",
+ "rayon",
  "sha2",
  "tracing",
 ]
@@ -292,6 +293,7 @@ dependencies = [
  "ark-relations 0.5.1",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
+ "rayon",
 ]
 
 [[package]]
@@ -438,6 +440,7 @@ dependencies = [
 [[package]]
 name = "ark-spartan"
 version = "0.5.0"
+source = "git+https://github.com/alireza-shirzad/spartan.git#529f269dc79d7d974d6d4a42cff69b192008d07d"
 dependencies = [
  "ark-bls12-381 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ark-ec 0.5.0",
@@ -932,7 +935,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "hyperplonk"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hyperplonk.git#2a3b55c97ad8a5d6627108a2e7def2aeccb7f3b9"
+source = "git+https://github.com/alireza-shirzad/hyperplonk#8de31874a0021a8d2837740b555b6a9c56f93078"
 dependencies = [
  "arithmetic",
  "ark-ec 0.4.2",
@@ -1543,7 +1546,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "subroutines"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hyperplonk.git#2a3b55c97ad8a5d6627108a2e7def2aeccb7f3b9"
+source = "git+https://github.com/alireza-shirzad/hyperplonk#8de31874a0021a8d2837740b555b6a9c56f93078"
 dependencies = [
  "arithmetic",
  "ark-bls12-381 0.4.0",
@@ -1728,7 +1731,7 @@ dependencies = [
 [[package]]
 name = "transcript"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hyperplonk.git#2a3b55c97ad8a5d6627108a2e7def2aeccb7f3b9"
+source = "git+https://github.com/alireza-shirzad/hyperplonk#8de31874a0021a8d2837740b555b6a9c56f93078"
 dependencies = [
  "ark-ff 0.4.2",
  "ark-serialize 0.4.2",
@@ -1752,7 +1755,7 @@ checksum = "5a5f39404a5da50712a4c1eecf25e90dd62b613502b7e925fd4e4d19b5c96512"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hyperplonk.git#2a3b55c97ad8a5d6627108a2e7def2aeccb7f3b9"
+source = "git+https://github.com/alireza-shirzad/hyperplonk#8de31874a0021a8d2837740b555b6a9c56f93078"
 dependencies = [
  "rayon",
 ]

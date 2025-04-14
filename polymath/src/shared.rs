@@ -23,7 +23,6 @@ impl<E: Pairing> Polymath<E> {
         pi_poly: &DensePolynomial<E::ScalarField>,
     ) -> E::ScalarField {
         let pi_at_x1 = pi_poly.evaluate(&x1);
-        dbg!(pi_at_x1);
         let n_field = E::ScalarField::from(vk.n as u64);
         ((a_at_x1 + y1_gamma) * a_at_x1 - pi_at_x1 / n_field) / y1_alpha
     }

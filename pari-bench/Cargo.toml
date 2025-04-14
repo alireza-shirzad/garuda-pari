@@ -56,13 +56,14 @@ parallel = [
     "std",
     "pari/parallel",
     "ark-ff/parallel",
+    "ark-ec/parallel",
     "pari/parallel",
     "ark-poly/parallel",
     "ark-std/parallel",
+    "ark-groth16/parallel",
     "rayon",
 ]
 sol = ["pari/sol"]
-
 
 
 # Plots for the paper

@@ -1,88 +1,30 @@
 use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
-// use ark_bn254::{Bn254, Fr as Bn254_Fr};
-use ark_crypto_primitives::crh::rescue::constraints::{CRHGadget, CRHParametersVar};
-use ark_crypto_primitives::crh::{CRHScheme, CRHSchemeGadget};
+use ark_crypto_primitives::crh::CRHScheme;
 use ark_crypto_primitives::sponge::rescue::RescueConfig;
 use ark_crypto_primitives::{crh::rescue::CRH, sponge::Absorb};
-use ark_ec::{AffineRepr, pairing::Pairing};
+use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::PrimeField;
-use ark_r1cs_std::alloc::AllocVar;
-use ark_r1cs_std::eq::EqGadget;
-use ark_r1cs_std::fields::fp::FpVar;
 use ark_relations::gr1cs;
-use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
-use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
 use ark_relations::gr1cs::instance_outliner::outline_r1cs;
-use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
+use ark_relations::gr1cs::ConstraintSynthesizer;
+use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
 use ark_serialize::CanonicalSerialize;
-use ark_std::UniformRand;
 use ark_std::rc::Rc;
+use ark_std::UniformRand;
 use ark_std::{
     rand::{RngCore, SeedableRng},
     test_rng,
 };
 use pari::Pari;
+use pari_bench::RescueDemo;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::env;
 use std::time::Duration;
 use std::{any::type_name, ops::Neg};
-
-#[derive(Clone)]
-struct RescueDemo<F: PrimeField> {
-    rescue_input: Option<Vec<F>>,
-    num_isntances: usize,
-    rescue_image: Option<F>,
-    config: RescueConfig<F>,
-    num_invocations: usize,
-}
-
-impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
-    ConstraintSynthesizer<F> for RescueDemo<F>
-{
-    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        let params_g =
-            CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();
-
-        let mut input_g = Vec::new();
-
-        for elem in self
-            .rescue_input
-            .clone()
-            .ok_or(SynthesisError::AssignmentMissing)
-            .unwrap()
-        {
-            input_g.push(FpVar::new_witness(cs.clone(), || Ok(elem)).unwrap());
-        }
-
-        let mut crh_a_g: Option<FpVar<F>> =
-            Some(CRHGadget::<F>::evaluate(&params_g, &input_g).unwrap());
-
-        for _ in 0..(self.num_invocations - 1) {
-            crh_a_g =
-                Some(CRHGadget::<F>::evaluate(&params_g, &vec![crh_a_g.unwrap(); 9]).unwrap());
-        }
-        for _ in 0..self.num_isntances - 1 {
-            let image_instance: FpVar<F> = FpVar::new_input(cs.clone(), || {
-                Ok(self
-                    .rescue_image
-                    .ok_or(SynthesisError::AssignmentMissing)
-                    .unwrap())
-            })
-            .unwrap();
-
-            if let Some(crh_a_g) = crh_a_g.clone() {
-                let _ = crh_a_g.enforce_equal(&image_instance);
-            }
-        }
-
-        Ok(())
-    }
-}
-
 fn bench<E: Pairing>(
-    _bench_name: &str,
     num_invocations: usize,
     input_size: usize,
     num_keygen_iterations: u32,
@@ -115,11 +57,11 @@ where
     let mut keygen_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
     let circuit = RescueDemo {
-        rescue_input: Some(rescue_input.clone()),
-        num_isntances: input_size,
-        rescue_image: Some(expected_image),
+        input: Some(rescue_input.clone()),
+        num_instances: input_size,
+        image: Some(expected_image),
         config: config.clone(),
-        num_invocations: num_invocations,
+        num_invocations,
     };
     let setup_circuit = circuit.clone();
     let (mut pk, mut vk) = Pari::<E>::keygen(setup_circuit, &mut rng);
@@ -142,10 +84,11 @@ where
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
     let start = ark_std::time::Instant::now();
     for _ in 0..num_verifier_iterations {
-        assert!(Pari::verify(&proof, &vk, &vec![
-            expected_image;
-            input_size - 1
-        ],));
+        assert!(Pari::verify(
+            &proof,
+            &vk,
+            &vec![expected_image; input_size - 1],
+        ));
     }
     verifier_time += start.elapsed();
     let cs = gr1cs::ConstraintSystem::new_ref();
@@ -160,8 +103,8 @@ where
         curve: type_name::<E>().to_string(),
         num_constraints: cs.num_constraints(),
         predicate_constraints: cs.get_all_predicates_num_constraints(),
-        num_invocations: num_invocations,
-        num_thread: num_thread,
+        num_invocations,
+        num_thread,
         input_size: cs.num_instance_variables(),
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
@@ -175,6 +118,7 @@ where
     }
 }
 
+#[cfg(not(feature = "sol"))]
 fn main() {
     let num_thread = env::var("NUM_THREAD")
         .unwrap_or_else(|_| "default".to_string())
@@ -186,13 +130,10 @@ fn main() {
         .build_global()
         .unwrap();
 
-    // bench_smart_contract();
-
     /////////// Benchmark Pari for different input sizes ///////////
     let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
-    for i in 0..num_inputs.len() {
-        let _ = bench::<Bls12_381>("bench", 1, num_inputs[i], 1, 1, 1000, num_thread)
-            .save_to_csv("pari.csv");
+    for input in &num_inputs {
+        let _ = bench::<Bls12_381>(1, *input, 1, 1, 1000, num_thread).save_to_csv("pari.csv");
     }
 
     /////////// Benchmark Pari for different circuit sizes ///////////
@@ -200,14 +141,18 @@ fn main() {
     let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
-    for i in 0..num_invocations.len() {
-        let _ = bench::<Bls12_381>("bench", num_invocations[i], 20, 1, 1, 100, num_thread)
-            .save_to_csv("pari.csv");
+    for invocation in &num_invocations {
+        let _ = bench::<Bls12_381>(*invocation, 20, 1, 1, 100, num_thread).save_to_csv("pari.csv");
     }
 }
 
-fn bench_smart_contract() {
+#[cfg(feature = "sol")]
+fn main() {
+    ThreadPoolBuilder::new()
+        .num_threads(10)
+        .build_global()
+        .unwrap();
     for i in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
-        let _ = bench::<Bn254>("bench", 2, *i, 1, 1, 1, 0);
+        let _ = bench::<Bn254>(2, *i, 1, 1, 1, 10);
     }
 }
