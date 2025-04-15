@@ -70,5 +70,3 @@ ark-relations = { git = "https://github.com/arkworks-rs/snark.git" }
 # [patch."https://github.com/arkworks-rs/r1cs-std"]
 # ark-r1cs-std = { path = "../arkworks/r1cs-std" }
 
-# [patch."https://github.com/alireza-shirzad/crypto-primitives.git"]
-# ark-crypto-primitives = { path = "../arkworks/ali-crypto-primitives/crypto-primitives" }
