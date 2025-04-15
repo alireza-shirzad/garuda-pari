@@ -182,24 +182,32 @@ impl<E: Pairing> Pari<E> {
     {
         // Start up the constraint System and synthesize the circuit
         let timer_cs_startup = start_timer!(|| "Prover constraint System Startup");
+        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
         let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
         circuit.generate_constraints(cs.clone())?;
+        end_timer!(timer_synthesize_circuit);
+        let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
+        end_timer!(timer_inlining);
+        let sr1cs_timer = start_timer!(|| "Convert to SR1CS");
         let sr1cs_cs =
             Sr1csAdapter::r1cs_to_sr1cs_with_assignment(&mut cs.into_inner().unwrap()).unwrap();
-        sr1cs_cs.set_instance_outliner(InstanceOutliner {
+        // sr1cs_cs.set_instance_outliner(InstanceOutliner {
+        //     pred_label: SR1CS_PREDICATE_LABEL.to_string(),
+        //     func: Rc::new(outline_sr1cs),
+        // });
+
+        // sr1cs_cs.finalize();
+
+        let mut sr1cs_inner = sr1cs_cs.into_inner().unwrap();
+        let _ = sr1cs_inner.perform_instance_outlining(InstanceOutliner {
             pred_label: SR1CS_PREDICATE_LABEL.to_string(),
             func: Rc::new(outline_sr1cs),
         });
-        let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
-        end_timer!(timer_synthesize_circuit);
-
-        let timer_inlining = start_timer!(|| "Inlining constraints");
-        sr1cs_cs.finalize();
-        end_timer!(timer_inlining);
+        end_timer!(sr1cs_timer);
         end_timer!(timer_cs_startup);
-        Ok(sr1cs_cs.into_inner().unwrap())
+        Ok(sr1cs_inner)
     }
 
     #[allow(clippy::type_complexity)]

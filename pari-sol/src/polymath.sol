@@ -239,38 +239,8 @@ contract Polymath {
         return chall;
     }
 
-    function comp_x2(
-        uint256[2] memory a,
-        uint256[2] memory c,
-        uint256 ax1,
-        uint256[2] memory input
-    ) public pure returns (uint256) {
-        bytes32 hash = keccak256(
-            abi.encodePacked(
-                a[0],
-                a[1],
-                c[0],
-                c[1],
-                ax1,
-                input[0],
-                input[1],
-                G_X,
-                G_Y,
-                H_X_0,
-                H_X_1,
-                H_Y_0,
-                H_Y_1,
-                X_H_X_0,
-                X_H_X_1,
-                X_H_Y_0,
-                X_H_Y_1,
-                Z_H_X_0,
-                Z_H_X_1,
-                Z_H_Y_0,
-                Z_H_Y_1
-            )
-        );
-
+    function comp_x2(uint256 x1, uint256 ax1) public pure returns (uint256) {
+        bytes32 hash = keccak256(abi.encodePacked(x1, ax1));
         // Compute challenge
         uint256 chall = uint256(hash) % R;
 
@@ -296,7 +266,7 @@ contract Polymath {
         uint256 d_y = proof[6];
         //////////////////////// Compute the challenges //////////////
         uint256 x1 = comp_x1([a_x, a_y], [c_x, c_y], input);
-        uint256 x2 = comp_x2([a_x, a_y], [c_x, c_y], ax1, input);
+        uint256 x2 = comp_x2(x1, ax1);
 
         //////////////////// Compute some needed variables //////////////
         uint256 y1 = exp(x1, SIGMA);

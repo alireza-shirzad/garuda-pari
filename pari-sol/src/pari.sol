@@ -341,46 +341,46 @@ input[1],
         uint256 u_g_x = proof[4]; // Fix: Load calldata into memory first
         uint256 u_g_y = proof[5];
 
-        // assembly ("memory-safe") {
-        //     let memPtr := mload(0x40) // Load free memory pointer
+        assembly ("memory-safe") {
+            let memPtr := mload(0x40) // Load free memory pointer
 
-        //     mstore(add(memPtr, 0x00), t_g_x)
-        //     mstore(add(memPtr, 0x20), t_g_y)
-        //     mstore(add(memPtr, 0x40), DELTA_TWO_H_X_1)
-        //     mstore(add(memPtr, 0x60), DELTA_TWO_H_X_0)
-        //     mstore(add(memPtr, 0x80), DELTA_TWO_H_Y_1)
-        //     mstore(add(memPtr, 0xa0), DELTA_TWO_H_Y_0)
+            mstore(add(memPtr, 0x00), t_g_x)
+            mstore(add(memPtr, 0x20), t_g_y)
+            mstore(add(memPtr, 0x40), DELTA_TWO_H_X_1)
+            mstore(add(memPtr, 0x60), DELTA_TWO_H_X_0)
+            mstore(add(memPtr, 0x80), DELTA_TWO_H_Y_1)
+            mstore(add(memPtr, 0xa0), DELTA_TWO_H_Y_0)
 
-        //     mstore(add(memPtr, 0xc0), u_g_x)
-        //     mstore(add(memPtr, 0xe0), u_g_y)
-        //     mstore(add(memPtr, 0x100), TAU_H_X_1)
-        //     mstore(add(memPtr, 0x120), TAU_H_X_0)
-        //     mstore(add(memPtr, 0x140), TAU_H_Y_1)
-        //     mstore(add(memPtr, 0x160), TAU_H_Y_0)
+            mstore(add(memPtr, 0xc0), u_g_x)
+            mstore(add(memPtr, 0xe0), u_g_y)
+            mstore(add(memPtr, 0x100), TAU_H_X_1)
+            mstore(add(memPtr, 0x120), TAU_H_X_0)
+            mstore(add(memPtr, 0x140), TAU_H_Y_1)
+            mstore(add(memPtr, 0x160), TAU_H_Y_0)
 
-        //     mstore(add(memPtr, 0x180), A_x)
-        //     mstore(add(memPtr, 0x1a0), A_y)
-        //     mstore(add(memPtr, 0x1c0), H_X_1)
-        //     mstore(add(memPtr, 0x1e0), H_X_0)
-        //     mstore(add(memPtr, 0x200), H_Y_1)
-        //     mstore(add(memPtr, 0x220), H_Y_0)
+            mstore(add(memPtr, 0x180), A_x)
+            mstore(add(memPtr, 0x1a0), A_y)
+            mstore(add(memPtr, 0x1c0), H_X_1)
+            mstore(add(memPtr, 0x1e0), H_X_0)
+            mstore(add(memPtr, 0x200), H_Y_1)
+            mstore(add(memPtr, 0x220), H_Y_0)
 
-        //     // Call the BN254 pairing precompile (0x08)
-        //     success := staticcall(
-        //         gas(), // Gas available
-        //         PRECOMPILE_VERIFY, // Precompile address for pairing
-        //         memPtr, // Input memory location
-        //         0x240, // Input size (576 bytes for 3 pairings)
-        //         memPtr, // Store output in the same memory
-        //         0x20 // Output size (32 bytes)
-        //     )
-        //     success := and(success, mload(memPtr))
-        // }
-        // if (!success) {
-        //     // Either proof or verification key invalid.
-        //     // We assume the contract is correctly generated, so the verification key is valid.
-        //     revert ProofInvalid();
-        // }
+            // Call the BN254 pairing precompile (0x08)
+            success := staticcall(
+                gas(), // Gas available
+                PRECOMPILE_VERIFY, // Precompile address for pairing
+                memPtr, // Input memory location
+                0x240, // Input size (576 bytes for 3 pairings)
+                memPtr, // Store output in the same memory
+                0x20 // Output size (32 bytes)
+            )
+            success := and(success, mload(memPtr))
+        }
+        if (!success) {
+            // Either proof or verification key invalid.
+            // We assume the contract is correctly generated, so the verification key is valid.
+            revert ProofInvalid();
+        }
     }
 }
 

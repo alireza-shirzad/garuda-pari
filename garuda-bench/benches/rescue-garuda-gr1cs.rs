@@ -142,6 +142,6 @@ fn main() {
     // }
 
 
-    let _ = bench::<Bls12_381>("bench", 16384, 20, 1, 1, 1, num_thread)
+    let _ = bench::<Bls12_381>("bench", 2048, 20, 1, 1, 1, num_thread)
     .save_to_csv("garuda-gr1cs.csv");
 }
