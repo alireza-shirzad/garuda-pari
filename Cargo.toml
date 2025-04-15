@@ -62,7 +62,7 @@ ark-ff = { git = "https://github.com/arkworks-rs/algebra.git" }
 ark-ec = { git = "https://github.com/arkworks-rs/algebra.git" }
 ark-poly = { git = "https://github.com/arkworks-rs/algebra.git" }
 ark-serialize = { git = "https://github.com/arkworks-rs/algebra.git" }
-ark-relations = { path = "../arkworks/snark/relations" }
+ark-relations = { git = "https://github.com/arkworks-rs/snark.git" }
 
 # [patch."https://github.com/arkworks-rs/snark"]
 # ark-relations = { path = "../arkworks/snark/relations" }
