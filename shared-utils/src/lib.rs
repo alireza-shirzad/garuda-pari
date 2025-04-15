@@ -130,7 +130,7 @@ pub fn batch_inversion_and_mul<F: Field>(v: &mut [F], coeff: &F) {
     tmp *= coeff;
 
     // Second pass: iterate backwards to compute inverses
-    for (mut f, s) in v
+    for (f, s) in v
         .iter_mut()
         // Backwards
         .rev()

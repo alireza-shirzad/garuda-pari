@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
 use csv::Writer;
 use std::error::Error;
@@ -13,7 +13,7 @@ pub struct BenchResult {
     pub num_keygen_iterations: usize,
     pub num_prover_iterations: usize,
     pub num_verifier_iterations: usize,
-    pub predicate_constraints: BTreeMap<String, usize>,
+    pub predicate_constraints: hashbrown::HashMap<String, usize>,
     pub num_constraints: usize,
     pub keygen_time: Duration,
     pub pk_size: usize,
@@ -56,7 +56,7 @@ impl BenchResult {
         }
 
         // Serialize data
-        let predicate_constraints_str = serde_json::to_string(&self.predicate_constraints)?;
+        let predicate_constraints_str = serde_json::to_string(&self.predicate_constraints.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>())?;
         let keygen_time_ms = self.keygen_time.as_secs_f64();
         let prover_time_ms = self.prover_time.as_secs_f64();
         let verifier_time_ms = self.verifier_time.as_secs_f64() * 1000.0;

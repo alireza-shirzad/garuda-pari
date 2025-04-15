@@ -3,13 +3,14 @@ use std::{iter::repeat_n, rc::Rc};
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::SparseMultilinearExtension;
+use hashbrown::HashMap;
 
 use crate::{
     arithmetic::DenseMultilinearExtension,
     data_structures::{Index, ProvingKey, SuccinctIndex, VerifyingKey},
     epc::{
         data_structures::{
-            Generators, MLBatchedCommitment, MLCommitment, MLCommitmentKey, MLPublicParameters,
+            Generators, MLBatchedCommitment, MLCommitmentKey, MLPublicParameters,
         },
         multilinear::MultilinearEPC,
         EPC,
@@ -24,7 +25,7 @@ use ark_relations::gr1cs::{
     SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
 };
 use ark_std::{
-    cfg_into_iter, cfg_iter, collections::BTreeMap, end_timer, rand::RngCore, start_timer,
+    cfg_into_iter, cfg_iter, end_timer, rand::RngCore, start_timer,
     vec::Vec, UniformRand,
 };
 use rayon::iter::IntoParallelIterator;
@@ -137,7 +138,7 @@ where
 
     fn create_sel_polynomials(
         num_vars: usize,
-        predicate_num_constraints: &BTreeMap<Label, usize>,
+        predicate_num_constraints: &HashMap<Label, usize>,
     ) -> Vec<DenseMultilinearExtension<E::ScalarField>>
     where
         E: Pairing,

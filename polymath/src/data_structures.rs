@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_poly::{GeneralEvaluationDomain, Radix2EvaluationDomain};
+use ark_poly::GeneralEvaluationDomain;
 use ark_serialize::CanonicalSerialize;
 
 /// The proving key for Pari

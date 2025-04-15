@@ -12,7 +12,7 @@ ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
 ark-crypto-primitives = { workspace = true }
-ark-r1cs-std = { workspace = true }
+ark-r1cs-std = { workspace = true, features = [ "std" ] }
 ark-relations = { workspace = true }
 merlin = { workspace = true }
 displaydoc = { workspace = true }
@@ -37,36 +37,42 @@ ark-crypto-primitives-v4 = { package = "ark-crypto-primitives", version = "0.4.0
 ] }
 ark-serialize-v4 = { package = "ark-serialize", version = "0.4.0" }
 rand = "0.8.5"
+hashbrown = { workspace = true }
 
 
 [[bench]]
 name = "rescue-garuda-gr1cs"
-path = "./rescue-garuda-gr1cs.rs"
+path = "benches/rescue-garuda-gr1cs.rs"
 harness = false
 
 
 [[bench]]
 name = "rescue-garuda-r1cs"
-path = "./rescue-garuda-r1cs.rs"
+path = "benches/rescue-garuda-r1cs.rs"
 harness = false
 
 
 [[bench]]
 name = "rescue-spartan-r1cs"
-path = "./rescue-spartan-r1cs.rs"
+path = "benches/rescue-spartan-r1cs.rs"
 harness = false
 
 [[bench]]
 name = "rescue-spartan-ccs"
-path = "./rescue-spartan-ccs.rs"
+path = "benches/rescue-spartan-ccs.rs"
 harness = false
 
 
 [[bench]]
 name = "rescue-hyperplonk"
-path = "./rescue-hyperplonk.rs"
+path = "benches/rescue-hyperplonk.rs"
 harness = false
 
+
+[[bench]]
+name = "rescue-gr1cs-synthesis"
+path = "benches/rescue-gr1cs-synthesis.rs"
+harness = false
 
 [features]
 default = ["std", "parallel"]

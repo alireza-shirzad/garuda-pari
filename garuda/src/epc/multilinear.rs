@@ -223,7 +223,7 @@ impl<E: Pairing, R: RngCore> EPC<R> for MultilinearEPC<E, R> {
         proofs
     }
 
-    fn BatchOpen(
+    fn batch_open(
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         point: &Self::EvaluationPoint,
@@ -266,7 +266,7 @@ impl<E: Pairing, R: RngCore> EPC<R> for MultilinearEPC<E, R> {
         left == right
     }
 
-    fn BatchVerify(
+    fn batch_verify(
         vk: &Self::VerifyingKey,
         comm: &Self::BatchedCommitment,
         point: &Self::EvaluationPoint,

@@ -57,8 +57,8 @@ impl<E: Pairing> Pari<E> {
         /////////////////////// Extract the constraint system  information ///////////////////////
         let timer_extract_info = start_timer!(|| "Extract constraint system information");
         let num_constraints = cs.num_constraints();
-        let instance_assignment = &cs.instance_assignment;
-        let witness_assignment = &cs.witness_assignment;
+        let instance_assignment = &cs.assignments.instance_assignment;
+        let witness_assignment = &cs.assignments.witness_assignment;
         let matrices = &cs.to_matrices().unwrap()[SR1CS_PREDICATE_LABEL];
         end_timer!(timer_extract_info);
 
@@ -239,7 +239,7 @@ impl<E: Pairing> Pari<E> {
             .zip(&mut z_b[..num_constraints])
             .zip(a_mat)
             .zip(b_mat)
-            .for_each(|(((mut a, mut b), at_i), bt_i)| {
+            .for_each(|(((a, b), at_i), bt_i)| {
                 *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(at_i, &assignment);
                 *b = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(bt_i, &assignment);
             });
@@ -251,7 +251,7 @@ impl<E: Pairing> Pari<E> {
             .zip(&mut w_b[..num_constraints])
             .zip(a_mat)
             .zip(b_mat)
-            .for_each(|(((mut a, mut b), at_i), bt_i)| {
+            .for_each(|(((a, b), at_i), bt_i)| {
                 *a = Sr1csAdapter::<E::ScalarField>::evaluate_constraint(
                     at_i,
                     &punctured_assignment,

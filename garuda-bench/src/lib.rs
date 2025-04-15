@@ -59,7 +59,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
         #[cfg(feature = "gr1cs")]
         {
-            let pow_pred = PredicateConstraintSystem::new_polynomial_predicate(
+            let pow_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
                 2,
                 vec![(F::from(1i8), vec![(0, 5)]), (F::from(-1i8), vec![(1, 1)])],
             );
