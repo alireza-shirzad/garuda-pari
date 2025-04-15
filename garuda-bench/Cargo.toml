@@ -44,18 +44,21 @@ hashbrown = { workspace = true }
 name = "rescue-garuda-gr1cs"
 path = "benches/rescue-garuda-gr1cs.rs"
 harness = false
+required-features = [ "gr1cs" ]
 
 
 [[bench]]
 name = "rescue-garuda-r1cs"
 path = "benches/rescue-garuda-r1cs.rs"
 harness = false
+required-features = [ "r1cs" ]
 
 
 [[bench]]
 name = "rescue-spartan-r1cs"
 path = "benches/rescue-spartan-r1cs.rs"
 harness = false
+required-features = [ "r1cs" ]
 
 [[bench]]
 name = "rescue-spartan-ccs"
@@ -73,6 +76,7 @@ harness = false
 name = "rescue-gr1cs-synthesis"
 path = "benches/rescue-gr1cs-synthesis.rs"
 harness = false
+required-features = [ "gr1cs" ]
 
 [features]
 default = ["std", "parallel"]

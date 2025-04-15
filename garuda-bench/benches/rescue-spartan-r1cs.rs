@@ -22,7 +22,7 @@ use shared_utils::BenchResult;
 use std::{any::type_name, cmp::max, env, ops::Neg, time::Duration};
 
 #[cfg(feature = "r1cs")]
-fn bench<E: Pairing>(
+fn run_bench<E: Pairing>(
     num_invocations: usize,
     input_size: usize,
     num_keygen_iterations: u32,
@@ -153,7 +153,7 @@ fn main() {
         .map(|i| 2_usize.pow(i as u32))
         .collect();
     for num_invocation in &num_invocations {
-        let _ = bench::<Bls12_381>(*num_invocation, 20, 1, 1, 100, num_thread)
+        let _ = run_bench::<Bls12_381>(*num_invocation, 20, 1, 1, 100, num_thread)
             .save_to_csv("spartan-r1cs.csv");
     }
 }

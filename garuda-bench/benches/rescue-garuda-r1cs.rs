@@ -27,7 +27,7 @@ use std::env;
 use std::ops::Neg;
 use std::time::Duration;
 #[cfg(feature = "r1cs")]
-fn bench<E: Pairing>(
+fn run_bench<E: Pairing>(
     _bench_name: &str,
     num_invocations: usize,
     input_size: usize,
@@ -136,7 +136,7 @@ fn main() {
         .map(|i| 2_usize.pow(i as u32))
         .collect();
     for num_invocation in &num_invocations {
-        let _ = bench::<Bls12_381>("bench", *num_invocation, 20, 1, 1, 100, num_thread)
+        let _ = run_bench::<Bls12_381>("bench", *num_invocation, 20, 1, 1, 100, num_thread)
             .save_to_csv("garuda-r1cs.csv");
     }
 }

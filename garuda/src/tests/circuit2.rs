@@ -1,11 +1,13 @@
 use ark_ff::Field;
 use ark_relations::{
     gr1cs::{
-        ConstraintSynthesizer, ConstraintSystemRef, Label,
-        Matrix, Variable, R1CS_PREDICATE_LABEL,
+        ConstraintSynthesizer, ConstraintSystemRef, Variable, 
     },
     lc,
 };
+#[cfg(test)]
+use ark_relations::gr1cs::{Label, Matrix, R1CS_PREDICATE_LABEL};
+#[cfg(test)]
 use ark_std::{collections::BTreeMap, string::ToString, vec::Vec};
 #[derive(Debug, Clone)]
 pub struct Circuit2<F: Field> {
@@ -15,6 +17,7 @@ pub struct Circuit2<F: Field> {
 }
 
 impl<F: Field> Circuit2<F> {
+    #[cfg(test)]
     pub fn get_matrices() -> BTreeMap<Label, Vec<Matrix<F>>> {
         let two = F::one() + F::one();
         let mut map: BTreeMap<Label, Vec<Matrix<F>>> = BTreeMap::new();
