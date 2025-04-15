@@ -12,7 +12,7 @@ ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
 ark-crypto-primitives = { workspace = true }
-ark-r1cs-std = { workspace = true }
+ark-r1cs-std = { workspace = true, features = [ "std" ] }
 ark-relations = { workspace = true }
 merlin = { workspace = true }
 displaydoc = { workspace = true }
@@ -68,6 +68,11 @@ name = "rescue-hyperplonk"
 path = "benches/rescue-hyperplonk.rs"
 harness = false
 
+
+[[bench]]
+name = "rescue-gr1cs-synthesis"
+path = "benches/rescue-gr1cs-synthesis.rs"
+harness = false
 
 [features]
 default = ["std", "parallel"]

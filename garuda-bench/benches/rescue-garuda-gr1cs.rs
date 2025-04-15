@@ -26,6 +26,7 @@ use std::any::type_name;
 use std::env;
 use std::ops::Neg;
 use std::time::Duration;
+
 #[cfg(feature = "gr1cs")]
 fn bench<E: Pairing>(
     _bench_name: &str,
