@@ -224,10 +224,15 @@ impl<E: Pairing> Pari<E> {
         end_timer!(timer_synthesize_circuit);
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
-        sr1cs_cs.finalize();
+        // sr1cs_cs.finalize();
+        let mut sr1cs_inner = sr1cs_cs.into_inner().unwrap();
+        let _ = sr1cs_inner.perform_instance_outlining(InstanceOutliner {
+            pred_label: SR1CS_PREDICATE_LABEL.to_string(),
+            func: Rc::new(outline_sr1cs),
+        });
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
-        Ok(sr1cs_cs.into_inner().unwrap())
+        Ok(sr1cs_inner)
     }
 
     #[allow(clippy::type_complexity)]
