@@ -172,7 +172,7 @@ impl<E: Pairing> Pari<E> {
         output
     }
 
-    fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
     ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
     where

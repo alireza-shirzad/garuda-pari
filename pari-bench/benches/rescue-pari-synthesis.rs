@@ -5,11 +5,13 @@ use ark_crypto_primitives::sponge::rescue::RescueConfig;
 use ark_crypto_primitives::{crh::rescue::CRH, sponge::Absorb};
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::PrimeField;
-use ark_relations::gr1cs;
-use ark_relations::gr1cs::instance_outliner::outline_r1cs;
 use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
+use ark_relations::gr1cs::instance_outliner::{outline_r1cs, outline_sr1cs};
+use ark_relations::gr1cs::predicate::polynomial_constraint::SR1CS_PREDICATE_LABEL;
 use ark_relations::gr1cs::ConstraintSynthesizer;
 use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
+use ark_relations::gr1cs::{self, ConstraintSystem, OptimizationGoal};
+use ark_relations::sr1cs::Sr1csAdapter;
 use ark_serialize::CanonicalSerialize;
 use ark_std::rc::Rc;
 use ark_std::UniformRand;
@@ -65,32 +67,23 @@ where
     };
     let setup_circuit = circuit.clone();
     let (mut pk, mut vk) = Pari::<E>::keygen(setup_circuit, &mut rng);
-    for _ in 0..num_keygen_iterations {
-        let setup_circuit = circuit.clone();
-        let start = ark_std::time::Instant::now();
-        (pk, vk) = Pari::<E>::keygen(setup_circuit, &mut rng);
-        keygen_time += start.elapsed();
-    }
     let pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
     let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
     let prover_circuit = circuit.clone();
-    let mut proof = Pari::<E>::prove(prover_circuit, &pk).unwrap();
-    for _ in 0..num_prover_iterations {
-        let prover_circuit = circuit.clone();
-        let start = ark_std::time::Instant::now();
-        proof = Pari::<E>::prove(prover_circuit, &pk).unwrap();
-        prover_time += start.elapsed();
-    }
-    let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
     let start = ark_std::time::Instant::now();
-    for _ in 0..num_verifier_iterations {
-        assert!(Pari::verify(
-            &proof,
-            &vk,
-            &vec![expected_image; input_size - 1],
-        ));
-    }
-    verifier_time += start.elapsed();
+    let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+    cs.set_optimization_goal(OptimizationGoal::Constraints);
+    prover_circuit.generate_constraints(cs.clone()).unwrap();
+    cs.finalize();
+    let sr1cs_cs =
+        Sr1csAdapter::r1cs_to_sr1cs_with_assignment(&mut cs.into_inner().unwrap()).unwrap();
+
+    let mut sr1cs_inner = sr1cs_cs.into_inner().unwrap();
+    let _ = sr1cs_inner.perform_instance_outlining(InstanceOutliner {
+        pred_label: SR1CS_PREDICATE_LABEL.to_string(),
+        func: Rc::new(outline_sr1cs),
+    });
+    prover_time += start.elapsed();
     let cs = gr1cs::ConstraintSystem::new_ref();
     cs.set_instance_outliner(InstanceOutliner {
         pred_label: R1CS_PREDICATE_LABEL.to_string(),
@@ -111,10 +104,10 @@ where
         num_verifier_iterations: num_verifier_iterations as usize,
         pk_size,
         vk_size,
-        proof_size,
-        prover_time: (prover_time / num_prover_iterations),
-        verifier_time: (verifier_time / num_verifier_iterations),
-        keygen_time: (keygen_time / num_keygen_iterations),
+        proof_size: 0,
+        prover_time ,
+        verifier_time,
+        keygen_time,
     }
 }
 
@@ -130,29 +123,12 @@ fn main() {
         .build_global()
         .unwrap();
 
-    /////////// Benchmark Pari for different input sizes ///////////
-    let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
-    for input in &num_inputs {
-        let _ = bench::<Bls12_381>(1, *input, 1, 1, 1000, num_thread).save_to_csv("pari.csv");
-    }
-
     /////////// Benchmark Pari for different circuit sizes ///////////
-    // const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
-    // let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
-    //     .map(|i| 2_usize.pow(i as u32))
-    //     .collect();
-    // for invocation in &num_invocations {
-    //     let _ = bench::<Bls12_381>(*invocation, 20, 1, 1, 100, num_thread).save_to_csv("pari.csv");
-    // }
-}
-
-#[cfg(feature = "sol")]
-fn main() {
-    ThreadPoolBuilder::new()
-        .num_threads(10)
-        .build_global()
-        .unwrap();
-    for i in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
-        let _ = bench::<Bn254>(2, *i, 1, 1, 1, 10);
+    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    for invocation in &num_invocations {
+        let _ = bench::<Bls12_381>(*invocation, 20, 1, 1, 0, num_thread).save_to_csv("pari-synthesis.csv");
     }
 }
