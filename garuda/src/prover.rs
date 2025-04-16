@@ -189,7 +189,7 @@ where
         cs.set_optimization_goal(OptimizationGoal::Constraints);
         cs.set_mode(gr1cs::SynthesisMode::Prove {
             construct_matrices: true,
-            generate_lc_assignments: false,
+            generate_lc_assignments: true,
         });
         cs.set_instance_outliner(InstanceOutliner {
             pred_label: R1CS_PREDICATE_LABEL.to_string(),
@@ -201,7 +201,6 @@ where
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
-
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
         Ok(cs.into_inner().unwrap())
