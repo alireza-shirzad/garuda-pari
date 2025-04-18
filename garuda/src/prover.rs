@@ -29,9 +29,7 @@ use ark_relations::gr1cs::{
     ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
     R1CS_PREDICATE_LABEL,
 };
-use ark_std::{
-    cfg_into_iter, cfg_iter, end_timer, rand::RngCore, start_timer, sync::Arc,
-};
+use ark_std::{cfg_into_iter, cfg_iter, end_timer, rand::RngCore, start_timer, sync::Arc};
 use shared_utils::transcript::IOPTranscript;
 
 use rayon::iter::IntoParallelIterator;
@@ -52,14 +50,12 @@ where
         E::ScalarField: std::convert::From<i32>,
     {
         let timer_prove = start_timer!(|| "Prove");
-        let cs = Self::circuit_to_prover_cs(circuit)?;
+        let (index, x_assignment, w_assignment) = Self::circuit_to_prover_cs(circuit)?;
         // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
         let timer_extract_i_x_w =
             start_timer!(|| "Extract NP index, intance, witness and extended witness");
-        let x_assignment: &[E::ScalarField] = &cs.assignments.instance_assignment;
-        let w_assignment: &[E::ScalarField] = &cs.assignments.witness_assignment;
-        let z_assignment: Vec<E::ScalarField> = [x_assignment, w_assignment].concat();
-        let index: Index<E::ScalarField> = Index::new(&cs);
+        let mut z_assignment = x_assignment.clone();
+        z_assignment.extend(w_assignment.iter());
         end_timer!(timer_extract_i_x_w);
 
         // initilizing the transcript
@@ -85,7 +81,7 @@ where
         // Line 3-b figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_epc_commit = start_timer!(|| "EPC Commit");
         let w_batched_comm =
-            MultilinearEPC::<E, R>::batch_commit(&pk.epc_ck, &mw_polys, Some(w_assignment));
+            MultilinearEPC::<E, R>::batch_commit(&pk.epc_ck, &mw_polys, Some(&w_assignment));
         let _ = transcript
             .append_serializable_element("batched_commitments".as_bytes(), &w_batched_comm);
         end_timer!(timer_epc_commit);
@@ -98,6 +94,7 @@ where
             Self::build_grand_poly(&z_polys, &pk.sel_polys, &index);
         end_timer!(timer_buid_grand_poly);
 
+        // grand_poly.print_evals();
         let timer_zero_check = start_timer!(|| "Zero Check");
         let zero_check_proof: IOPProof<E::ScalarField> = <PolyIOP<E::ScalarField> as ZeroCheck<
             E::ScalarField,
@@ -175,9 +172,16 @@ where
         result
     }
 
-    fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    ) -> Result<
+        (
+            Index<E::ScalarField>,
+            Vec<E::ScalarField>,
+            Vec<E::ScalarField>,
+        ),
+        SynthesisError,
+    >
     where
         E: Pairing,
         E::ScalarField: Field,
@@ -200,10 +204,19 @@ where
         end_timer!(timer_synthesize_circuit);
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
+        assert!(cs.is_satisfied().unwrap());
         cs.finalize();
+        assert!(cs.is_satisfied().unwrap());
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
-        Ok(cs.into_inner().unwrap())
+        let cs_inner = cs.into_inner().unwrap();
+        let x_assignment: &[E::ScalarField] = &cs_inner.assignments.instance_assignment;
+        let w_assignment: &[E::ScalarField] = &cs_inner.assignments.witness_assignment;
+        Ok((
+            Index::new(&cs_inner),
+            x_assignment.to_vec(),
+            w_assignment.to_vec(),
+        ))
     }
 
     #[allow(clippy::type_complexity)]
@@ -271,12 +284,11 @@ where
             .collect();
 
         for (c, (_, predicate_type)) in index.predicate_types.iter().enumerate() {
-            let predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm> = match predicate_type
-                .clone()
-            {
-                Predicate::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
-                _ => unimplemented!("Only polynomial predicates are supported"),
-            };
+            let predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm> =
+                match predicate_type.clone() {
+                    Predicate::Polynomial(polynomial_predicate) => polynomial_predicate.polynomial,
+                    _ => unimplemented!("Only polynomial predicates are supported"),
+                };
             Self::build_grand_poly_multi_pred(
                 predicate_poly,
                 &sel_arcs[c],

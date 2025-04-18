@@ -137,8 +137,12 @@ where
         vk_size,
         proof_size,
         prover_time: (prover_time / num_prover_iterations),
+        prover_prep_time: Duration::new(0, 0),
+        prover_corrected_time: ((prover_time) / num_prover_iterations),
         verifier_time: (verifier_time / num_verifier_iterations),
         keygen_time: (keygen_time / num_keygen_iterations),
+        keygen_prep_time: Duration::new(0, 0),
+        keygen_corrected_time: ((keygen_time) / num_keygen_iterations),
     }
 }
 

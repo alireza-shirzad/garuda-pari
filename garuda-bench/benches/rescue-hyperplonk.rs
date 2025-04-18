@@ -1,8 +1,11 @@
 use ark_bls12_381_v4::Bls12_381;
+use ark_crypto_primitives::crh::sha256::digest::KeyInit;
 use ark_crypto_primitives_v4::sponge::Absorb;
 use ark_ec_v4::pairing::Pairing;
 use ark_ec_v4::AffineRepr;
 use ark_ff_v4::PrimeField;
+use ark_relations::utils::HashBuilder;
+use ark_relations::utils::IndexMap;
 use ark_serialize_v4::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::log2;
 use ark_std::test_rng;
@@ -16,6 +19,7 @@ use hp_subroutines::PolynomialCommitmentScheme;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::ops::Neg;
@@ -94,7 +98,7 @@ where
     BenchResult {
         curve: type_name::<E>().to_string(),
         num_constraints: 1 << nv,
-        predicate_constraints: hashbrown::HashMap::new(),
+        predicate_constraints: IndexMap::with_hasher(HashBuilder::default()),
         num_invocations,
         input_size,
         num_thread,
@@ -105,8 +109,12 @@ where
         vk_size: 0,
         proof_size,
         prover_time: (prover_time / num_prover_iterations),
+        prover_prep_time: Duration::new(0, 0),
+        prover_corrected_time: (prover_time / num_prover_iterations),
         verifier_time: (verifier_time / num_verifier_iterations),
         keygen_time: (keygen_time / num_keygen_iterations),
+        keygen_prep_time: Duration::new(0, 0),
+        keygen_corrected_time: (keygen_time / num_keygen_iterations),
     }
 }
 

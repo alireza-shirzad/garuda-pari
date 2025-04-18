@@ -23,11 +23,10 @@ use garuda_bench::{create_test_rescue_parameter, RescueDemo};
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
-use std::env;
 use std::ops::Neg;
 use std::time::Duration;
-#[cfg(feature = "r1cs")]
-fn run_bench<E: Pairing>(
+
+fn bench<E: Pairing>(
     _bench_name: &str,
     num_invocations: usize,
     input_size: usize,
@@ -55,7 +54,9 @@ where
         expected_image = CRH::<E::ScalarField>::evaluate(&config, output.clone()).unwrap();
     }
     let mut prover_time = Duration::new(0, 0);
+    let mut prover_prep_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
+    let mut keygen_prep_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
     let circuit = RescueDemo::<E::ScalarField> {
         input: Some(input.clone()),
@@ -64,30 +65,45 @@ where
         num_invocations,
         num_instances: input_size,
     };
-    let setup_circuit = circuit.clone();
-    let (mut pk, mut vk) = Garuda::<E, StdRng>::keygen(setup_circuit, &mut rng);
+    let (mut pk, mut vk) = (None, None);
     for _ in 0..num_keygen_iterations {
         let setup_circuit = circuit.clone();
+
         let start = ark_std::time::Instant::now();
-        (pk, vk) = Garuda::<E, StdRng>::keygen(setup_circuit, &mut rng);
+        let _cs = Garuda::<E, StdRng>::circuit_to_keygen_cs(circuit.clone()).unwrap();
+        keygen_prep_time += start.elapsed();
+        let start = ark_std::time::Instant::now();
+        let (ipk, ivk) = Garuda::<E, StdRng>::keygen(setup_circuit, &mut rng);
+        pk = Some(ipk);
+        vk = Some(ivk);
         keygen_time += start.elapsed();
     }
-    let pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
-    let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
-    let prover_circuit = circuit.clone();
-    let mut proof = Garuda::<E, StdRng>::prove(prover_circuit, &pk).unwrap();
+    let pk_size = pk
+        .as_ref()
+        .unwrap()
+        .serialized_size(ark_serialize::Compress::Yes);
+    let vk_size = vk
+        .as_ref()
+        .unwrap()
+        .serialized_size(ark_serialize::Compress::Yes);
+    let mut proof = None;
     for _ in 0..num_prover_iterations {
         let prover_circuit = circuit.clone();
+
         let start = ark_std::time::Instant::now();
-        proof = Garuda::<E, StdRng>::prove(prover_circuit, &pk).unwrap();
+
+        let _cs = Garuda::<E, StdRng>::circuit_to_prover_cs(circuit.clone()).unwrap();
+        prover_prep_time += start.elapsed();
+        let start = ark_std::time::Instant::now();
+        proof = Some(Garuda::<E, StdRng>::prove(prover_circuit, pk.as_ref().unwrap()).unwrap());
         prover_time += start.elapsed();
     }
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
     let start = ark_std::time::Instant::now();
     for _ in 0..num_verifier_iterations {
         assert!(Garuda::<E, StdRng>::verify(
-            &proof,
-            &vk,
+            proof.as_ref().unwrap(),
+            vk.as_ref().unwrap(),
             &vec![expected_image; input_size - 1]
         ));
     }
@@ -114,29 +130,52 @@ where
         vk_size,
         proof_size,
         prover_time: (prover_time / num_prover_iterations),
+        prover_prep_time: (prover_prep_time / num_prover_iterations),
+        prover_corrected_time: ((prover_time - prover_prep_time) / num_prover_iterations),
         verifier_time: (verifier_time / num_verifier_iterations),
         keygen_time: (keygen_time / num_keygen_iterations),
+        keygen_prep_time: (keygen_prep_time / num_keygen_iterations),
+        keygen_corrected_time: ((keygen_time - keygen_prep_time) / num_keygen_iterations),
     }
 }
 
 fn main() {
-    let num_thread = env::var("NUM_THREAD")
-        .unwrap_or_else(|_| "default".to_string())
-        .parse::<usize>()
-        .unwrap();
-
-    ThreadPoolBuilder::new()
-        .num_threads(num_thread)
-        .build_global()
-        .unwrap();
-
-    /////////// Benchmark Pari for different circuit sizes ///////////
     const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
-    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
-        .map(|i| 2_usize.pow(i as u32))
-        .collect();
-    for num_invocation in &num_invocations {
-        let _ = run_bench::<Bls12_381>("bench", *num_invocation, 20, 1, 1, 100, num_thread)
-            .save_to_csv("garuda-r1cs.csv");
+    let num_invocations: Vec<usize> = (4..6).map(|i| 2_usize.pow(i as u32)).collect();
+
+    for &num_thread in &[1, 4] {
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(num_thread)
+            .build()
+            .expect("Failed to build thread pool");
+
+        pool.install(|| {
+            for &num_invocation in &num_invocations {
+                const GARUDA_VARIANT: &str = {
+                    #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
+                    {
+                        "garuda-gr1cs"
+                    }
+
+                    #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
+                    {
+                        "garuda-r1cs"
+                    }
+
+                    // Fire a helpful error if the build is mis‑configured.
+                    #[cfg(not(any(
+                        all(feature = "gr1cs", not(feature = "r1cs")),
+                        all(feature = "r1cs", not(feature = "gr1cs"))
+                    )))]
+                    {
+                        compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".");
+                    }
+                };
+
+                let filename = format!("{GARUDA_VARIANT}-{}t.csv", num_thread);
+                let _ = bench::<Bls12_381>("bench", num_invocation, 20, 1, 1, 100, num_thread)
+                    .save_to_csv(&filename);
+            }
+        });
     }
 }

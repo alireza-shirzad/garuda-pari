@@ -8,9 +8,9 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_relations::gr1cs::{
+use ark_relations::{gr1cs::{
     predicate::Predicate, ConstraintSystem, Label, Matrix,
-};
+}, utils::IndexMap};
 use ark_serialize::CanonicalSerialize;
 use ark_std::log2;
 
@@ -76,7 +76,7 @@ pub struct Proof<E: Pairing> {
 
 #[derive(Debug, Clone)]
 /// A datastructure representing the index of the Generalized rank1 constraint system (GR1CS)
-pub(crate) struct Index<F: Field> {
+pub struct Index<F: Field> {
     /// The number of instance variables
     pub instance_len: usize,
     /// The log of the number of constraints rounded up
@@ -90,7 +90,7 @@ pub(crate) struct Index<F: Field> {
     /// The maximum degree of the predicates, assuming that all the predicate are polynomial predicates
     pub predicate_max_deg: usize,
     /// The individual number of constraints of the predicates
-    pub predicate_num_constraints: HashMap<Label, usize>,
+    pub predicate_num_constraints: IndexMap<Label, usize>,
     /// The matrices of the predicates
     pub predicate_matrices: BTreeMap<Label, Vec<Matrix<F>>>,
     /// The types of the predicates

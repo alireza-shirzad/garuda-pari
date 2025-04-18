@@ -131,19 +131,19 @@ fn main() {
         .unwrap();
 
     /////////// Benchmark Pari for different input sizes ///////////
-    let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
-    for input in &num_inputs {
-        let _ = bench::<Bls12_381>(1, *input, 1, 1, 1000, num_thread).save_to_csv("pari.csv");
-    }
+    // let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
+    // for input in &num_inputs {
+    //     let _ = bench::<Bls12_381>(1, *input, 1, 1, 1000, num_thread).save_to_csv("pari.csv");
+    // }
 
     /////////// Benchmark Pari for different circuit sizes ///////////
-    // const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
-    // let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
-    //     .map(|i| 2_usize.pow(i as u32))
-    //     .collect();
-    // for invocation in &num_invocations {
-    //     let _ = bench::<Bls12_381>(*invocation, 20, 1, 1, 100, num_thread).save_to_csv("pari.csv");
-    // }
+    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
+    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    for invocation in &num_invocations {
+        let _ = bench::<Bls12_381>(*invocation, 20, 1, 1, 100, num_thread).save_to_csv("pari.csv");
+    }
 }
 
 #[cfg(feature = "sol")]

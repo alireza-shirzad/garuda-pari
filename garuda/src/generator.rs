@@ -1,32 +1,32 @@
-use std::{iter::repeat_n, rc::Rc};
-
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::SparseMultilinearExtension;
 use hashbrown::HashMap;
+use rayon::iter::repeatn;
+use std::{collections::BTreeMap, rc::Rc};
 
 use crate::{
     arithmetic::DenseMultilinearExtension,
     data_structures::{Index, ProvingKey, SuccinctIndex, VerifyingKey},
     epc::{
-        data_structures::{
-            Generators, MLBatchedCommitment, MLCommitmentKey, MLPublicParameters,
-        },
+        data_structures::{Generators, MLBatchedCommitment, MLCommitmentKey, MLPublicParameters},
         multilinear::MultilinearEPC,
         EPC,
     },
     utils::stack_matrices,
     Garuda,
 };
-use ark_relations::gr1cs::{
-    self,
-    instance_outliner::{outline_r1cs, InstanceOutliner},
-    transpose, ConstraintSynthesizer, ConstraintSystem, Label, Matrix, OptimizationGoal,
-    SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
+use ark_relations::{
+    gr1cs::{
+        self,
+        instance_outliner::{outline_r1cs, InstanceOutliner},
+        transpose, ConstraintSynthesizer, ConstraintSystem, Label, Matrix, OptimizationGoal,
+        SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
+    },
+    utils::IndexMap,
 };
 use ark_std::{
-    cfg_into_iter, cfg_iter, end_timer, rand::RngCore, start_timer,
-    vec::Vec, UniformRand,
+    cfg_into_iter, cfg_iter, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand,
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
@@ -45,9 +45,8 @@ where
         E::ScalarField: Field,
     {
         let timer_generator = start_timer!(|| "Generator");
-        let cs = Self::circuit_to_keygen_cs(circuit).unwrap();
+        let index = Self::circuit_to_keygen_cs(circuit).unwrap();
         let timer_indexer = start_timer!(|| "Constraint System Startup");
-        let index = Index::new(&cs);
         end_timer!(timer_indexer);
 
         // Generate the public parameters for the multilinear EPC
@@ -107,9 +106,9 @@ where
         (pk, vk)
     }
 
-    fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-    ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
+    ) -> Result<Index<E::ScalarField>, SynthesisError>
     where
         E: Pairing,
         E::ScalarField: Field,
@@ -133,12 +132,12 @@ where
 
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
-        Ok(cs.into_inner().unwrap())
+        Ok(Index::new(&cs.into_inner().unwrap()))
     }
 
     fn create_sel_polynomials(
         num_vars: usize,
-        predicate_num_constraints: &HashMap<Label, usize>,
+        predicate_num_constraints: &IndexMap<Label, usize>,
     ) -> Vec<DenseMultilinearExtension<E::ScalarField>>
     where
         E: Pairing,
@@ -155,11 +154,12 @@ where
         }
 
         // Now build the polynomials in parallel
-        let sel_polynomials: Vec<_> = cfg_into_iter!(offsets_and_counts)
+        let sel_polynomials: Vec<_> = (offsets_and_counts)
+            .iter()
             .map(|(offset, count)| {
-                let evaluations: Vec<_> = repeat_n(E::ScalarField::zero(), offset)
-                    .chain(repeat_n(E::ScalarField::ONE, count))
-                    .chain(repeat_n(
+                let evaluations: Vec<_> = repeatn(E::ScalarField::zero(), *offset)
+                    .chain(repeatn(E::ScalarField::ONE, *count))
+                    .chain(repeatn(
                         E::ScalarField::zero(),
                         domain_size - offset - count,
                     ))

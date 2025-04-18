@@ -22,7 +22,6 @@ num-bigint = { workspace = true }
 ark-bls12-381 = { workspace = true }
 ark-spartan = { git = "https://github.com/alireza-shirzad/spartan.git", default-features = false }
 
-
 # These are for the hyperplonk benches
 hp-hyperplonk = { package = "hyperplonk", git = "https://github.com/alireza-shirzad/hyperplonk" }
 hp-subroutines = { package = "subroutines", git = "https://github.com/alireza-shirzad/hyperplonk" }
@@ -41,24 +40,11 @@ hashbrown = { workspace = true }
 
 
 [[bench]]
-name = "rescue-garuda-gr1cs"
-path = "benches/rescue-garuda-gr1cs.rs"
+name = "rescue-garuda"
+path = "benches/rescue-garuda.rs"
 harness = false
-required-features = [ "gr1cs" ]
 
 
-[[bench]]
-name = "rescue-garuda-r1cs"
-path = "benches/rescue-garuda-r1cs.rs"
-harness = false
-required-features = [ "r1cs" ]
-
-
-[[bench]]
-name = "rescue-spartan-r1cs"
-path = "benches/rescue-spartan-r1cs.rs"
-harness = false
-required-features = [ "r1cs" ]
 
 [[bench]]
 name = "rescue-spartan-ccs"
@@ -72,11 +58,6 @@ path = "benches/rescue-hyperplonk.rs"
 harness = false
 
 
-[[bench]]
-name = "rescue-gr1cs-synthesis"
-path = "benches/rescue-gr1cs-synthesis.rs"
-harness = false
-required-features = [ "gr1cs" ]
 
 [features]
 default = ["std", "parallel"]

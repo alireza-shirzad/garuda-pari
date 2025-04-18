@@ -14,3 +14,4 @@ ark-ec = { workspace = true }
 merlin = { workspace = true }
 displaydoc = { workspace = true }
 hashbrown = { workspace = true }
+ark-relations = { workspace = true }

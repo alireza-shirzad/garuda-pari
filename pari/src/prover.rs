@@ -193,12 +193,6 @@ impl<E: Pairing> Pari<E> {
         let sr1cs_timer = start_timer!(|| "Convert to SR1CS");
         let sr1cs_cs =
             Sr1csAdapter::r1cs_to_sr1cs_with_assignment(&mut cs.into_inner().unwrap()).unwrap();
-        // sr1cs_cs.set_instance_outliner(InstanceOutliner {
-        //     pred_label: SR1CS_PREDICATE_LABEL.to_string(),
-        //     func: Rc::new(outline_sr1cs),
-        // });
-
-        // sr1cs_cs.finalize();
 
         let mut sr1cs_inner = sr1cs_cs.into_inner().unwrap();
         let _ = sr1cs_inner.perform_instance_outlining(InstanceOutliner {

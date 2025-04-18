@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
+use ark_relations::utils::IndexMap;
 use csv::Writer;
 use std::error::Error;
 use std::fs::{metadata, OpenOptions};
@@ -13,12 +15,16 @@ pub struct BenchResult {
     pub num_keygen_iterations: usize,
     pub num_prover_iterations: usize,
     pub num_verifier_iterations: usize,
-    pub predicate_constraints: hashbrown::HashMap<String, usize>,
+    pub predicate_constraints: IndexMap<String, usize>,
     pub num_constraints: usize,
     pub keygen_time: Duration,
+    pub keygen_prep_time: Duration,
+    pub keygen_corrected_time: Duration,
     pub pk_size: usize,
     pub vk_size: usize,
     pub prover_time: Duration,
+    pub prover_prep_time: Duration,
+    pub prover_corrected_time: Duration,
     pub proof_size: usize,
     pub verifier_time: Duration,
 }
@@ -45,10 +51,14 @@ impl BenchResult {
                 "Predicate Constraints",
                 "Num KeyGen Iterations",
                 "Setup Time (s)",
+                "Setup Preparation Time (s)",
+                "Setup Corrected Time (s)",
                 "PK Size (bytes)",
                 "VK Size (bytes)",
                 "Num Prover Iterations",
                 "Prover Time (s)",
+                "Prover preparation Time (s)",
+                "Prover Corrected Time (s)",
                 "Proof Size (bytes)",
                 "Num Verifier Iterations",
                 "Verifier Time (ms)",
@@ -59,6 +69,10 @@ impl BenchResult {
         let predicate_constraints_str = serde_json::to_string(&self.predicate_constraints.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>())?;
         let keygen_time_ms = self.keygen_time.as_secs_f64();
         let prover_time_ms = self.prover_time.as_secs_f64();
+        let keygen_prep_time_ms = self.keygen_prep_time.as_secs_f64();
+        let prover_prep_time_ms = self.prover_prep_time.as_secs_f64();
+        let keygen_corrected_time_ms = self.keygen_corrected_time.as_secs_f64();
+        let prover_corrected_time_ms = self.prover_corrected_time.as_secs_f64();
         let verifier_time_ms = self.verifier_time.as_secs_f64() * 1000.0;
 
         writer.write_record(&[
@@ -70,6 +84,8 @@ impl BenchResult {
             predicate_constraints_str,
             self.num_keygen_iterations.to_string(),
             keygen_time_ms.to_string(),
+            keygen_prep_time_ms.to_string(),
+            keygen_corrected_time_ms.to_string(),
             match self.pk_size {
                 0 => "-".to_string(),
                 _ => self.pk_size.to_string(),
@@ -80,6 +96,8 @@ impl BenchResult {
             },
             self.num_prover_iterations.to_string(),
             prover_time_ms.to_string(),
+            prover_prep_time_ms.to_string(),
+            prover_corrected_time_ms.to_string(),
             match self.proof_size {
                 0 => "-".to_string(),
                 _ => self.proof_size.to_string(),
