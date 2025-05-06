@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
 use hashbrown::HashMap;
+use std::collections::BTreeMap;
 
 use crate::{
     arithmetic::DenseMultilinearExtension,
@@ -8,9 +8,10 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_relations::{gr1cs::{
-    predicate::Predicate, ConstraintSystem, Label, Matrix,
-}, utils::IndexMap};
+use ark_relations::{
+    gr1cs::{predicate::Predicate, ConstraintSystem, Label, Matrix},
+    utils::IndexMap,
+};
 use ark_serialize::CanonicalSerialize;
 use ark_std::log2;
 

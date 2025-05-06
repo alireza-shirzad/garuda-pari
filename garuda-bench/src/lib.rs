@@ -1,4 +1,4 @@
-use std::str::FromStr;
+pub mod bellpepper_adapter;
 
 use ark_crypto_primitives::{
     crh::{
@@ -15,6 +15,7 @@ use ark_relations::gr1cs::{
 use garuda::ConstraintSystemRef;
 use num_bigint::BigUint;
 use rand::Rng;
+use std::str::FromStr;
 
 pub const RESCUE_ROUNDS: usize = 12;
 pub const WIDTH: usize = 9;
