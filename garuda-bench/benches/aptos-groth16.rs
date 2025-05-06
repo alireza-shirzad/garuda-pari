@@ -28,7 +28,7 @@ async fn main() {
     ////////////////// KeyGen ////////////////
     let start = Instant::now();
     let (pk, vk) = Groth16::<E>::setup(circom.clone(), &mut rng).unwrap();
-    let pvk = prepare_verifying_key::<E>(&vk);
+    let pvk = prepare_verifying_key(&vk);
     let duration = start.elapsed();
     println!("Keygen took: {:?}", duration);
 
@@ -37,7 +37,7 @@ async fn main() {
     let circom = circom.clone();
     let instance = circom.get_public_inputs().unwrap();
     let start = Instant::now();
-    let proof = Groth16::<E>::prove(&pk, circom, &mut rng).unwrap();
+    let proof = Groth16::<E>::create_proof_with_reduction_no_zk(circom, &pk).unwrap();
     let duration = start.elapsed();
     println!("Prover took: {:?}", duration);
 

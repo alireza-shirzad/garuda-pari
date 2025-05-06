@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-use std::time::Duration;
-
 use ark_relations::utils::IndexMap;
 use csv::Writer;
+use std::time::Duration;
 use std::error::Error;
 use std::fs::{metadata, OpenOptions};
 

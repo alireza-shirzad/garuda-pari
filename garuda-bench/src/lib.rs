@@ -9,9 +9,7 @@ use ark_crypto_primitives::{
 };
 use ark_ff::PrimeField;
 use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
-use ark_relations::gr1cs::{
-    predicate::PredicateConstraintSystem, ConstraintSynthesizer, SynthesisError,
-};
+use ark_relations::gr1cs::{ConstraintSynthesizer, SynthesisError};
 use garuda::ConstraintSystemRef;
 use num_bigint::BigUint;
 use rand::Rng;
@@ -60,6 +58,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
         #[cfg(feature = "gr1cs")]
         {
+            use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
             let pow_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
                 2,
                 vec![(F::from(1i8), vec![(0, 5)]), (F::from(-1i8), vec![(1, 1)])],
