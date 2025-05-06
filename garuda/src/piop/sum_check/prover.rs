@@ -14,12 +14,12 @@ use crate::piop::{
 };
 use ark_ff::{batch_inversion, PrimeField};
 use ark_poly::DenseMultilinearExtension;
-use ark_std::{cfg_into_iter, end_timer, start_timer, vec::Vec};
+use ark_std::{cfg_into_iter, cfg_iter_mut, end_timer, start_timer, vec::Vec};
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::sync::Arc;
 
 #[cfg(feature = "parallel")]
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use rayon::prelude::*;
 
 impl<F: PrimeField> SumCheckProver<F> for IOPProverState<F> {
     type VirtualPolynomial = VirtualPolynomial<F>;
@@ -97,14 +97,7 @@ impl<F: PrimeField> SumCheckProver<F> for IOPProverState<F> {
             self.challenges.push(*chal);
 
             let r = self.challenges[self.round - 1];
-            #[cfg(feature = "parallel")]
-            flattened_ml_extensions
-                .par_iter_mut()
-                .for_each(|mle| *mle = fix_variables(mle, &[r]));
-            #[cfg(not(feature = "parallel"))]
-            flattened_ml_extensions
-                .iter_mut()
-                .for_each(|mle| *mle = fix_variables(mle, &[r]));
+            cfg_iter_mut!(flattened_ml_extensions).for_each(|mle| *mle = fix_variables(mle, &[r]));
         } else if self.round > 0 {
             return Err(PolyIOPErrors::InvalidProver(
                 "verifier message is empty".to_string(),
