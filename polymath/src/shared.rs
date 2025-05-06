@@ -4,14 +4,14 @@ use std::fmt::Debug;
 use std::iter::repeat_n;
 use std::ops::Neg;
 
-use crate::{Polymath, data_structures::VerifyingKey};
-use ark_ec::{AffineRepr, pairing::Pairing};
+use crate::{data_structures::VerifyingKey, Polymath};
+use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{Field, PrimeField};
 use ark_poly::univariate::{DenseOrSparsePolynomial, DensePolynomial, SparsePolynomial};
-use ark_poly::{EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial, domain};
+use ark_poly::{domain, EvaluationDomain, Evaluations, GeneralEvaluationDomain, Polynomial};
 use ark_relations::gr1cs::{ConstraintSynthesizer, Matrix};
-use ark_std::Zero;
 use ark_std::rand::RngCore;
+use ark_std::Zero;
 
 impl<E: Pairing> Polymath<E> {
     pub(crate) fn compute_c_at_x1(

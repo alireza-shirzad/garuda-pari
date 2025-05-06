@@ -64,7 +64,7 @@ pub struct MLCommitment<E: Pairing> {
 /// commitment
 pub struct MLBatchedCommitment<E: Pairing> {
     pub individual_comms: Vec<MLCommitment<E>>,
-    pub consistency_comm: Option<E::G1>,
+    pub consistency_comm: Option<E::G1Affine>,
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]

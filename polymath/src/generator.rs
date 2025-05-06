@@ -1,25 +1,25 @@
 use std::{cmp::max, rc::Rc};
 
 use crate::{
-    MINUS_ALPHA, MINUS_GAMMA, Polymath,
     data_structures::{ProvingKey, SuccinctIndex, VerifyingKey},
+    Polymath, MINUS_ALPHA, MINUS_GAMMA,
 };
 use ark_ec::{pairing::Pairing, scalar_mul::BatchMulPreprocessing};
 use ark_ff::{Field, Zero};
 use ark_poly::{
-    EvaluationDomain, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain, domain,
+    domain, EvaluationDomain, GeneralEvaluationDomain, Polynomial, Radix2EvaluationDomain,
 };
 use ark_relations::{
     gr1cs::{
-        self, ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal, SynthesisError,
-        SynthesisMode,
-        instance_outliner::{InstanceOutliner, outline_sr1cs},
+        self,
+        instance_outliner::{outline_sr1cs, InstanceOutliner},
         predicate::polynomial_constraint::SR1CS_PREDICATE_LABEL,
-        transpose,
+        transpose, ConstraintSynthesizer, ConstraintSystem, Matrix, OptimizationGoal,
+        SynthesisError, SynthesisMode,
     },
     sr1cs::Sr1csAdapter,
 };
-use ark_std::{UniformRand, end_timer, rand::RngCore, start_timer, vec::Vec};
+use ark_std::{end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 impl<E: Pairing> Polymath<E> {
@@ -145,9 +145,9 @@ impl<E: Pairing> Polymath<E> {
         let h = h.into();
         let x_h = x_h.into();
         let z_h = z_h.into();
-        
-        let k_domain_size_by_h_domain_size = k_domain.size_as_field_element()
-                / h_domain.size_as_field_element();
+
+        let k_domain_size_by_h_domain_size =
+            k_domain.size_as_field_element() / h_domain.size_as_field_element();
 
         /////////////////////////////////////////////////////////////////
         let vk = VerifyingKey {

@@ -3,8 +3,8 @@ use crate::{
     data_structures::{Proof, VerifyingKey},
     Pari,
 };
-use ark_ec::AffineRepr;
 use ark_ec::pairing::Pairing;
+use ark_ec::AffineRepr;
 use ark_ff::PrimeField;
 use ark_ff::{FftField, Field, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};

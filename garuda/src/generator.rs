@@ -1,9 +1,8 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::SparseMultilinearExtension;
-use hashbrown::HashMap;
 use rayon::iter::repeatn;
-use std::{collections::BTreeMap, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
     arithmetic::DenseMultilinearExtension,
@@ -25,20 +24,14 @@ use ark_relations::{
     },
     utils::IndexMap,
 };
-use ark_std::{
-    cfg_into_iter, cfg_iter, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand,
-};
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::IntoParallelRefIterator;
-use rayon::iter::ParallelIterator;
-impl<E, R> Garuda<E, R>
-where
-    E: Pairing,
-    R: RngCore,
-{
+use ark_std::{cfg_iter, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand};
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
+impl<E: Pairing> Garuda<E> {
     pub fn keygen<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
-        rng: &mut R,
+        mut rng: impl RngCore,
     ) -> (ProvingKey<E>, VerifyingKey<E>)
     where
         E: Pairing,
@@ -52,8 +45,8 @@ where
         // Generate the public parameters for the multilinear EPC
         let timer_epc_startup = start_timer!(|| "EPC Startup");
         let generators = Generators {
-            g: E::G1::rand(rng),
-            h: E::G2::rand(rng),
+            g: E::G1::rand(&mut rng),
+            h: E::G2::rand(&mut rng),
         };
         let epc_pp = MLPublicParameters {
             num_var: index.log_num_constraints,
@@ -67,7 +60,7 @@ where
         end_timer!(timer_epc_equif_constrs_gen);
         start_timer!(|| "Generating EPC Keys");
         let (epc_ck, epc_vk, _epc_tr) =
-            MultilinearEPC::<E, R>::setup(rng, &epc_pp, &equifficient_constrinats);
+            MultilinearEPC::<E>::setup(rng, &epc_pp, &equifficient_constrinats);
         end_timer!(timer_epc_startup);
         end_timer!(timer_epc_startup);
 
@@ -129,8 +122,8 @@ where
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
-
         end_timer!(timer_inlining);
+
         end_timer!(timer_cs_startup);
         Ok(Index::new(&cs.into_inner().unwrap()))
     }
@@ -215,7 +208,7 @@ where
                     &index.predicate_num_constraints,
                 );
                 let sel_comms: MLBatchedCommitment<E> =
-                    MultilinearEPC::<E, R>::batch_commit(epc_ck, &sel_polys, None);
+                    MultilinearEPC::batch_commit(epc_ck, &sel_polys, None);
                 (Some(sel_polys), Some(sel_comms))
             }
         }

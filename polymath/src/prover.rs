@@ -93,10 +93,12 @@ impl<E: Pairing> Polymath<E> {
             cs.num_constraints(),
         )
         .unwrap();
-        let xu_dense_poly =
-            Evaluations::from_vec_and_domain(cs.assignments.instance_assignment.clone(), pk.vk.k_domain)
-                .interpolate()
-                * domain_normalizer_poly;
+        let xu_dense_poly = Evaluations::from_vec_and_domain(
+            cs.assignments.instance_assignment.clone(),
+            pk.vk.k_domain,
+        )
+        .interpolate()
+            * domain_normalizer_poly;
         let u_dense_poly = Evaluations::from_vec_and_domain(zu_vec, pk.vk.h_domain).interpolate();
         let wu_dense_poly = &u_dense_poly - &xu_dense_poly;
         // Note that xw poly is zero, so we have ww = zw
@@ -165,7 +167,8 @@ impl<E: Pairing> Polymath<E> {
             + Self::mul_by_x_power(&h_zh_poly_sparse, pk.vk.sigma * (MINUS_GAMMA + MINUS_ALPHA))
             + r_over_y_to_gamma_poly;
 
-        let u_w_g1: E::G1Affine = Self::msm(&cs.assignments.witness_assignment, &pk.u_w_g1_vec).into();
+        let u_w_g1: E::G1Affine =
+            Self::msm(&cs.assignments.witness_assignment, &pk.u_w_g1_vec).into();
 
         let h_zh_x_over_y_to_alpha_g1: E::G1Affine =
             Self::msm(&h.coeffs, &pk.x_zh_over_y_alpha_g1_vec).into();

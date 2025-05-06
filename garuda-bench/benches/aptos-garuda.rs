@@ -1,16 +1,13 @@
-use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Instant};
+use std::time::Instant;
 
-use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
 use ark_relations::gr1cs::ConstraintSynthesizer;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_std::test_rng;
 use garuda::Garuda;
-use num_bigint::BigInt;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use rayon::ThreadPoolBuilder;
-use serde::Deserialize;
+use rand::{RngCore, SeedableRng};
+
 // Keygen took: 19.18047725s
 // Prover took: 58.543421709s
 // Verifier took: 5.030917ms
@@ -24,21 +21,24 @@ async fn main() {
         .unwrap();
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
     let mut builder = CircomBuilder::new(cfg);
-    builder.load_input_json("./circuits/aptos/input.json").unwrap();
+    builder
+        .load_input_json("./circuits/aptos/input.json")
+        .unwrap();
     let circom = builder.build().unwrap();
     let cs = ConstraintSystem::<Fr>::new_ref();
     circom.clone().generate_constraints(cs.clone()).unwrap();
     let start = Instant::now();
-    let (pk, vk) = Garuda::<E, StdRng>::keygen(circom.clone(), &mut rng);
+    let (pk, vk) = Garuda::<E>::keygen(circom.clone(), &mut rng);
     let duration = start.elapsed();
     println!("Keygen took: {:?}", duration);
-    let start = Instant::now();
-    let proof = Garuda::<E, StdRng>::prove(circom.clone(), &pk).unwrap();
-    let duration = start.elapsed();
-    println!("Prover took: {:?}", duration);
+    let circom = circom.clone();
     let instance = circom.get_public_inputs().unwrap();
     let start = Instant::now();
-    assert!(Garuda::<E, StdRng>::verify(&proof, &vk, &instance));
+    let proof = Garuda::prove(&pk, circom).unwrap();
+    let duration = start.elapsed();
+    println!("Prover took: {:?}", duration);
+    let start = Instant::now();
+    assert!(Garuda::verify(&proof, &vk, &instance));
     let duration = start.elapsed();
     println!("Verifier took: {:?}", duration);
 }

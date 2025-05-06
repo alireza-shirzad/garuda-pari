@@ -1,8 +1,8 @@
-use ark_ff::{BigInteger, BigInteger256, Field as arkField, PrimeField as arkPrimeField};
+use ark_ff::{BigInteger256, Field as arkField, PrimeField as arkPrimeField};
 use ark_r1cs_std::{
     alloc::{AllocVar, AllocationMode},
     boolean::Boolean,
-    fields::{fp::FpVar, FieldVar},
+    fields::fp::FpVar,
 };
 use ark_relations::gr1cs::{
     ConstraintSystemRef, Namespace, SynthesisError as arkSynthesisError, R1CS_PREDICATE_LABEL,
@@ -12,10 +12,8 @@ use bellpepper_core::{
     SynthesisError as bpSynthesisError,
 };
 use core::borrow::Borrow;
-use ff::{Field as novaField, PrimeField as novaPrimeField};
-use rayon::iter::ParallelBridge;
+use ff::PrimeField as novaPrimeField;
 use rayon::prelude::*;
-use std::sync::Arc;
 
 pub trait AllocIoVar<V: ?Sized, A: arkField>: Sized + AllocVar<V, A> {
     /// Allocates a new input/output pair of type `Self` in the `ConstraintSystem`
@@ -71,7 +69,7 @@ fn bellpepper_lc<N: novaPrimeField, CS: ConstraintSystem<N>>(
     alloc_io: &Vec<AllocatedNum<N>>,
     alloc_wits: &Vec<AllocatedNum<N>>,
     lc: &Vec<(N, usize)>,
-    i: usize,
+    _: usize,
 ) -> LinearCombination<N> {
     let mut lc_bellpepper = LinearCombination::zero();
 
@@ -109,14 +107,12 @@ impl<N: novaPrimeField<Repr = [u8; 32]>> FCircuit<N> {
     ) -> Self {
         ark_cs_ref.finalize();
         // assert!(ark_cs_ref.is_satisfied().unwrap());
-        
 
         let ark_cs = ark_cs_ref.borrow().unwrap();
 
         // io pairs + constant
         let instance_assignment = ark_cs.instance_assignment().unwrap();
         assert_eq!(instance_assignment[0], A::one());
-
 
         let input_assignments: Vec<N> = ark_cs
             .witness_assignment()
@@ -159,7 +155,6 @@ impl<N: novaPrimeField<Repr = [u8; 32]>> FCircuit<N> {
             wit_assignments,
         }
     }
-
 }
 
 impl<N: novaPrimeField<Repr = [u8; 32]>> Circuit<N> for FCircuit<N> {

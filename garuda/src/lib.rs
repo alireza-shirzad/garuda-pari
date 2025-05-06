@@ -1,8 +1,7 @@
 use ark_ec::pairing::Pairing;
-use ark_std::rand::RngCore;
+use ark_std::marker::PhantomData;
 
 pub use ark_relations::gr1cs::ConstraintSystemRef;
-use ark_std::marker::PhantomData;
 
 mod arithmetic;
 pub mod data_structures;
@@ -15,11 +14,10 @@ mod utils;
 mod verifier;
 
 /// The SNARK of [[Garuda]](https://eprint.iacr.org/2024/1245.pdf).
-pub struct Garuda<E: Pairing, R: RngCore> {
+pub struct Garuda<E: Pairing> {
     _p: PhantomData<E>,
-    _r: PhantomData<R>,
 }
 
-impl<E: Pairing, R: RngCore> Garuda<E, R> {
+impl<E: Pairing> Garuda<E> {
     pub const SNARK_NAME: &'static str = "Garuda";
 }

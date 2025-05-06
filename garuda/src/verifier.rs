@@ -9,14 +9,10 @@ use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::{Polynomial, SparseMultilinearExtension};
 use ark_relations::gr1cs::predicate::{polynomial_constraint::PolynomialPredicate, Predicate};
-use ark_std::{end_timer, marker::PhantomData, rand::RngCore, start_timer};
+use ark_std::{end_timer, marker::PhantomData, start_timer};
 use shared_utils::transcript::IOPTranscript;
 
-impl<E, R> Garuda<E, R>
-where
-    E: Pairing,
-    R: RngCore,
-{
+impl<E: Pairing> Garuda<E> {
     pub fn verify(proof: &Proof<E>, vk: &VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
     where
         E: Pairing,
@@ -114,7 +110,7 @@ where
             .chain(proof.clone().sel_poly_evals.unwrap_or_default())
             .collect();
 
-        if !MultilinearEPC::<E, R>::batch_verify(
+        if !MultilinearEPC::batch_verify(
             &vk.epc_vk,
             &batched_comm,
             &zero_check_subclaim.point,

@@ -1,12 +1,10 @@
 use ark_ff::Field;
-use ark_relations::{
-    gr1cs::{
-        ConstraintSynthesizer, ConstraintSystemRef, Variable, 
-    },
-    lc,
-};
 #[cfg(test)]
 use ark_relations::gr1cs::{Label, Matrix, R1CS_PREDICATE_LABEL};
+use ark_relations::{
+    gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, Variable},
+    lc,
+};
 #[cfg(test)]
 use ark_std::{collections::BTreeMap, string::ToString, vec::Vec};
 #[derive(Debug, Clone)]

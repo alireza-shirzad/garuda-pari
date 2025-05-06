@@ -11,12 +11,6 @@ mod util;
 mod virtual_polynomial;
 
 pub use errors::ArithErrors;
-pub use multilinear_polynomial::{
-    fix_variables,
-    random_mle_list,
-    DenseMultilinearExtension,
-};
+pub use multilinear_polynomial::{fix_variables, random_mle_list, DenseMultilinearExtension};
 pub use util::bit_decompose;
-pub use virtual_polynomial::{
-    eq_eval, VPAuxInfo, VirtualPolynomial,
-};
+pub use virtual_polynomial::{eq_eval, VPAuxInfo, VirtualPolynomial};

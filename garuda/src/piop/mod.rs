@@ -11,7 +11,6 @@ mod errors;
 pub mod prelude;
 mod structs;
 mod sum_check;
-mod utils;
 mod zero_check;
 
 #[derive(Clone, Debug, Default, Copy, PartialEq, Eq)]

@@ -1,6 +1,5 @@
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Instant};
 
-use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
 use ark_crypto_primitives::snark::{CircuitSpecificSetupSNARK, SNARK};
@@ -8,11 +7,11 @@ use ark_groth16::{prepare_verifying_key, Groth16};
 use ark_relations::gr1cs::ConstraintSynthesizer;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_std::test_rng;
-use garuda::Garuda;
 use num_bigint::BigInt;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use rayon::ThreadPoolBuilder;
+use rand::{RngCore, SeedableRng};
+
 use serde::Deserialize;
+
 #[tokio::main]
 async fn main() {
     type E = Bn254;
@@ -35,13 +34,14 @@ async fn main() {
 
     ////////////////// Prove ////////////////
 
+    let circom = circom.clone();
+    let instance = circom.get_public_inputs().unwrap();
     let start = Instant::now();
-    let proof = Groth16::<E>::prove(&pk, circom.clone(), &mut rng).unwrap();
+    let proof = Groth16::<E>::prove(&pk, circom, &mut rng).unwrap();
     let duration = start.elapsed();
     println!("Prover took: {:?}", duration);
 
     ////////////////// Verify ////////////////
-    let instance = circom.get_public_inputs().unwrap();
     let start = Instant::now();
     assert!(Groth16::<E>::verify_with_processed_vk(&pvk, &instance, &proof).unwrap());
     let duration = start.elapsed();

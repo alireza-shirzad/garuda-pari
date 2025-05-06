@@ -2,7 +2,7 @@ use ark_std::rand::RngCore;
 
 pub mod data_structures;
 pub mod multilinear;
-pub trait EPC<R: RngCore> {
+pub trait EPC {
     type PublicParameters;
     type OpeningProof;
     type BatchedOpeningProof;
@@ -20,7 +20,7 @@ pub trait EPC<R: RngCore> {
     type EquifficientConstraint;
 
     fn setup(
-        rng: &mut R,
+        rng: impl RngCore,
         pp: &Self::PublicParameters,
         equifficient_constrinats: &Self::EquifficientConstraint,
     ) -> (Self::CommitmentKey, Self::VerifyingKey, Self::Trapdoor);

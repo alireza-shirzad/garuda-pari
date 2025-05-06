@@ -8,9 +8,9 @@ mod generator;
 mod prover;
 // #[cfg(feature = "sol")]
 // mod solidity;
+mod shared;
 mod utils;
 mod verifier;
-mod shared;
 
 #[cfg(test)]
 mod test;

@@ -105,7 +105,7 @@ where
         pk_size,
         vk_size,
         proof_size: 0,
-        prover_time ,
+        prover_time,
         verifier_time,
         keygen_time,
     }
@@ -129,6 +129,7 @@ fn main() {
         .map(|i| 2_usize.pow(i as u32))
         .collect();
     for invocation in &num_invocations {
-        let _ = bench::<Bls12_381>(*invocation, 20, 1, 1, 0, num_thread).save_to_csv("pari-synthesis.csv");
+        let _ = bench::<Bls12_381>(*invocation, 20, 1, 1, 0, num_thread)
+            .save_to_csv("pari-synthesis.csv");
     }
 }

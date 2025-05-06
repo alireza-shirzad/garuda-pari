@@ -1,5 +1,4 @@
 use ark_bls12_381_v4::Bls12_381;
-use ark_crypto_primitives::crh::sha256::digest::KeyInit;
 use ark_crypto_primitives_v4::sponge::Absorb;
 use ark_ec_v4::pairing::Pairing;
 use ark_ec_v4::AffineRepr;
@@ -7,8 +6,16 @@ use ark_ff_v4::PrimeField;
 use ark_relations::utils::HashBuilder;
 use ark_relations::utils::IndexMap;
 use ark_serialize_v4::{CanonicalDeserialize, CanonicalSerialize};
+
+use ark_std::any::type_name;
+use ark_std::env;
+use ark_std::fs::File;
 use ark_std::log2;
+use ark_std::ops::Neg;
+use ark_std::path::Path;
 use ark_std::test_rng;
+use ark_std::time::Duration;
+
 use hp_hyperplonk::prelude::CustomizedGates;
 use hp_hyperplonk::prelude::MockCircuit;
 use hp_hyperplonk::HyperPlonkSNARK;
@@ -16,15 +23,9 @@ use hp_subroutines::MultilinearKzgPCS;
 use hp_subroutines::MultilinearUniversalParams;
 use hp_subroutines::PolyIOP;
 use hp_subroutines::PolynomialCommitmentScheme;
+
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
-use std::any::type_name;
-use std::collections::BTreeMap;
-use std::env;
-use std::fs::File;
-use std::ops::Neg;
-use std::path::Path;
-use std::time::Duration;
 
 fn bench<E: Pairing>(
     num_invocations: usize,
