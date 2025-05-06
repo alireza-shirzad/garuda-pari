@@ -1,5 +1,5 @@
 use crate::{
-    arithmetic::{DenseMultilinearExtension, VirtualPolynomial},
+    arithmetic::{DenseMultilinearExtension as DenseMLE, VirtualPolynomial},
     data_structures::{Index, Proof, ProvingKey},
     epc::{data_structures::MLBatchedCommitment, multilinear::MultilinearEPC, EPC},
     piop::{prelude::ZeroCheck, PolyIOP},
@@ -15,7 +15,6 @@ use ark_poly::{
 use ark_relations::gr1cs::{
     self,
     instance_outliner::{outline_r1cs, InstanceOutliner},
-    mat_vec_mul,
     predicate::Predicate,
     ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError,
     R1CS_PREDICATE_LABEL,
@@ -66,8 +65,10 @@ impl<E: Pairing> Garuda<E> {
         // EPC-Commit to the witness polynomials, i.e. generate c_i = EPC.Comm(w_i)
         // Line 3-b figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_epc_commit = start_timer!(|| "EPC Commit");
+        let num_constraints = index.predicate_num_constraints.values().sum::<usize>();
+        let rest_zeros = vec![Some(num_constraints); mw_polys.len()];
         let w_batched_comm =
-            MultilinearEPC::batch_commit(&pk.epc_ck, &mw_polys, Some(&w_assignment));
+            MultilinearEPC::batch_commit(&pk.epc_ck, &mw_polys, &rest_zeros, Some(&w_assignment));
         transcript
             .append_serializable_element("batched_commitments".as_bytes(), &w_batched_comm)
             .unwrap();
@@ -201,10 +202,7 @@ impl<E: Pairing> Garuda<E> {
     fn generate_w_z_polys(
         index: &Index<E::ScalarField>,
         z_assignment: &[E::ScalarField],
-    ) -> (
-        Vec<DenseMultilinearExtension<E::ScalarField>>,
-        Vec<DenseMultilinearExtension<E::ScalarField>>,
-    )
+    ) -> (Vec<DenseMLE<E::ScalarField>>, Vec<DenseMLE<E::ScalarField>>)
     where
         E: Pairing,
         E::ScalarField: Field,
@@ -214,11 +212,11 @@ impl<E: Pairing> Garuda<E> {
         w_assignment[index.instance_len..].copy_from_slice(&z_assignment[index.instance_len..]);
         cfg_iter!(stacked_matrices)
             .map(|matrix| {
-                let mz = mat_vec_mul(matrix, z_assignment);
-                let mw = mat_vec_mul(matrix, &w_assignment);
+                let mz = crate::utils::mat_vec_mul(matrix, z_assignment);
+                let mw = crate::utils::mat_vec_mul(matrix, &w_assignment);
                 (
-                    DenseMultilinearExtension::from_evaluations_vec(index.log_num_constraints, mw),
-                    DenseMultilinearExtension::from_evaluations_vec(index.log_num_constraints, mz),
+                    DenseMLE::from_evaluations_vec(index.log_num_constraints, mw),
+                    DenseMLE::from_evaluations_vec(index.log_num_constraints, mz),
                 )
             })
             .unzip()
@@ -227,8 +225,8 @@ impl<E: Pairing> Garuda<E> {
     // A helper function to build the grand polynomial
     // On witness polys, selector polys, and the predicate poly (inside the index), output the grand polynomial
     fn build_grand_poly(
-        z_polys: &Vec<DenseMultilinearExtension<E::ScalarField>>,
-        sel_polys: &Option<Vec<DenseMultilinearExtension<E::ScalarField>>>,
+        z_polys: &Vec<DenseMLE<E::ScalarField>>,
+        sel_polys: &Option<Vec<DenseMLE<E::ScalarField>>>,
         index: &Index<E::ScalarField>,
     ) -> VirtualPolynomial<E::ScalarField>
     where
@@ -274,7 +272,7 @@ impl<E: Pairing> Garuda<E> {
 
     pub fn build_grand_poly_single_pred(
         predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm>,
-        witness_poly_arcs: &[Arc<DenseMultilinearExtension<E::ScalarField>>],
+        witness_poly_arcs: &[Arc<DenseMLE<E::ScalarField>>],
         virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
         // 1.  Compute each (coeff, mle_list) pair in parallel (or serial).
@@ -300,8 +298,8 @@ impl<E: Pairing> Garuda<E> {
 
     pub fn build_grand_poly_multi_pred(
         predicate_poly: SparsePolynomial<E::ScalarField, SparseTerm>,
-        selector_poly: &Arc<DenseMultilinearExtension<E::ScalarField>>,
-        witness_poly_arcs: &[Arc<DenseMultilinearExtension<E::ScalarField>>],
+        selector_poly: &Arc<DenseMLE<E::ScalarField>>,
+        witness_poly_arcs: &[Arc<DenseMLE<E::ScalarField>>],
         virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
         // -------- phase 1: compute each (mle_list, coeff) in parallel --------

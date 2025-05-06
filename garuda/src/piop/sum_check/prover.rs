@@ -130,13 +130,11 @@ impl<F: PrimeField> SumCheckProver<F> for IOPProverState<F> {
                         )
                     },
                     |(mut buf, mut acc), b| {
-                        buf.iter_mut()
-                            .zip(products.iter())
-                            .for_each(|((eval, step), f)| {
-                                let table = &flattened_ml_extensions[*f];
-                                *eval = table[b << 1];
-                                *step = table[(b << 1) + 1] - table[b << 1];
-                            });
+                        buf.iter_mut().zip(products).for_each(|((eval, step), f)| {
+                            let table = &flattened_ml_extensions[*f];
+                            *eval = table[b << 1];
+                            *step = table[(b << 1) + 1] - table[b << 1];
+                        });
                         acc[0] += buf.iter().map(|(eval, _)| eval).product::<F>();
                         acc[1..].iter_mut().for_each(|acc| {
                             buf.iter_mut().for_each(|(eval, step)| *eval += step as &_);
@@ -150,13 +148,13 @@ impl<F: PrimeField> SumCheckProver<F> for IOPProverState<F> {
                     || vec![F::zero(); products.len() + 1],
                     |mut sum, partial| {
                         sum.iter_mut()
-                            .zip(partial.iter())
+                            .zip(partial)
                             .for_each(|(sum, partial)| *sum += partial);
                         sum
                     },
                 );
             sum.iter_mut().for_each(|sum| *sum *= coefficient);
-            let extraploation = cfg_into_iter!(0..self.poly.aux_info.max_degree - products.len())
+            let extrapolation = cfg_into_iter!(0..self.poly.aux_info.max_degree - products.len())
                 .map(|i| {
                     let (points, weights) = &self.extrapolation_aux[products.len() - 1];
                     let at = F::from((products.len() + 1 + i) as u64);
@@ -165,7 +163,7 @@ impl<F: PrimeField> SumCheckProver<F> for IOPProverState<F> {
                 .collect::<Vec<_>>();
             products_sum
                 .iter_mut()
-                .zip(sum.iter().chain(extraploation.iter()))
+                .zip(sum.into_iter().chain(extrapolation))
                 .for_each(|(products_sum, sum)| *products_sum += sum);
         });
 

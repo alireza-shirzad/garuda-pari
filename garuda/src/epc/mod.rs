@@ -25,11 +25,19 @@ pub trait EPC {
         equifficient_constrinats: &Self::EquifficientConstraint,
     ) -> (Self::CommitmentKey, Self::VerifyingKey, Self::Trapdoor);
 
-    fn commit(ck: &Self::CommitmentKey, poly: &Self::Polynomial) -> Self::Commitment;
+    /// `rest_zero` indicates that the rest of the coefficients are zero.
+    /// Implementations can use this to skip work.
+    fn commit(
+        ck: &Self::CommitmentKey,
+        poly: &Self::Polynomial,
+        rest_zero: Option<usize>,
+    ) -> Self::Commitment;
 
+    /// The second component of the `polys` tuple is `rest_zero` as in the `commit` function.
     fn batch_commit(
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
+        rest_zeros: &[Option<usize>],
         equifficients: Option<&[Self::Equifficient]>,
     ) -> Self::BatchedCommitment;
 

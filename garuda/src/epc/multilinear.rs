@@ -143,25 +143,25 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         )
     }
 
-    fn commit(ck: &Self::CommitmentKey, poly: &Self::Polynomial) -> Self::Commitment {
-        let scalars: Vec<_> = poly
-            .to_evaluations()
-            .into_iter()
+    fn commit(
+        ck: &Self::CommitmentKey,
+        poly: &Self::Polynomial,
+        rest_zero: Option<usize>,
+    ) -> Self::Commitment {
+        let rest_zero = rest_zero.unwrap_or(1 << poly.num_vars());
+        let scalars: Vec<_> = cfg_iter!(poly.evaluations[..rest_zero])
             .map(|x| x.into_bigint())
             .collect();
         Self::Commitment {
             nv: ck.nv,
-            g_product: <E::G1 as VariableBaseMSM>::msm_bigint(
-                &ck.powers_of_g[0],
-                scalars.as_slice(),
-            )
-            .into_affine(),
+            g_product: E::G1::msm_bigint(&ck.powers_of_g[0], scalars.as_slice()).into_affine(),
         }
     }
 
     fn batch_commit(
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
+        rest_zeros: &[Option<usize>],
         equifficients: Option<&[Self::Equifficient]>,
     ) -> Self::BatchedCommitment {
         let timer_indiv_comm = start_timer!(|| "Individual commits");
@@ -170,7 +170,8 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         #[cfg(not(feature = "parallel"))]
         use std::iter::once;
         let mut individual_comms = cfg_iter!(polys)
-            .map(|poly| Self::commit(ck, poly))
+            .zip(rest_zeros)
+            .map(|(poly, rest_zero)| Self::commit(ck, poly, *rest_zero))
             .chain(once({
                 let g = match equifficients {
                     Some(e) => E::G1::msm(&ck.consistency_pk, e).unwrap(),
@@ -216,8 +217,12 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                     *q = r_2b_plus_1 - r_2b;
                     *r = r_2b + *q * point_at_k;
                 });
-            let scalars: Vec<_> = (0..(1 << k))
-                .map(|x| current_q[x >> 1].into_bigint()) // fine
+            let scalars: Vec<_> = current_q
+                .iter()
+                .flat_map(|x| {
+                    let i = x.into_bigint();
+                    [i, i]
+                }) // fine
                 .collect();
             std::mem::swap(&mut current_r, &mut last_r);
             all_scalars.push(scalars);

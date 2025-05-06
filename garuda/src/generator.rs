@@ -207,8 +207,12 @@ impl<E: Pairing> Garuda<E> {
                     index.log_num_constraints,
                     &index.predicate_num_constraints,
                 );
-                let sel_comms: MLBatchedCommitment<E> =
-                    MultilinearEPC::batch_commit(epc_ck, &sel_polys, None);
+                let sel_comms: MLBatchedCommitment<E> = MultilinearEPC::batch_commit(
+                    epc_ck,
+                    &sel_polys,
+                    &vec![None; sel_polys.len()],
+                    None,
+                );
                 (Some(sel_polys), Some(sel_comms))
             }
         }

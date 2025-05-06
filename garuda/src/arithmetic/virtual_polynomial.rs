@@ -7,15 +7,11 @@
 //! This module defines our main mathematical object `VirtualPolynomial`; and
 //! various functions associated with it.
 
-use super::{errors::ArithErrors, multilinear_polynomial::random_zero_mle_list, random_mle_list};
+use super::errors::ArithErrors;
 use ark_ff::PrimeField;
 use ark_poly::{DenseMultilinearExtension, Polynomial};
 use ark_serialize::CanonicalSerialize;
-use ark_std::{
-    end_timer,
-    rand::{Rng, RngCore},
-    start_timer,
-};
+use ark_std::{end_timer, start_timer};
 use rayon::prelude::*;
 use std::{cmp::max, collections::HashMap, marker::PhantomData, ops::Add, sync::Arc};
 
@@ -248,50 +244,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
         Ok(res)
     }
 
-    /// Sample a random virtual polynomial, return the polynomial and its sum.
-    pub fn rand<R: RngCore>(
-        nv: usize,
-        num_multiplicands_range: (usize, usize),
-        num_products: usize,
-        rng: &mut R,
-    ) -> Result<(Self, F), ArithErrors> {
-        let start = start_timer!(|| "sample random virtual polynomial");
-
-        let mut sum = F::zero();
-        let mut poly = VirtualPolynomial::new(nv);
-        for _ in 0..num_products {
-            let num_multiplicands =
-                rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
-            let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
-            let coefficient = F::rand(rng);
-            poly.add_mle_list(product.into_iter(), coefficient)?;
-            sum += product_sum * coefficient;
-        }
-
-        end_timer!(start);
-        Ok((poly, sum))
-    }
-
-    /// Sample a random virtual polynomial that evaluates to zero everywhere
-    /// over the boolean hypercube.
-    pub fn rand_zero<R: RngCore>(
-        nv: usize,
-        num_multiplicands_range: (usize, usize),
-        num_products: usize,
-        rng: &mut R,
-    ) -> Result<Self, ArithErrors> {
-        let mut poly = VirtualPolynomial::new(nv);
-        for _ in 0..num_products {
-            let num_multiplicands =
-                rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
-            let product = random_zero_mle_list(nv, num_multiplicands, rng);
-            let coefficient = F::rand(rng);
-            poly.add_mle_list(product.into_iter(), coefficient)?;
-        }
-
-        Ok(poly)
-    }
-
     // Input poly f(x) and a random vector r, output
     //      \hat f(x) = \sum_{x_i \in eval_x} f(x_i) eq(x, r)
     // where
@@ -445,57 +397,6 @@ mod test {
     use ark_bls12_381::Fr;
     use ark_ff::UniformRand;
     use ark_std::test_rng;
-
-    #[test]
-    fn test_virtual_polynomial_additions() -> Result<(), ArithErrors> {
-        let mut rng = test_rng();
-        for nv in 2..5 {
-            for num_products in 2..5 {
-                let base: Vec<Fr> = (0..nv).map(|_| Fr::rand(&mut rng)).collect();
-
-                let (a, _a_sum) =
-                    VirtualPolynomial::<Fr>::rand(nv, (2, 3), num_products, &mut rng)?;
-                let (b, _b_sum) =
-                    VirtualPolynomial::<Fr>::rand(nv, (2, 3), num_products, &mut rng)?;
-                let c = &a + &b;
-
-                assert_eq!(
-                    a.evaluate(base.as_ref())? + b.evaluate(base.as_ref())?,
-                    c.evaluate(base.as_ref())?
-                );
-            }
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_virtual_polynomial_mul_by_mle() -> Result<(), ArithErrors> {
-        let mut rng = test_rng();
-        for nv in 2..5 {
-            for num_products in 2..5 {
-                let base: Vec<Fr> = (0..nv).map(|_| Fr::rand(&mut rng)).collect();
-
-                let (a, _a_sum) =
-                    VirtualPolynomial::<Fr>::rand(nv, (2, 3), num_products, &mut rng)?;
-                let (b, _b_sum) = random_mle_list(nv, 1, &mut rng);
-                let b_mle = b[0].clone();
-                let coeff = Fr::rand(&mut rng);
-                let b_vp = VirtualPolynomial::new_from_mle(&b_mle, coeff);
-
-                let mut c = a.clone();
-
-                c.mul_by_mle(b_mle, coeff)?;
-
-                assert_eq!(
-                    a.evaluate(base.as_ref())? * b_vp.evaluate(base.as_ref())?,
-                    c.evaluate(base.as_ref())?
-                );
-            }
-        }
-
-        Ok(())
-    }
 
     #[test]
     fn test_eq_xr() {

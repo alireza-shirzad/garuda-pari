@@ -1,8 +1,8 @@
 use ark_relations::utils::IndexMap;
 use csv::Writer;
-use std::time::Duration;
 use std::error::Error;
 use std::fs::{metadata, OpenOptions};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct BenchResult {
