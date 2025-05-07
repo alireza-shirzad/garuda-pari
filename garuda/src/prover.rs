@@ -3,15 +3,12 @@ use crate::{
     data_structures::{Index, Proof, ProvingKey},
     epc::{data_structures::MLBatchedCommitment, multilinear::MultilinearEPC, EPC},
     piop::{prelude::ZeroCheck, PolyIOP},
-    utils::stack_matrices,
+    utils::{evaluate_batch, stack_matrices},
     Garuda,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{Field, Zero};
-use ark_poly::{
-    multivariate::{SparsePolynomial, SparseTerm},
-    Polynomial,
-};
+use ark_ff::Field;
+use ark_poly::multivariate::{SparsePolynomial, SparseTerm};
 use ark_relations::gr1cs::{
     self,
     instance_outliner::{outline_r1cs, InstanceOutliner},
@@ -59,7 +56,7 @@ impl<E: Pairing> Garuda<E> {
         // Generate the w polynomials, i.e. w_i = M_i * (0||w) and z polynomials, i.e. z_i = M_i * z
         // Line 3-a figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_generate_w_z_polys = start_timer!(|| "Generate Mw, Mz Polynomials");
-        let (mw_polys, z_polys) = Self::generate_w_z_polys(&index, &z_assignment);
+        let (mw_polys, mz_polys) = Self::generate_w_z_polys(&index, &z_assignment);
         end_timer!(timer_generate_w_z_polys);
         //
         // EPC-Commit to the witness polynomials, i.e. generate c_i = EPC.Comm(w_i)
@@ -78,7 +75,7 @@ impl<E: Pairing> Garuda<E> {
         // Note that we use the z_polys here
         // Line 5 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_buid_grand_poly = start_timer!(|| "Build Grand Polynomial");
-        let grand_poly = Self::build_grand_poly(&z_polys, &pk.sel_polys, &index);
+        let grand_poly = Self::build_grand_poly(&mz_polys, &pk.sel_polys, &index);
         end_timer!(timer_buid_grand_poly);
 
         // grand_poly.print_evals();
@@ -91,18 +88,17 @@ impl<E: Pairing> Garuda<E> {
 
         let timer_eval_polys = start_timer!(|| "Evaluate Polynomials");
         let timer_eval_mw_polys = start_timer!(|| "Evaluate M.w Polynomials");
-        let w_poly_evals = cfg_iter!(mw_polys)
-            .map(|witness| witness.evaluate(&zero_check_proof.point))
-            .collect();
+        let w_poly_evals = evaluate_batch(&mw_polys, &zero_check_proof.point);
         end_timer!(timer_eval_mw_polys);
 
         let timer_eval_sel_polys = start_timer!(|| "Evaluate Selector Polynomials");
         let sel_poly_evals = match index.num_predicates {
             1 => None,
             _ => pk.sel_polys.as_ref().map(|sel_polys| {
-                cfg_iter!(sel_polys)
-                    .map(|selector| selector.evaluate(&zero_check_proof.point))
-                    .collect()
+                evaluate_batch(
+                    &sel_polys,
+                    &zero_check_proof.point,
+                )
             }),
         };
         end_timer!(timer_eval_sel_polys);
@@ -208,12 +204,9 @@ impl<E: Pairing> Garuda<E> {
         E::ScalarField: Field,
     {
         let stacked_matrices = stack_matrices(index);
-        let mut w_assignment = vec![E::ScalarField::zero(); z_assignment.len()];
-        w_assignment[index.instance_len..].copy_from_slice(&z_assignment[index.instance_len..]);
         cfg_iter!(stacked_matrices)
             .map(|matrix| {
-                let mz = crate::utils::mat_vec_mul(matrix, z_assignment);
-                let mw = crate::utils::mat_vec_mul(matrix, &w_assignment);
+                let (mz, mw) = crate::utils::mat_vec_mul(matrix, z_assignment, index.instance_len);
                 (
                     DenseMLE::from_evaluations_vec(index.log_num_constraints, mw),
                     DenseMLE::from_evaluations_vec(index.log_num_constraints, mz),
