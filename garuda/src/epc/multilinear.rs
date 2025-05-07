@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use super::{
     data_structures::{
         MLBatchedCommitment, MLCommitment, MLCommitmentKey, MLPublicParameters, MLTrapdoor,
@@ -18,7 +16,7 @@ use ark_ff::PrimeField;
 use ark_poly::{
     DenseMultilinearExtension, MultilinearExtension, Polynomial, SparseMultilinearExtension,
 };
-use ark_std::{cfg_chunks, cfg_iter, UniformRand};
+use ark_std::{cfg_chunks, cfg_iter, marker::PhantomData, UniformRand};
 use ark_std::{collections::LinkedList, end_timer, start_timer};
 use ark_std::{rand::RngCore, One, Zero};
 
@@ -92,10 +90,12 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         let mut start = 0;
         for i in 0..pp.num_var {
             let size = 1 << (pp.num_var - i);
-            let pp_k_g = (&pp_g[start..(start + size)]).to_vec();
+            let pp_k_g = pp_g[start..][..size].to_vec();
             powers_of_g.push(pp_k_g);
             start += size;
         }
+        let last = powers_of_g.last().unwrap();
+        powers_of_g.push(vec![last.iter().sum::<E::G1>().into_affine()]);
         let h_mask = h_table.batch_mul(&tau);
 
         // Consistency stuff
@@ -219,10 +219,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                 });
             let scalars: Vec<_> = current_q
                 .iter()
-                .flat_map(|x| {
-                    let i = x.into_bigint();
-                    [i, i]
-                }) // fine
+                .map(|x| x.into_bigint()) // fine
                 .collect();
             std::mem::swap(&mut current_r, &mut last_r);
             all_scalars.push(scalars);
@@ -231,7 +228,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
 
         let msm_time = start_timer!(|| "MSM");
         let proofs = cfg_iter!(all_scalars)
-            .zip(&ck.powers_of_g)
+            .zip(&ck.powers_of_g[1..])
             .map(|(scalars, powers)| E::G1::msm_bigint(&powers, &scalars).into_affine())
             .collect::<Vec<_>>();
         end_timer!(msm_time);
