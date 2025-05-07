@@ -199,8 +199,9 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
     ) -> Self::OpeningProof {
         let nv = poly.num_vars();
         let mut current_r = poly.to_evaluations();
-        let mut last_r = vec![E::ScalarField::zero(); 1 << nv];
-        let mut current_q = vec![E::ScalarField::zero(); 1 << (nv - 1)];
+        let mut last_r = vec![E::ScalarField::zero(); 1 << (nv - 1)];
+        let zero = <E::ScalarField as PrimeField>::BigInt::from(0u8);
+        let mut current_q = vec![zero; 1 << (nv - 1)];
 
         let mut all_scalars = Vec::with_capacity(nv);
         let compute_scalars_time = start_timer!(|| "Compute scalars");
@@ -214,15 +215,12 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                 .zip(&mut last_r)
                 .for_each(|((current_r_s, q), r)| {
                     let [r_2b, r_2b_plus_1] = <[_; 2]>::try_from(current_r_s).unwrap();
-                    *q = r_2b_plus_1 - r_2b;
-                    *r = r_2b + *q * point_at_k;
+                    let t = r_2b_plus_1 - r_2b;
+                    *r = r_2b + t * point_at_k;
+                    *q = t.into_bigint();
                 });
-            let scalars: Vec<_> = current_q
-                .iter()
-                .map(|x| x.into_bigint()) // fine
-                .collect();
             std::mem::swap(&mut current_r, &mut last_r);
-            all_scalars.push(scalars);
+            all_scalars.push(current_q.clone());
         }
         end_timer!(compute_scalars_time);
 

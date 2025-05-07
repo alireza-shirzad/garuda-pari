@@ -6,6 +6,11 @@ use ark_std::{cfg_iter, cfg_iter_mut, end_timer, start_timer};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+#[cfg(not(feature = "parallel"))]
+use ark_std::iter::repeat_n;
+#[cfg(feature = "parallel")]
+use rayon::iter::repeatn as repeat_n;
+
 /// Takes as input a struct, and converts them to a series of bytes. All traits
 /// that implement `CanonicalSerialize` can be automatically converted to bytes
 /// in this manner.
@@ -17,62 +22,68 @@ macro_rules! to_bytes {
     }};
 }
 
-pub(crate) fn stack_matrices<F: Field>(index: &Index<F>) -> Vec<Matrix<F>> {
+pub(crate) fn stack_matrices<F: Field>(index: &mut Index<F>) -> Vec<Matrix<F>> {
     let stacking_time = start_timer!(|| "Stacking matrices");
 
+    let r1cs = R1CS_PREDICATE_LABEL;
+    if index.predicate_matrices.len() == 1 {
+        let (_, value) = index.predicate_matrices.pop_first().unwrap();
+        end_timer!(stacking_time);
+        return value;
+    }
     let mut stacked_matrices = vec![vec![]; index.max_arity];
     // Append the R1CS predicate matrices first
-    let r1cs = R1CS_PREDICATE_LABEL;
-    append_matrices(&mut stacked_matrices, &index.predicate_matrices[r1cs]);
+    append_matrices(
+        &mut stacked_matrices,
+        index.predicate_matrices.remove(r1cs).unwrap(),
+    );
 
     // Append the other predicate matrices
-    for pred_matrices in index
-        .predicate_matrices
-        .iter()
+    let pred_matrices = std::mem::take(&mut index.predicate_matrices);
+    for pred_matrices in pred_matrices
+        .into_iter()
         .filter_map(|(label, m)| (label != r1cs).then_some(m))
     {
         append_matrices(&mut stacked_matrices, pred_matrices);
     }
 
     // Pad out each matrix to next power of 2
-
-    let next_power_of_2 = 2usize.pow(index.log_num_constraints as u32);
-    for stacked_i in stacked_matrices.iter_mut() {
-        stacked_i.resize(next_power_of_2, vec![]);
-    }
-
     end_timer!(stacking_time);
-
     stacked_matrices
 }
 
 pub fn append_matrices<F: Field>(
     stacked_matrices: &mut Vec<Matrix<F>>,
-    pred_matrices: &[Matrix<F>],
+    pred_matrices: Vec<Matrix<F>>,
 ) {
     let num_pred_matrices = pred_matrices.len();
     let num_pred_constraints = pred_matrices[0].len();
     let (current, rest) = stacked_matrices.split_at_mut(num_pred_matrices);
     cfg_iter_mut!(current)
         .zip(pred_matrices)
-        .for_each(|(stacked_i, pred_i)| stacked_i.extend_from_slice(pred_i));
+        .for_each(|(stacked_i, pred_i)| stacked_i.par_extend(pred_i));
     for stacked_i in rest.iter_mut() {
-        #[cfg(not(feature = "parallel"))]
-        use ark_std::iter::repeat_n;
-        #[cfg(feature = "parallel")]
-        use rayon::iter::repeatn as repeat_n;
         stacked_i.par_extend(repeat_n(vec![], num_pred_constraints));
     }
 }
 
 /// Multiply a matrix by a vector.
-pub fn mat_vec_mul<F: Field>(matrix: &Matrix<F>, vector: &[F], num_instances: usize) -> (Vec<F>, Vec<F>) {
-    cfg_iter!(matrix)
+pub fn mat_vec_mul<F: Field>(
+    matrix: &Matrix<F>,
+    vector: &[F],
+    num_instances: usize,
+) -> (Vec<F>, Vec<F>) {
+    let next_power_of_two = matrix.len().next_power_of_two();
+    let (mut mz, mut mw): (Vec<_>, Vec<_>) = cfg_iter!(matrix)
         .map(|row| {
             let mut mx_sum = F::zero();
             let mut mw_sum = F::zero();
             for (value, col) in row {
-                let value = vector[*col] * value;
+                let value = if value.is_one() {
+                    vector[*col]
+                } else {
+                    vector[*col] * value
+                };
                 if *col < num_instances {
                     mx_sum += value
                 } else {
@@ -81,31 +92,28 @@ pub fn mat_vec_mul<F: Field>(matrix: &Matrix<F>, vector: &[F], num_instances: us
             }
             (mx_sum + mw_sum, mw_sum)
         })
-        .unzip()
+        .unzip();
+    mz.resize(next_power_of_two, F::zero());
+    mw.resize(next_power_of_two, F::zero());
+    (mz, mw)
 }
 
 pub fn evaluate_batch<F: Field>(mles: &[DenseMultilinearExtension<F>], point: &[F]) -> Vec<F> {
     let eq_evals = EqEvalIter::new(point.to_vec()).evals();
-    
-    mles.iter().map(|mle| cfg_iter!(mle.evaluations).zip(&eq_evals).filter_map(|(c, e)| (!c.is_zero()).then(|| *c * e)
-    ).sum()).collect()
-}
 
-pub fn evaluate<F: Field>(mle: &DenseMultilinearExtension<F>, point: &[F]) -> F {
-    let mut eq_eval = EqEvalIter::new(point.to_vec());
-    mle.evaluations.chunks(BUFFER_SIZE).map(|mle_chunk| {
-        let evals = eq_eval.next_batch().unwrap();
-        mle_chunk
-            .par_iter()
-            .zip(evals)
-            .map(|(c, e)| {
-                *c * e
-            }).sum::<F>()
-    }).sum::<F>()
+    mles.iter()
+        .map(|mle| {
+            cfg_iter!(mle.evaluations)
+                .zip(&eq_evals)
+                .filter_map(|(c, e)| (!c.is_zero()).then(|| *c * e))
+                .sum()
+        })
+        .collect()
 }
 
 #[cfg(feature = "parallel")]
-use rayon::{iter::MinLen, prelude::*};
+use rayon::iter::MinLen;
+use rayon::vec;
 
 /// An iterator that generates the evaluations of the polynomial
 /// eq(r, y || x) over the Boolean hypercube.
@@ -202,7 +210,7 @@ impl<F: Field> EqEvalIter<F> {
             Some(result.into_par_iter().with_min_len(1 << 7))
         }
     }
-    
+
     pub fn evals(&mut self) -> Vec<F> {
         let mut vec = Vec::new();
         while let Some(batch) = self.next_batch() {

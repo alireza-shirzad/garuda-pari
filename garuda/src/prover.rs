@@ -7,7 +7,6 @@ use crate::{
     Garuda,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::Field;
 use ark_poly::multivariate::{SparsePolynomial, SparseTerm};
 use ark_relations::gr1cs::{
     self,
@@ -16,29 +15,21 @@ use ark_relations::gr1cs::{
     ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError,
     R1CS_PREDICATE_LABEL,
 };
-use ark_std::{cfg_into_iter, cfg_iter, end_timer, rc::Rc, start_timer, sync::Arc};
+use ark_std::{end_timer, rc::Rc, start_timer, sync::Arc};
 use shared_utils::transcript::IOPTranscript;
-
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 
 impl<E: Pairing> Garuda<E> {
     pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
         pk: &ProvingKey<E>,
         circuit: C,
-    ) -> Result<Proof<E>, SynthesisError>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::ScalarField: std::convert::From<i32>,
-    {
+    ) -> Result<Proof<E>, SynthesisError> {
         let timer_prove = start_timer!(|| "Prove");
-        let (index, x_assignment, w_assignment) = Self::circuit_to_prover_cs(circuit)?;
+        let (mut index, x_assignment, w_assignment) = Self::circuit_to_prover_cs(circuit)?;
         // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
         let timer_extract_i_x_w =
             start_timer!(|| "Extract NP index, intance, witness and extended witness");
         let mut z_assignment = x_assignment.clone();
-        z_assignment.extend(w_assignment.iter());
+        z_assignment.extend_from_slice(&w_assignment);
         end_timer!(timer_extract_i_x_w);
 
         // initilizing the transcript
@@ -56,7 +47,7 @@ impl<E: Pairing> Garuda<E> {
         // Generate the w polynomials, i.e. w_i = M_i * (0||w) and z polynomials, i.e. z_i = M_i * z
         // Line 3-a figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_generate_w_z_polys = start_timer!(|| "Generate Mw, Mz Polynomials");
-        let (mw_polys, mz_polys) = Self::generate_w_z_polys(&index, &z_assignment);
+        let (mw_polys, mz_polys) = Self::generate_w_z_polys(&mut index, &z_assignment);
         end_timer!(timer_generate_w_z_polys);
         //
         // EPC-Commit to the witness polynomials, i.e. generate c_i = EPC.Comm(w_i)
@@ -75,7 +66,7 @@ impl<E: Pairing> Garuda<E> {
         // Note that we use the z_polys here
         // Line 5 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_buid_grand_poly = start_timer!(|| "Build Grand Polynomial");
-        let grand_poly = Self::build_grand_poly(&mz_polys, &pk.sel_polys, &index);
+        let grand_poly = Self::build_grand_poly(mz_polys, &pk.sel_polys, &index);
         end_timer!(timer_buid_grand_poly);
 
         // grand_poly.print_evals();
@@ -94,12 +85,10 @@ impl<E: Pairing> Garuda<E> {
         let timer_eval_sel_polys = start_timer!(|| "Evaluate Selector Polynomials");
         let sel_poly_evals = match index.num_predicates {
             1 => None,
-            _ => pk.sel_polys.as_ref().map(|sel_polys| {
-                evaluate_batch(
-                    &sel_polys,
-                    &zero_check_proof.point,
-                )
-            }),
+            _ => pk
+                .sel_polys
+                .as_ref()
+                .map(|sel_polys| evaluate_batch(&sel_polys, &zero_check_proof.point)),
         };
         end_timer!(timer_eval_sel_polys);
         end_timer!(timer_eval_polys);
@@ -107,15 +96,22 @@ impl<E: Pairing> Garuda<E> {
         // Construct the set of all polynomials the corresponding commitments to be opened
         // We will batch-open these commitments
         // Note that selector polynomials are only present when there are more than one predicate
-        let comms_to_be_opened = cfg_into_iter!(w_batched_comm.individual_comms.clone())
-            .chain(match pk.verifying_key.sel_batched_comm.clone() {
-                Some(sel_comms) => sel_comms.individual_comms,
-                None => Vec::with_capacity(0),
-            })
+        let comms_to_be_opened = w_batched_comm
+            .individual_comms
+            .iter()
+            .copied()
+            .chain(
+                pk.verifying_key
+                    .sel_batched_comm
+                    .iter()
+                    .cloned()
+                    .flat_map(|c| c.individual_comms),
+            )
             .collect();
 
-        let polys_to_be_opened: Vec<_> = cfg_into_iter!(mw_polys.clone())
-            .chain(pk.sel_polys.clone().unwrap_or(Vec::with_capacity(0)))
+        let polys_to_be_opened: Vec<_> = mw_polys
+            .into_iter()
+            .chain(pk.sel_polys.iter().cloned().flat_map(|c| c))
             .collect();
 
         // open the commitments
@@ -140,7 +136,7 @@ impl<E: Pairing> Garuda<E> {
             zero_check_proof,
             sel_poly_evals,
             w_poly_evals,
-            bathced_opening_proof: opening_proof,
+            batched_opening_proof: opening_proof,
         });
 
         end_timer!(timer_prove);
@@ -157,12 +153,7 @@ impl<E: Pairing> Garuda<E> {
             Vec<E::ScalarField>,
         ),
         SynthesisError,
-    >
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-        E::ScalarField: std::convert::From<i32>,
-    {
+    > {
         // Start up the constraint System and synthesize the circuit
         let timer_cs_startup = start_timer!(|| "Building Constraint System");
         let cs = ConstraintSystem::new_ref();
@@ -196,15 +187,12 @@ impl<E: Pairing> Garuda<E> {
 
     #[allow(clippy::type_complexity)]
     fn generate_w_z_polys(
-        index: &Index<E::ScalarField>,
+        index: &mut Index<E::ScalarField>,
         z_assignment: &[E::ScalarField],
-    ) -> (Vec<DenseMLE<E::ScalarField>>, Vec<DenseMLE<E::ScalarField>>)
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-    {
+    ) -> (Vec<DenseMLE<E::ScalarField>>, Vec<DenseMLE<E::ScalarField>>) {
         let stacked_matrices = stack_matrices(index);
-        cfg_iter!(stacked_matrices)
+        stacked_matrices
+            .iter()
             .map(|matrix| {
                 let (mz, mw) = crate::utils::mat_vec_mul(matrix, z_assignment, index.instance_len);
                 (
@@ -218,17 +206,11 @@ impl<E: Pairing> Garuda<E> {
     // A helper function to build the grand polynomial
     // On witness polys, selector polys, and the predicate poly (inside the index), output the grand polynomial
     fn build_grand_poly(
-        z_polys: &Vec<DenseMLE<E::ScalarField>>,
+        z_polys: Vec<DenseMLE<E::ScalarField>>,
         sel_polys: &Option<Vec<DenseMLE<E::ScalarField>>>,
         index: &Index<E::ScalarField>,
-    ) -> VirtualPolynomial<E::ScalarField>
-    where
-        E: Pairing,
-        E::ScalarField: Field,
-    {
-        let z_arcs = cfg_iter!(z_polys)
-            .map(|item| Arc::new(item.clone()))
-            .collect::<Vec<_>>();
+    ) -> VirtualPolynomial<E::ScalarField> {
+        let z_arcs = z_polys.into_iter().map(Arc::new).collect::<Vec<_>>();
         let mut target_virtual_poly = VirtualPolynomial::new(index.log_num_constraints);
         // If there is only one predicate, The virtual poly is just L(mle(M_1z), mle(M_2z), ..., mle(M_tz)) without any selector
         if index.num_predicates == 1 {
@@ -268,24 +250,21 @@ impl<E: Pairing> Garuda<E> {
         witness_poly_arcs: &[Arc<DenseMLE<E::ScalarField>>],
         virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
-        // 1.  Compute each (coeff, mle_list) pair in parallel (or serial).
-        let contributions = cfg_into_iter!(predicate_poly.terms) // parallel ↔ serial switch
-            .map(|(coeff, term)| {
-                // Re‑create the list of MLEs for this monomial.
-                let mle_list: Vec<_> = term
-                    .iter()
-                    .flat_map(|(var, exponent)| {
-                        std::iter::repeat_with(|| Arc::clone(&witness_poly_arcs[*var]))
-                            .take(*exponent)
-                    })
-                    .collect();
-                (mle_list, coeff)
-            })
-            .collect::<Vec<_>>();
+        // 1.  Compute each (coeff, mle_list) pair.
+        let contributions = (predicate_poly.terms).into_iter().map(|(coeff, term)| {
+            // Re‑create the list of MLEs for this monomial.
+            let mle_list = term
+                .into_iter()
+                .flat_map(|(var, exponent)| {
+                    std::iter::repeat_n(Arc::clone(&witness_poly_arcs[*var]), *exponent)
+                })
+                .collect::<Vec<_>>();
+            (mle_list, coeff)
+        });
 
         // 2.  Feed the results into `virtual_poly` (sequential – cheap).
         for (mle_list, coeff) in contributions {
-            let _ = virtual_poly.add_mle_list(mle_list, coeff);
+            virtual_poly.add_mle_list(mle_list, coeff).unwrap();
         }
     }
 
@@ -296,22 +275,23 @@ impl<E: Pairing> Garuda<E> {
         virtual_poly: &mut VirtualPolynomial<E::ScalarField>,
     ) {
         // -------- phase 1: compute each (mle_list, coeff) in parallel --------
-        let contributions = cfg_into_iter!(predicate_poly.terms) // ⇢ `.into_par_iter()` when parallel
+        let contributions = predicate_poly
+            .terms // ⇢ `.into_par_iter()` when parallel
+            .into_iter()
             .map(|(coeff, term)| {
                 // Build the list of MLEs for this monomial.
                 let mut mle_list = Vec::with_capacity(1 + term.len()); // 1 for selector
                 mle_list.push(Arc::clone(selector_poly));
 
                 term.iter().for_each(|(var, exponent)| {
-                    mle_list.extend(
-                        std::iter::repeat_with(|| Arc::clone(&witness_poly_arcs[*var]))
-                            .take(*exponent),
-                    );
+                    mle_list.extend(std::iter::repeat_n(
+                        Arc::clone(&witness_poly_arcs[*var]),
+                        *exponent,
+                    ));
                 });
 
                 (mle_list, coeff)
-            })
-            .collect::<Vec<_>>();
+            });
 
         // -------- phase 2: mutate `virtual_poly` sequentially --------
         for (mle_list, coeff) in contributions {

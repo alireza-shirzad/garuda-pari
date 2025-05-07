@@ -16,6 +16,7 @@ ark-poly = { workspace = true }
 ark-crypto-primitives = { workspace = true }
 ark-r1cs-std = { workspace = true, features = ["std"] }
 ark-relations = { workspace = true }
+ark-groth16 = { workspace = true, default-features = false, features = ["parallel"] }
 ark-bls12-381 = { workspace = true }
 ark-spartan = { git = "https://github.com/alireza-shirzad/spartan.git", default-features = false }
 ark-pallas = { version = "0.5.0", default-features = false, features = [
@@ -54,7 +55,7 @@ tokio = { version = "1.0", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-ark-groth16 = { workspace = true, default-features = false }
+
 [[bench]]
 name = "rescue-garuda"
 path = "benches/rescue-garuda.rs"

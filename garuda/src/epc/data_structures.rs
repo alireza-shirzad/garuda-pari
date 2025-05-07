@@ -51,7 +51,7 @@ pub struct MLTrapdoor<E: Pairing> {
     pub consistency_challanges: Vec<E::ScalarField>,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, Copy)]
 /// commitment
 pub struct MLCommitment<E: Pairing> {
     /// number of variables

@@ -38,7 +38,7 @@ impl<E: Pairing> Garuda<E> {
         E::ScalarField: Field,
     {
         let timer_generator = start_timer!(|| "Generator");
-        let index = Self::circuit_to_keygen_cs(circuit).unwrap();
+        let mut index = Self::circuit_to_keygen_cs(circuit).unwrap();
         let timer_indexer = start_timer!(|| "Constraint System Startup");
         end_timer!(timer_indexer);
 
@@ -56,7 +56,7 @@ impl<E: Pairing> Garuda<E> {
 
         let timer_epc_equif_constrs_gen = start_timer!(|| "Generating Equifficient Constraints");
         let equifficient_constrinats: Vec<Vec<SparseMultilinearExtension<E::ScalarField>>> =
-            Self::build_equifficient_constraints(&index);
+            Self::build_equifficient_constraints(&mut index);
         end_timer!(timer_epc_equif_constrs_gen);
         start_timer!(|| "Generating EPC Keys");
         let (epc_ck, epc_vk, _epc_tr) =
@@ -166,7 +166,7 @@ impl<E: Pairing> Garuda<E> {
     }
 
     fn build_equifficient_constraints(
-        index: &Index<E::ScalarField>,
+        index: &mut Index<E::ScalarField>,
     ) -> Vec<Vec<SparseMultilinearExtension<E::ScalarField>>>
     where
         E: Pairing,

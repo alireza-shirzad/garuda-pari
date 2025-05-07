@@ -27,7 +27,7 @@ tracing = { version = "0.1", default-features = false, features = [ "attributes"
 rayon = { version = "1.5.2" }
 lazy_static = "1.4"
 csv = "1.2"
-num-bigint = "0.4.4"
+num-bigint = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hashbrown = { version = "0.15", default-features = false , features = [ "default-hasher"] }
@@ -63,6 +63,7 @@ ark-ff = { git = "https://github.com/arkworks-rs/algebra.git" }
 ark-ec = { git = "https://github.com/arkworks-rs/algebra.git" }
 ark-poly = { git = "https://github.com/arkworks-rs/algebra.git" }
 ark-serialize = { git = "https://github.com/arkworks-rs/algebra.git" }
+# ark-relations = { path = "../arkworks/snark/relations" }
 ark-relations = { git = "https://github.com/arkworks-rs/snark.git" }
 
 # [patch."https://github.com/arkworks-rs/snark"]
@@ -70,4 +71,3 @@ ark-relations = { git = "https://github.com/arkworks-rs/snark.git" }
 
 # [patch."https://github.com/arkworks-rs/r1cs-std"]
 # ark-r1cs-std = { path = "../arkworks/r1cs-std" }
-

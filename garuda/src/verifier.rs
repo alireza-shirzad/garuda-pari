@@ -115,7 +115,7 @@ impl<E: Pairing> Garuda<E> {
             &batched_comm,
             &zero_check_subclaim.point,
             &evals_to_be_checked,
-            &proof.bathced_opening_proof,
+            &proof.batched_opening_proof,
             vk.succinct_index.max_arity,
         ) {
             panic!("Batch verification failed");
