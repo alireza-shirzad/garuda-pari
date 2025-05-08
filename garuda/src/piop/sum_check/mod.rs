@@ -79,7 +79,7 @@ pub trait SumCheckVerifier<F: PrimeField> {
     type SumCheckSubClaim;
 
     /// Initialize the verifier's state.
-    fn verifier_init(index_info: &Self::VPAuxInfo) -> Self;
+    fn init(index_info: &Self::VPAuxInfo) -> Self;
 
     /// Run verifier for the current round, given a prover message.
     ///
@@ -165,18 +165,17 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         let start = start_timer!(|| "sum check verify");
 
         transcript.append_serializable_element(b"aux info", aux_info)?;
-        let mut verifier_state = IOPVerifierState::verifier_init(aux_info);
-        for i in 0..aux_info.num_variables {
-            let prover_msg = proof.proofs.get(i).expect("proof is incomplete");
+        let mut state = IOPVerifierState::init(aux_info);
+        let round_update_time = start_timer!(|| "sum check round update");
+        for prover_msg in &proof.proofs {
+            let start = start_timer!(|| format!("{}-th round", state.round));
             transcript.append_serializable_element(b"prover msg", prover_msg)?;
-            IOPVerifierState::verify_round_and_update_state(
-                &mut verifier_state,
-                prover_msg,
-                transcript,
-            )?;
+            state.verify_round_and_update_state(prover_msg, transcript)?;
+            end_timer!(start);
         }
+        end_timer!(round_update_time);
 
-        let res = IOPVerifierState::check_and_generate_subclaim(&verifier_state, &claimed_sum);
+        let res = state.check_and_generate_subclaim(&claimed_sum);
 
         end_timer!(start);
         res

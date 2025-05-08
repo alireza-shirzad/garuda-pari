@@ -24,7 +24,7 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
     type SumCheckSubClaim = SumCheckSubClaim<F>;
 
     /// Initialize the verifier's state.
-    fn verifier_init(index_info: &Self::VPAuxInfo) -> Self {
+    fn init(index_info: &Self::VPAuxInfo) -> Self {
         let start = start_timer!(|| "sum check verifier init");
         let res = Self {
             round: 1,
@@ -48,9 +48,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
         prover_msg: &Self::ProverMessage,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::Challenge, PolyIOPErrors> {
-        let start =
-            start_timer!(|| format!("sum check verify {}-th round and update state", self.round));
-
         if self.finished {
             return Err(PolyIOPErrors::InvalidVerifier(
                 "Incorrect verifier state: Verifier is already finished.".to_string(),
@@ -77,8 +74,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
             // proceed to the next round
             self.round += 1;
         }
-
-        end_timer!(start);
         Ok(challenge)
     }
 
