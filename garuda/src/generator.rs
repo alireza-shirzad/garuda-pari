@@ -5,7 +5,7 @@ use rayon::iter::repeatn;
 use std::rc::Rc;
 
 use crate::{
-    arithmetic::DenseMultilinearExtension,
+    arithmetic::DenseMultilinearExtension as DenseMLE,
     data_structures::{Index, ProvingKey, SuccinctIndex, VerifyingKey},
     epc::{
         data_structures::{Generators, MLBatchedCommitment, MLCommitmentKey, MLPublicParameters},
@@ -131,7 +131,7 @@ impl<E: Pairing> Garuda<E> {
     fn create_sel_polynomials(
         num_vars: usize,
         predicate_num_constraints: &IndexMap<Label, usize>,
-    ) -> Vec<DenseMultilinearExtension<E::ScalarField>>
+    ) -> Vec<DenseMLE<E::ScalarField>>
     where
         E: Pairing,
         E::ScalarField: Field,
@@ -158,7 +158,7 @@ impl<E: Pairing> Garuda<E> {
                     ))
                     .collect();
 
-                DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations)
+                DenseMLE::from_evaluations_vec(num_vars, evaluations)
             })
             .collect();
 
@@ -197,7 +197,7 @@ impl<E: Pairing> Garuda<E> {
         index: &Index<E::ScalarField>,
         epc_ck: &MLCommitmentKey<E>,
     ) -> (
-        Option<Vec<DenseMultilinearExtension<E::ScalarField>>>,
+        Option<Vec<DenseMLE<E::ScalarField>>>,
         Option<MLBatchedCommitment<E>>,
     ) {
         match index.num_predicates {
@@ -207,7 +207,7 @@ impl<E: Pairing> Garuda<E> {
                     index.log_num_constraints,
                     &index.predicate_num_constraints,
                 );
-                let sel_comms: MLBatchedCommitment<E> = MultilinearEPC::batch_commit(
+                let sel_comms = MultilinearEPC::batch_commit(
                     epc_ck,
                     &sel_polys,
                     &vec![None; sel_polys.len()],

@@ -16,9 +16,6 @@ use ark_ff::PrimeField;
 use ark_std::{end_timer, start_timer};
 use shared_utils::transcript::IOPTranscript;
 
-#[cfg(feature = "parallel")]
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-
 impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
     type VPAuxInfo = VPAuxInfo<F>;
     type ProverMessage = IOPProverMessage<F>;
@@ -32,7 +29,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
         let res = Self {
             round: 1,
             num_vars: index_info.num_variables,
-            max_degree: index_info.max_degree,
             finished: false,
             polynomials_received: Vec::with_capacity(index_info.num_variables),
             challenges: Vec::with_capacity(index_info.num_variables),
@@ -113,41 +109,8 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
 
         // the deferred check during the interactive phase:
         // 2. set `expected` to P(r)`
-        #[cfg(feature = "parallel")]
-        let mut expected_vec = self
-            .polynomials_received
-            .clone()
-            .into_par_iter()
-            .zip(self.challenges.clone().into_par_iter())
-            .map(|(evaluations, challenge)| {
-                if evaluations.len() != self.max_degree + 1 {
-                    return Err(PolyIOPErrors::InvalidVerifier(format!(
-                        "incorrect number of evaluations: {} vs {}",
-                        evaluations.len(),
-                        self.max_degree + 1
-                    )));
-                }
-                interpolate_uni_poly::<F>(&evaluations, challenge)
-            })
-            .collect::<Result<Vec<_>, PolyIOPErrors>>()?;
-
-        #[cfg(not(feature = "parallel"))]
-        let mut expected_vec = self
-            .polynomials_received
-            .clone()
-            .into_iter()
-            .zip(self.challenges.clone().into_iter())
-            .map(|(evaluations, challenge)| {
-                if evaluations.len() != self.max_degree + 1 {
-                    return Err(PolyIOPErrors::InvalidVerifier(format!(
-                        "incorrect number of evaluations: {} vs {}",
-                        evaluations.len(),
-                        self.max_degree + 1
-                    )));
-                }
-                interpolate_uni_poly::<F>(&evaluations, challenge)
-            })
-            .collect::<Result<Vec<_>, PolyIOPErrors>>()?;
+        let mut expected_vec =
+            interpolate_uni_poly_batch(&self.polynomials_received, &self.challenges)?;
 
         // insert the asserted_sum to the first position of the expected vector
         expected_vec.insert(0, *asserted_sum);
@@ -155,7 +118,7 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
         for (evaluations, &expected) in self
             .polynomials_received
             .iter()
-            .zip(expected_vec.iter())
+            .zip(&expected_vec)
             .take(self.num_vars)
         {
             // the deferred check during the interactive phase:
@@ -186,11 +149,137 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
 /// negligible compared to field operations.
 /// TODO: The quadratic term can be removed by precomputing the lagrange
 /// coefficients.
+fn interpolate_uni_poly_batch<F: PrimeField>(
+    p_i_s: &[Vec<F>],
+    eval_at_s: &[F],
+) -> Result<Vec<F>, PolyIOPErrors> {
+    let len = p_i_s[0].len();
+    let mut numerators = Vec::with_capacity(p_i_s.len() * len);
+    let mut denominators = Vec::with_capacity(p_i_s.len() * len);
+
+    let mut evals = Vec::with_capacity(len);
+
+    let start = start_timer!(|| "sum check interpolate uni poly opt");
+    for (p_i, &eval_at) in p_i_s.iter().zip(eval_at_s.iter()) {
+        let len = p_i.len();
+        let mut prod = eval_at;
+        evals.push(eval_at);
+
+        // `prod = \prod_{j} (eval_at - j)`
+        for e in 1..len {
+            let tmp = eval_at - F::from(e as u64);
+            evals.push(tmp);
+            prod *= tmp;
+        }
+        // we want to compute \prod (j!=i) (i-j) for a given i
+        //
+        // we start from the last step, which is
+        //  denom[len-1] = (len-1) * (len-2) *... * 2 * 1
+        // the step before that is
+        //  denom[len-2] = (len-2) * (len-3) * ... * 2 * 1 * -1
+        // and the step before that is
+        //  denom[len-3] = (len-3) * (len-4) * ... * 2 * 1 * -1 * -2
+        //
+        // i.e., for any i, the one before this will be derived from
+        //  denom[i-1] = denom[i] * (len-i) / i
+        //
+        // that is, we only need to store
+        // - the last denom for i = len-1, and
+        // - the ratio between current step and fhe last step, which is the product of
+        //   (len-i) / i from all previous steps and we store this product as a fraction
+        //   number to reduce field divisions.
+
+        // We know
+        //  - 2^61 < factorial(20) < 2^62
+        //  - 2^122 < factorial(33) < 2^123
+        // so we will be able to compute the ratio
+        //  - for len <= 20 with i64
+        //  - for len <= 33 with i128
+        //  - for len >  33 with BigInt
+        if p_i.len() <= 20 {
+            let last_denominator = F::from(u64_factorial(len - 1));
+            let mut ratio_numerator = 1i64;
+            let mut ratio_denominator = 1u64;
+
+            for i in (0..len).rev() {
+                let ratio_numerator_f = if ratio_numerator < 0 {
+                    -F::from((-ratio_numerator) as u64)
+                } else {
+                    F::from(ratio_numerator as u64)
+                };
+
+                numerators.push(p_i[i] * prod * F::from(ratio_denominator));
+                denominators.push(last_denominator * ratio_numerator_f * evals[i]);
+
+                // compute denom for the next step is current_denom * (len-i)/i
+                if i != 0 {
+                    ratio_numerator *= -(len as i64 - i as i64);
+                    ratio_denominator *= i as u64;
+                }
+            }
+        } else if p_i.len() <= 33 {
+            let last_denominator = F::from(u128_factorial(len - 1));
+            let mut ratio_numerator = 1i128;
+            let mut ratio_denominator = 1u128;
+
+            for i in (0..len).rev() {
+                let ratio_numerator_f = if ratio_numerator < 0 {
+                    -F::from((-ratio_numerator) as u128)
+                } else {
+                    F::from(ratio_numerator as u128)
+                };
+
+                numerators.push(p_i[i] * prod * F::from(ratio_denominator));
+                denominators.push(last_denominator * ratio_numerator_f * evals[i]);
+
+                // compute denom for the next step is current_denom * (len-i)/i
+                if i != 0 {
+                    ratio_numerator *= -(len as i128 - i as i128);
+                    ratio_denominator *= i as u128;
+                }
+            }
+        } else {
+            let mut denom_up = field_factorial::<F>(len - 1);
+            let mut denom_down = F::one();
+
+            for i in (0..len).rev() {
+                numerators.push(p_i[i] * prod * denom_down);
+                denominators.push(denom_up * evals[i]);
+                // compute denom for the next step is current_denom * (len-i)/i
+                if i != 0 {
+                    denom_up *= -F::from((len - i) as u64);
+                    denom_down *= F::from(i as u64);
+                }
+            }
+        }
+        evals.clear();
+    }
+    shared_utils::batch_inversion_and_mul(&mut denominators, &F::one());
+    let res = numerators
+        .chunks(len)
+        .zip(denominators.chunks(len))
+        .map(|(n, d)| n.iter().zip(d).map(|(n, d)| *n * d).sum::<F>())
+        .collect::<Vec<F>>();
+    end_timer!(start);
+    Ok(res)
+}
+
+/// Interpolate a uni-variate degree-`p_i.len()-1` polynomial and evaluate this
+/// polynomial at `eval_at`:
+///
+///   \sum_{i=0}^len p_i * (\prod_{j!=i} (eval_at - j)/(i-j) )
+///
+/// This implementation is linear in number of inputs in terms of field
+/// operations. It also has a quadratic term in primitive operations which is
+/// negligible compared to field operations.
+/// TODO: The quadratic term can be removed by precomputing the lagrange
+/// coefficients.
+#[cfg(test)]
 fn interpolate_uni_poly<F: PrimeField>(p_i: &[F], eval_at: F) -> Result<F, PolyIOPErrors> {
     let start = start_timer!(|| "sum check interpolate uni poly opt");
 
     let len = p_i.len();
-    let mut evals = vec![];
+    let mut evals = Vec::with_capacity(len);
     let mut prod = eval_at;
     evals.push(eval_at);
 
@@ -231,6 +320,8 @@ fn interpolate_uni_poly<F: PrimeField>(p_i: &[F], eval_at: F) -> Result<F, PolyI
         let mut ratio_numerator = 1i64;
         let mut ratio_denominator = 1u64;
 
+        let mut numerators = Vec::with_capacity(len);
+        let mut denominators = Vec::with_capacity(len);
         for i in (0..len).rev() {
             let ratio_numerator_f = if ratio_numerator < 0 {
                 -F::from((-ratio_numerator) as u64)
@@ -238,8 +329,8 @@ fn interpolate_uni_poly<F: PrimeField>(p_i: &[F], eval_at: F) -> Result<F, PolyI
                 F::from(ratio_numerator as u64)
             };
 
-            res += p_i[i] * prod * F::from(ratio_denominator)
-                / (last_denominator * ratio_numerator_f * evals[i]);
+            numerators.push(p_i[i] * prod * F::from(ratio_denominator));
+            denominators.push(last_denominator * ratio_numerator_f * evals[i]);
 
             // compute denom for the next step is current_denom * (len-i)/i
             if i != 0 {
@@ -247,6 +338,12 @@ fn interpolate_uni_poly<F: PrimeField>(p_i: &[F], eval_at: F) -> Result<F, PolyI
                 ratio_denominator *= i as u64;
             }
         }
+        shared_utils::batch_inversion_and_mul(&mut denominators, &F::one());
+        res += numerators
+            .into_iter()
+            .zip(denominators.into_iter())
+            .map(|(num, denom)| num * denom)
+            .sum::<F>();
     } else if p_i.len() <= 33 {
         let last_denominator = F::from(u128_factorial(len - 1));
         let mut ratio_numerator = 1i128;

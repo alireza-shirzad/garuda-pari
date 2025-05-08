@@ -37,10 +37,10 @@ impl<E: Pairing> Garuda<E> {
         let mut transcript = IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
         let verifier_key = &pk.verifying_key;
         transcript
-            .append_serializable_element("vk".as_bytes(), &verifier_key)
+            .append_serializable_element(b"vk", &verifier_key)
             .unwrap();
         transcript
-            .append_serializable_element("input".as_bytes(), &x_assignment[1..].to_vec())
+            .append_serializable_element(b"input", &x_assignment[1..])
             .unwrap();
         end_timer!(timer_init_transcript);
 
@@ -58,7 +58,7 @@ impl<E: Pairing> Garuda<E> {
         let w_batched_comm =
             MultilinearEPC::batch_commit(&pk.epc_ck, &mw_polys, &rest_zeros, Some(&w_assignment));
         transcript
-            .append_serializable_element("batched_commitments".as_bytes(), &w_batched_comm)
+            .append_serializable_element(b"batched_commitments", &w_batched_comm)
             .unwrap();
         end_timer!(timer_epc_commit);
 

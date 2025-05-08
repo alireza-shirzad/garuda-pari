@@ -7,14 +7,12 @@ use super::{
 };
 use crate::to_bytes;
 use ark_crypto_primitives::crh::{sha256::Sha256, CRHScheme};
-use ark_ec::{
-    pairing::{Pairing, PairingOutput},
-    AffineRepr, CurveGroup, VariableBaseMSM,
-};
-use ark_ec::{scalar_mul::BatchMulPreprocessing, ScalarMul};
+use ark_ec::scalar_mul::BatchMulPreprocessing;
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup, VariableBaseMSM};
 use ark_ff::PrimeField;
 use ark_poly::{
-    DenseMultilinearExtension, MultilinearExtension, Polynomial, SparseMultilinearExtension,
+    DenseMultilinearExtension as DenseMLE, MultilinearExtension, Polynomial,
+    SparseMultilinearExtension,
 };
 use ark_std::{cfg_chunks, cfg_iter, marker::PhantomData, UniformRand};
 use ark_std::{collections::LinkedList, end_timer, start_timer};
@@ -22,6 +20,7 @@ use ark_std::{rand::RngCore, One, Zero};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
+use shared_utils::msm_bigint_wnaf;
 
 use std::ops::Mul;
 pub struct MultilinearEPC<E: Pairing> {
@@ -39,7 +38,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
     type Trapdoor = MLTrapdoor<E>;
     type Commitment = MLCommitment<E>;
     type BatchedCommitment = MLBatchedCommitment<E>;
-    type Polynomial = DenseMultilinearExtension<E::ScalarField>;
+    type Polynomial = DenseMLE<E::ScalarField>;
     type Equifficient = E::ScalarField;
     type BasisPoly = SparseMultilinearExtension<E::ScalarField>;
     type PolynomialBasis = Vec<Self::BasisPoly>;
@@ -60,7 +59,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
             .collect();
 
         let mut powers_of_g = Vec::new();
-        let mut eq: LinkedList<DenseMultilinearExtension<E::ScalarField>> =
+        let mut eq: LinkedList<DenseMLE<E::ScalarField>> =
             LinkedList::from_iter(Self::eq_extension(&tau).into_iter());
         let mut eq_arr = LinkedList::new();
         let mut base = eq.pop_back().unwrap().evaluations;
@@ -100,7 +99,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
 
         // Consistency stuff
 
-        let mut randomized_basis_set: Vec<E::ScalarField> = Vec::new();
+        let mut randomized_basis_set = Vec::new();
         for i in 0..dim {
             let value = equifficient_constraints
                 .iter()
@@ -120,6 +119,14 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
             .iter()
             .map(|alpha| pp.generators.h * (*alpha))
             .collect();
+        let consistency_vk = E::G2::normalize_batch(&consistency_vk);
+
+        let consistency_vk_prep: Vec<E::G2Prepared> = consistency_vk
+            .iter()
+            .map(|x| E::G2Prepared::from(*x))
+            .collect();
+        let h_mask_random_prep: Vec<E::G2Prepared> =
+            h_mask.iter().map(|x| E::G2Prepared::from(*x)).collect();
 
         (
             MLCommitmentKey {
@@ -133,8 +140,11 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                 nv: pp.num_var,
                 g: pp.generators.g.into(),
                 h: pp.generators.h.into(),
+                h_prep: pp.generators.h.into().into(),
                 h_mask_random: h_mask,
+                h_mask_random_prep,
                 consistency_vk,
+                consistency_vk_prep,
             },
             MLTrapdoor {
                 tau,
@@ -255,24 +265,28 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         eval: &Self::Evaluation,
         proof: &Self::OpeningProof,
     ) -> bool {
-        let left = E::pairing(comm.g_product.into_group() - &vk.g.mul(eval), vk.h);
+        let verify_time = start_timer!(|| "EPC Verify");
+        let lhs = {
+            let mut left_input = comm.g_product.into_group() - &vk.g.mul(*eval);
+            let point_bigint = point.iter().map(|x| x.into_bigint()).collect::<Vec<_>>();
+            left_input += msm_bigint_wnaf::<E::G1>(proof, point_bigint.as_slice());
 
-        let h_mul = vk.h.into_group().batch_mul(point);
-
-        let pairing_rights: Vec<_> = (0..comm.nv)
-            .map(|i| vk.h_mask_random[i].into_group() - &h_mul[i])
-            .collect();
-        let pairing_rights: Vec<E::G2Affine> = E::G2::normalize_batch(&pairing_rights);
-        let pairing_rights: Vec<E::G2Prepared> = pairing_rights
-            .into_iter()
-            .map(|x| E::G2Prepared::from(x))
-            .collect();
-
-        let pairing_lefts: Vec<E::G1Prepared> =
-            proof.iter().map(|x| E::G1Prepared::from(*x)).collect();
-
-        let right = E::multi_pairing(pairing_lefts, pairing_rights);
-        left == right
+            let right_input = vk.h_prep.clone();
+            (left_input.into().into(), right_input)
+        };
+        let mut rhs = {
+            let left_inputs = proof
+                .iter()
+                .map(|x| E::G1Prepared::from(-*x))
+                .collect::<Vec<_>>();
+            let right_inputs = vk.h_mask_random_prep.clone();
+            (left_inputs, right_inputs)
+        };
+        rhs.0.push(lhs.0);
+        rhs.1.push(lhs.1);
+        let result = E::multi_pairing(rhs.0, rhs.1).is_zero();
+        end_timer!(verify_time);
+        result
     }
 
     fn batch_verify(
@@ -283,44 +297,73 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         proof: &Self::BatchedOpeningProof,
         constrained_num: usize,
     ) -> bool {
+        let verify_time = start_timer!(|| "EPC Batch Verify");
         // perform the consistency check on the constrained polyanomials, i.e. check the equifficiency property
-        match &comm.consistency_comm {
-            Some(consistency_comm) => {
-                Self::verify_consistency(
-                    vk,
-                    *consistency_comm,
-                    &comm.individual_comms[..constrained_num],
-                );
-            }
-            None => {}
+        let mut consistency_result = true;
+        if let Some(consistency_comm) = &comm.consistency_comm {
+            consistency_result &= Self::verify_consistency(
+                vk,
+                *consistency_comm,
+                &comm.individual_comms[..constrained_num],
+            );
         }
         let individual_comms = &comm.individual_comms;
-        let g_products: Vec<_> = individual_comms.iter().map(|x| x.g_product).collect();
+        let mut g_products: Vec<_> = individual_comms.iter().map(|x| x.g_product).collect();
         assert_eq!(
             evals.len(),
             individual_comms.len(),
             "Invalid size of values"
         );
-        let challs_field: Vec<_> = Self::produce_opening_batch_challs(individual_comms);
-        let challs_bigint: Vec<_> = challs_field.iter().map(|x| x.into_bigint()).collect();
+        let comm_batch_time = start_timer!(|| "Batching comms");
+        let challs_field = Self::produce_opening_batch_challs(individual_comms);
+        let challs_bigint = challs_field.iter().map(|x| x.into_bigint());
         let batched_eval = challs_field
             .iter()
             .zip(evals.iter())
             .fold(E::ScalarField::zero(), |acc, (x, y)| acc + (*x * y));
-        let batched_comm =
-            <E::G1 as VariableBaseMSM>::msm_bigint(&g_products, challs_bigint.as_slice())
-                .into_affine();
-        let result = Self::verify(
-            vk,
-            &MLCommitment {
-                nv: individual_comms[0].nv,
-                g_product: batched_comm,
-            },
-            point,
-            &batched_eval,
-            proof,
-        );
-        result
+        end_timer!(comm_batch_time);
+
+        let point_bigint = point.iter().map(|x| x.into_bigint());
+
+        let result = {
+            let eval = &batched_eval;
+            let verify_time = start_timer!(|| "EPC Verify");
+            // We rewrite the logn many pairings via the standard KZG pairing rewrite
+            // to maximize the pairings which use the same G2 element.
+            let lhs = {
+                // One big MSM for
+                // 1. Combining the individual commitments via a linear combination
+                // 2. Computing `proof[i] * point[i]` for each i
+                // 3. Computing `-eval * vk.g`
+                //
+                // Part 1 above generates the batched commitment
+                g_products.extend(proof.clone());
+                g_products.push(vk.g);
+                let scalars = challs_bigint
+                    .chain(point_bigint)
+                    .chain(std::iter::once((-*eval).into_bigint()))
+                    .collect::<Vec<_>>();
+                let left_input = msm_bigint_wnaf::<E::G1>(&g_products, scalars.as_slice());
+
+                let right_input = vk.h_prep.clone();
+                (left_input.into().into(), right_input)
+            };
+            let mut rhs = {
+                let left_inputs = proof
+                    .iter()
+                    .map(|x| E::G1Prepared::from(-*x))
+                    .collect::<Vec<_>>();
+                let right_inputs = vk.h_mask_random_prep.clone();
+                (left_inputs, right_inputs)
+            };
+            rhs.0.push(lhs.0);
+            rhs.1.push(lhs.1);
+            let result = E::multi_pairing(rhs.0, rhs.1).is_zero();
+            end_timer!(verify_time);
+            result
+        };
+        end_timer!(verify_time);
+        consistency_result & result
     }
 }
 
@@ -329,29 +372,25 @@ impl<E: Pairing> MultilinearEPC<E> {
         vk: &MLVerifyingKey<E>,
         consistency_comm: E::G1Affine,
         individual_comms: &[MLCommitment<E>],
-    ) {
+    ) -> bool {
+        let start = start_timer!(|| "EPC Consistency Check");
         assert_eq!(vk.consistency_vk.len(), individual_comms.len());
-        let left: PairingOutput<E> = E::pairing(consistency_comm, vk.h);
-        let pairing_lefts: Vec<E::G1Prepared> = individual_comms
+        let mut pairing_lefts: Vec<_> = individual_comms
             .iter()
-            .map(|comm| E::G1Prepared::from(comm.g_product))
-            .collect();
-        let pairing_rights: Vec<E::G2Prepared> = vk
-            .consistency_vk
-            .iter()
-            .copied()
-            .map(E::G2Prepared::from)
-            .collect();
-        let right: PairingOutput<E> = E::multi_pairing(pairing_lefts, pairing_rights);
-        if left != right {
-            panic!("consistency check failed");
-        }
+            .map(|comm| comm.g_product.into())
+            .collect::<Vec<E::G1Prepared>>();
+        pairing_lefts.push((-consistency_comm).into());
+        let mut pairing_rights = vk.consistency_vk_prep.clone();
+        pairing_rights.push(vk.h_prep.clone());
+        let result = E::multi_pairing(pairing_lefts, pairing_rights).is_zero();
+        end_timer!(start);
+        result
     }
 
     /// generate eq(t,x), a product of multilinear polynomials with fixed t.
     /// eq(a,b) is takes extensions of a,b in {0,1}^num_vars such that if a and b in {0,1}^num_vars are equal
     /// then this polynomial evaluates to 1.
-    fn eq_extension(t: &[E::ScalarField]) -> Vec<DenseMultilinearExtension<E::ScalarField>> {
+    fn eq_extension(t: &[E::ScalarField]) -> Vec<DenseMLE<E::ScalarField>> {
         let dim = t.len();
         let mut result = Vec::new();
         for i in 0..dim {
@@ -366,7 +405,7 @@ impl<E: Pairing> MultilinearEPC<E> {
                 let ti_xi = ti * xi;
                 poly.push(ti_xi + ti_xi - xi - ti + E::ScalarField::one());
             }
-            result.push(DenseMultilinearExtension::from_evaluations_vec(dim, poly));
+            result.push(DenseMLE::from_evaluations_vec(dim, poly));
         }
 
         result
@@ -386,19 +425,17 @@ impl<E: Pairing> MultilinearEPC<E> {
     }
 
     pub fn produce_batched_poly(
-        polys: &[DenseMultilinearExtension<E::ScalarField>],
+        polys: &[DenseMLE<E::ScalarField>],
         comms: &MLBatchedCommitment<E>,
-    ) -> DenseMultilinearExtension<E::ScalarField> {
+    ) -> DenseMLE<E::ScalarField> {
         let comms = &comms.individual_comms;
         let num_vars = polys[0].num_vars();
         for poly in polys {
             assert_eq!(poly.num_vars(), num_vars, "Invalid size of polynomial");
         }
         let challenges = Self::produce_opening_batch_challs(comms);
-        let mut batched_poly = DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            vec![E::ScalarField::zero(); 1 << num_vars],
-        );
+        let mut batched_poly =
+            DenseMLE::from_evaluations_vec(num_vars, vec![E::ScalarField::zero(); 1 << num_vars]);
         for (poly, challenge) in polys.iter().zip(challenges) {
             cfg_iter!(poly.evaluations)
                 .zip(&mut batched_poly.evaluations)

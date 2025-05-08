@@ -113,7 +113,6 @@ pub fn evaluate_batch<F: Field>(mles: &[DenseMultilinearExtension<F>], point: &[
 
 #[cfg(feature = "parallel")]
 use rayon::iter::MinLen;
-use rayon::vec;
 
 /// An iterator that generates the evaluations of the polynomial
 /// eq(r, y || x) over the Boolean hypercube.

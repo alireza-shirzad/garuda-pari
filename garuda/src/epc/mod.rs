@@ -55,6 +55,7 @@ pub trait EPC {
         comms: &Self::BatchedCommitment,
     ) -> Self::BatchedOpeningProof;
 
+    #[allow(dead_code)]
     fn verify(
         vk: &Self::VerifyingKey,
         comm: &Self::Commitment,

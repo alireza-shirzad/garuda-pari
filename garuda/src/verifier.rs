@@ -25,10 +25,10 @@ impl<E: Pairing> Garuda<E> {
         let timer_transcript_init = start_timer!(|| "Transcript initializtion");
         let mut transcript: IOPTranscript<<E as Pairing>::ScalarField> =
             IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
-        let _ = transcript.append_serializable_element("vk".as_bytes(), vk);
-        let _ = transcript.append_serializable_element("input".as_bytes(), &public_input.to_vec());
-        let _ = transcript
-            .append_serializable_element("batched_commitments".as_bytes(), &proof.w_batched_comm);
+        let _ = transcript.append_serializable_element(b"vk", vk);
+        let _ = transcript.append_serializable_element(b"input", &public_input);
+        let _ =
+            transcript.append_serializable_element(b"batched_commitments", &proof.w_batched_comm);
 
         end_timer!(timer_transcript_init);
 
@@ -36,8 +36,7 @@ impl<E: Pairing> Garuda<E> {
         // Line 4 of figure 7 in https://eprint.iacr.org/2024/1245.pdf
         // This process is only succinct if the constraint system is 'instance outlined'
         let timer_x_poly = start_timer!(|| "Compute x polynomial");
-        let mut px_evaluations: Vec<(usize, E::ScalarField)> =
-            Vec::with_capacity(vk.succinct_index.instance_len);
+        let mut px_evaluations = Vec::with_capacity(vk.succinct_index.instance_len);
         let r1cs_orig_num_cnstrs =
             vk.succinct_index.r1cs_num_constraints - vk.succinct_index.instance_len;
         px_evaluations.push((r1cs_orig_num_cnstrs, E::ScalarField::ONE));
@@ -62,7 +61,7 @@ impl<E: Pairing> Garuda<E> {
             num_variables: vk.succinct_index.log_num_constraints,
             phantom: PhantomData,
         };
-        let zero_check_subclaim = <PolyIOP<E::ScalarField> as ZeroCheck<E::ScalarField>>::verify(
+        let zero_check_subclaim = PolyIOP::verify(
             &proof.zero_check_proof,
             &zero_check_auxiliary_info,
             &mut transcript,
@@ -88,7 +87,7 @@ impl<E: Pairing> Garuda<E> {
         // The batch contains the evaluation proofs of the w polynomials and possibly the selector polynomials
         // If there is only one predicate, then there is no selector polynomial
 
-        let timer_epc_batch_ver = start_timer!(|| "Grand Poly Evaluation");
+        let timer_epc_batch_ver = start_timer!(|| "EPC Verification");
         let batched_comm = MLBatchedCommitment {
             individual_comms: proof
                 .w_batched_comm
