@@ -18,6 +18,8 @@ use ark_std::{
     test_rng,
 };
 use garuda::Garuda;
+use garuda_bench::INPUT_BENCHMARK;
+use garuda_bench::RESCUE_APPLICATION_NAME;
 use garuda_bench::{create_test_rescue_parameter, RescueDemo};
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
@@ -26,7 +28,6 @@ use std::ops::Neg;
 use std::time::Duration;
 
 fn bench<E: Pairing>(
-    _bench_name: &str,
     num_invocations: usize,
     input_size: usize,
     num_keygen_iterations: u32,
@@ -141,15 +142,59 @@ where
 }
 
 fn main() {
-    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
-    let num_invocations: Vec<usize> = (4..6).map(|i| 2_usize.pow(i as u32)).collect();
+    //////////// Benchamrk the Verifier ////////////////
+    const MAX_LOG2_INPUT_SIZE: usize = 20;
+    let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .expect("Failed to build thread pool");
+    pool.install(|| {
+        for &input_size in &input_sizes {
+            const GARUDA_VARIANT: &str = {
+                #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
+                {
+                    "garuda-gr1cs"
+                }
+
+                #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
+                {
+                    "garuda-r1cs"
+                }
+
+                // Fire a helpful error if the build is mis‑configured.
+                #[cfg(not(any(
+                    all(feature = "gr1cs", not(feature = "r1cs")),
+                    all(feature = "r1cs", not(feature = "gr1cs"))
+                )))]
+                {
+                    compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
+                }
+            };
+
+            let filename = format!(
+                "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}t-{INPUT_BENCHMARK}.csv",
+                1
+            );
+            let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1).save_to_csv(&filename);
+        }
+    });
+
+    //////////// Benchamrk the prover ////////////////
+
+    const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
+    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
 
     for &num_thread in &[1, 4] {
         let pool = ThreadPoolBuilder::new()
             .num_threads(num_thread)
             .build()
             .expect("Failed to build thread pool");
-
         pool.install(|| {
             for &num_invocation in &num_invocations {
                 const GARUDA_VARIANT: &str = {
@@ -173,8 +218,11 @@ fn main() {
                     }
                 };
 
-                let filename = format!("{GARUDA_VARIANT}-{}t.csv", num_thread);
-                let _ = bench::<Bls12_381>("bench", num_invocation, 20, 1, 1, 100, num_thread)
+                let filename = format!(
+                    "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}t.csv",
+                    num_thread
+                );
+                let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread)
                     .save_to_csv(&filename);
             }
         });

@@ -50,11 +50,20 @@ bls12_381 = { version = "0.8.0" }
 ark-bn254 = { git = "https://github.com/arkworks-rs/algebra", default-features = false, features = [
     "curve",
 ] }
-ark-circom = { git = "https://github.com/alireza-shirzad/circom-compat" }
+ark-circom = { path = "../../circom-compat" }
 tokio = { version = "1.0", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+[[bench]]
+name = "aadhaar-garuda"
+path = "benches/aadhaar-garuda.rs"
+harness = false
+
+[[bench]]
+name = "aadhaar-groth16"
+path = "benches/aadhaar-groth16.rs"
+harness = false
 
 [[bench]]
 name = "rescue-garuda"
@@ -81,7 +90,6 @@ harness = false
 name = "rescue-spartan-ccs"
 path = "benches/rescue-spartan-ccs.rs"
 harness = false
-
 
 [[bench]]
 name = "rescue-hyperplonk"
@@ -115,3 +123,6 @@ parallel = [
 
 r1cs = ["ark-crypto-primitives/r1cs"]
 gr1cs = ["ark-crypto-primitives/gr1cs"]
+
+
+

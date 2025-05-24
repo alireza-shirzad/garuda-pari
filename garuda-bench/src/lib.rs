@@ -1,3 +1,6 @@
+pub const INPUT_BENCHMARK: &str = "input";
+pub const RESCUE_APPLICATION_NAME: &str = "rescue";
+
 pub mod bellpepper_adapter;
 
 use ark_crypto_primitives::{

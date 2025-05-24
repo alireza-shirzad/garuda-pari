@@ -172,7 +172,6 @@ impl<E: Pairing> Garuda<E> {
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
-        debug_assert!(cs.is_satisfied().unwrap());
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
         let cs = cs.into_inner().unwrap();

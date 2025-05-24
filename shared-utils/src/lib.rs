@@ -4,6 +4,8 @@ use ark_ec::VariableBaseMSM;
 use ark_ff::{BigInteger, Field, PrimeField};
 pub use bench::BenchResult;
 
+pub const RESULT_FOLDER_PATH: &str = "results";
+
 /// Takes as input a struct, and converts them to a series of bytes. All traits
 /// that implement `CanonicalSerialize` can be automatically converted to bytes
 /// in this manner.

@@ -1,8 +1,10 @@
 use ark_relations::utils::IndexMap;
 use csv::Writer;
 use std::error::Error;
-use std::fs::{metadata, OpenOptions};
+use std::fs::{create_dir_all, metadata, OpenOptions};
 use std::time::Duration;
+
+use crate::RESULT_FOLDER_PATH;
 
 #[derive(Debug)]
 pub struct BenchResult {
@@ -29,13 +31,22 @@ pub struct BenchResult {
 
 impl BenchResult {
     pub fn save_to_csv(&self, filename: &str) -> Result<(), Box<dyn Error>> {
-        let file_exists = metadata(filename).is_ok();
+        // Ensure the "results" directory exists
+        create_dir_all(RESULT_FOLDER_PATH)?;
 
+        // Construct full path to file
+        let full_path = format!("{}/{}", RESULT_FOLDER_PATH, filename);
+
+        // Check if file exists
+        let file_exists = metadata(&full_path).is_ok();
+
+        // Open the file in append mode
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(filename)?;
+            .open(&full_path)?;
 
+        // Create CSV writer
         let mut writer = Writer::from_writer(file);
 
         // If the file is newly created, write headers

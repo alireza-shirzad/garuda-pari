@@ -3,3 +3,7 @@
 *.bin
 Cargo.lock
 garuda-bench/circuits/aptos/
+*.pdf
+*.wasm
+*.r1cs
+*.json
