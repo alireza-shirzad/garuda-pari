@@ -73,7 +73,7 @@ where
         let _cs = Garuda::<E>::circuit_to_keygen_cs(circuit.clone()).unwrap();
         keygen_prep_time += start.elapsed();
         let start = ark_std::time::Instant::now();
-        let (ipk, ivk) = Garuda::<E>::keygen(setup_circuit, &mut rng);
+        let (ipk, ivk) = Garuda::<E>::keygen(setup_circuit, true, &mut rng);
         pk = Some(ipk);
         vk = Some(ivk);
         keygen_time += start.elapsed();
@@ -97,7 +97,7 @@ where
         let start = ark_std::time::Instant::now();
         proof = pk
             .as_ref()
-            .map(|pk| Garuda::prove(pk, prover_circuit).unwrap());
+            .map(|pk| Garuda::prove(pk, true, prover_circuit).unwrap());
         prover_time += start.elapsed();
     }
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);

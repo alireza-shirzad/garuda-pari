@@ -20,7 +20,7 @@ ark-crypto-primitives = { git = "https://github.com/alireza-shirzad/crypto-primi
 ] }
 ark-bls12-381 = { git = "https://github.com/arkworks-rs/algebra", default-features = false, features = ["curve"] }
 ark-bn254 = { git = "https://github.com/arkworks-rs/algebra", default-features = false, features = ["curve"] }
-
+ark-poly-commit = { version = "0.5.0"}
 merlin = { version = "3.0.0", default-features = false }
 displaydoc = { version = "0.2.3", default-features = false }
 tracing = { version = "0.1", default-features = false, features = [ "attributes" ] }

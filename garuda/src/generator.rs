@@ -31,6 +31,7 @@ use rayon::prelude::*;
 impl<E: Pairing> Garuda<E> {
     pub fn keygen<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
+        zk: bool,
         mut rng: impl RngCore,
     ) -> (ProvingKey<E>, VerifyingKey<E>)
     where
@@ -60,7 +61,7 @@ impl<E: Pairing> Garuda<E> {
         end_timer!(timer_epc_equif_constrs_gen);
         start_timer!(|| "Generating EPC Keys");
         let (epc_ck, epc_vk, _epc_tr) =
-            MultilinearEPC::<E>::setup(rng, &epc_pp, &equifficient_constrinats);
+            MultilinearEPC::<E>::setup(rng, &epc_pp, Some(10), &equifficient_constrinats);
         end_timer!(timer_epc_startup);
         end_timer!(timer_epc_startup);
 
@@ -210,6 +211,7 @@ impl<E: Pairing> Garuda<E> {
                 let sel_comms = MultilinearEPC::batch_commit(
                     epc_ck,
                     &sel_polys,
+                    &vec![None; sel_polys.len()],
                     &vec![None; sel_polys.len()],
                     None,
                 );

@@ -9,15 +9,18 @@ use crate::to_bytes;
 use ark_crypto_primitives::crh::{sha256::Sha256, CRHScheme};
 use ark_ec::scalar_mul::BatchMulPreprocessing;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup, VariableBaseMSM};
+use ark_ff::Field;
 use ark_ff::PrimeField;
+use ark_poly::multivariate::Term;
+use ark_poly::DenseMVPolynomial;
 use ark_poly::{
+    multivariate::{SparsePolynomial, SparseTerm},
     DenseMultilinearExtension as DenseMLE, MultilinearExtension, Polynomial,
     SparseMultilinearExtension,
 };
-use ark_std::{cfg_chunks, cfg_iter, marker::PhantomData, UniformRand};
+use ark_std::{cfg_chunks, cfg_into_iter, cfg_iter, marker::PhantomData, rand::Rng, UniformRand};
 use ark_std::{collections::LinkedList, end_timer, start_timer};
 use ark_std::{rand::RngCore, One, Zero};
-
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use shared_utils::msm_bigint_wnaf;
@@ -29,17 +32,18 @@ pub struct MultilinearEPC<E: Pairing> {
 
 impl<E: Pairing> EPC for MultilinearEPC<E> {
     type PublicParameters = MLPublicParameters<E>;
-    type OpeningProof = Vec<E::G1Affine>;
-    type BatchedOpeningProof = Vec<E::G1Affine>;
+    type OpeningProof = (Vec<E::G1Affine>, Option<E::ScalarField>);
+    type BatchedOpeningProof = Self::OpeningProof;
     type CommitmentKey = MLCommitmentKey<E>;
     type VerifyingKey = MLVerifyingKey<E>;
     type Evaluation = E::ScalarField;
     type EvaluationPoint = Vec<E::ScalarField>;
     type Trapdoor = MLTrapdoor<E>;
+    type ProverZKState = Option<SparsePolynomial<E::ScalarField, SparseTerm>>;
+    type ProverBatchedZKState = Vec<Self::ProverZKState>;
     type Commitment = MLCommitment<E>;
     type BatchedCommitment = MLBatchedCommitment<E>;
     type Polynomial = DenseMLE<E::ScalarField>;
-    type Equifficient = E::ScalarField;
     type BasisPoly = SparseMultilinearExtension<E::ScalarField>;
     type PolynomialBasis = Vec<Self::BasisPoly>;
     type EquifficientConstraint = Vec<Self::PolynomialBasis>;
@@ -47,20 +51,21 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
     fn setup(
         mut rng: impl RngCore,
         pp: &Self::PublicParameters,
+        hiding_bound: Option<usize>,
         equifficient_constraints: &Self::EquifficientConstraint,
     ) -> (Self::CommitmentKey, Self::VerifyingKey, Self::Trapdoor) {
-        let dim = equifficient_constraints[0].len();
-        let tau: Vec<E::ScalarField> = (0..pp.num_var)
+        // beta_is, the random evaluation points
+        let beta: Vec<E::ScalarField> = (0..pp.num_var)
             .map(|_| E::ScalarField::rand(&mut rng))
             .collect();
-
+        // alpha_is, the random consistency challenges
         let consistency_challanges: Vec<E::ScalarField> = (0..pp.num_constraints)
             .map(|_| E::ScalarField::rand(&mut rng))
             .collect();
 
         let mut powers_of_g = Vec::new();
         let mut eq: LinkedList<DenseMLE<E::ScalarField>> =
-            LinkedList::from_iter(Self::eq_extension(&tau).into_iter());
+            LinkedList::from_iter(Self::eq_extension(&beta));
         let mut eq_arr = LinkedList::new();
         let mut base = eq.pop_back().unwrap().evaluations;
 
@@ -71,7 +76,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                 base = base
                     .into_iter()
                     .zip(mul.into_iter())
-                    .map(|(a, b)| a * &b)
+                    .map(|(a, b)| a * b)
                     .collect();
             }
         }
@@ -95,10 +100,36 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         }
         let last = powers_of_g.last().unwrap();
         powers_of_g.push(vec![last.iter().sum::<E::G1>().into_affine()]);
-        let h_mask = h_table.batch_mul(&tau);
+        let h_mask = h_table.batch_mul(&beta);
 
-        // Consistency stuff
+        // Preparing the zk srs, if hiding_bound is set
+        let (gamma_g, powers_of_gamma_g) = match hiding_bound {
+            Some(hiding_bound) => {
+                let gamma_g = E::G1::rand(&mut rng);
+                let mut powers_of_gamma_g = vec![Vec::new(); pp.num_var];
+                let gamma_g_table = BatchMulPreprocessing::new(gamma_g, hiding_bound + 1);
 
+                ark_std::cfg_iter_mut!(powers_of_gamma_g)
+                    .enumerate()
+                    .for_each(|(i, v)| {
+                        let mut powers_of_beta_i = Vec::with_capacity(hiding_bound + 1);
+                        let mut cur = E::ScalarField::one();
+                        for _ in 0..=hiding_bound {
+                            cur *= &beta[i];
+                            powers_of_beta_i.push(cur);
+                        }
+                        *v = gamma_g_table.batch_mul(&powers_of_beta_i);
+                    });
+
+                let gamma_g = gamma_g.into_affine();
+                (Some(gamma_g), Some(powers_of_gamma_g))
+            }
+            None => (None, None),
+        };
+
+        // Preparing the consistency srs
+
+        let dim = equifficient_constraints[0].len();
         let mut randomized_basis_set = Vec::new();
         for i in 0..dim {
             let value = equifficient_constraints
@@ -107,7 +138,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                 .fold(
                     E::ScalarField::zero(),
                     |acc, (basis_set, consistency_chall)| {
-                        acc + (basis_set[i].evaluate(&tau) * consistency_chall)
+                        acc + (basis_set[i].evaluate(&beta) * consistency_chall)
                     },
                 );
             randomized_basis_set.push(value);
@@ -125,15 +156,18 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
             .iter()
             .map(|x| E::G2Prepared::from(*x))
             .collect();
-        let h_mask_random_prep: Vec<E::G2Prepared> =
+        let powers_of_h_prep: Vec<E::G2Prepared> =
             h_mask.iter().map(|x| E::G2Prepared::from(*x)).collect();
 
+        // Assembling the keys
         (
             MLCommitmentKey {
                 nv: pp.num_var,
                 powers_of_g,
                 g: pp.generators.g.into(),
                 h: pp.generators.h.into(),
+                gamma_g,
+                powers_of_gamma_g,
                 consistency_pk,
             },
             MLVerifyingKey {
@@ -141,13 +175,14 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                 g: pp.generators.g.into(),
                 h: pp.generators.h.into(),
                 h_prep: pp.generators.h.into().into(),
-                h_mask_random: h_mask,
-                h_mask_random_prep,
+                powers_of_h: h_mask,
+                powers_of_h_prep,
+                gamma_g,
                 consistency_vk,
                 consistency_vk_prep,
             },
             MLTrapdoor {
-                tau,
+                beta,
                 consistency_challanges,
             },
         )
@@ -156,49 +191,105 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
     fn commit(
         ck: &Self::CommitmentKey,
         poly: &Self::Polynomial,
+        rng: &mut impl Rng,
+        hiding_bound: Option<usize>,
         rest_zero: Option<usize>,
-    ) -> Self::Commitment {
+    ) -> (Self::Commitment, Self::ProverZKState) {
+        let (hiding_commitment, prover_state) = match hiding_bound {
+            Some(hiding_bound) => {
+                let p_hat: SparsePolynomial<E::ScalarField, SparseTerm> =
+                    Self::generate_mask_polynomial(rng, poly.num_vars(), hiding_bound, false);
+                // Get the powers of `\gamma G` corresponding to the terms of `rand`
+                let powers_of_gamma_g = p_hat
+                    .terms()
+                    .iter()
+                    .map(|(_, term)| {
+                        // Implicit Assumption: Each monomial in `rand` is univariate
+                        let vars = term.vars();
+                        match term.is_constant() {
+                            true => ck.gamma_g.unwrap(),
+                            false => {
+                                ck.powers_of_gamma_g.clone().unwrap()[vars[0]][term.degree() - 1]
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                let msm_time = start_timer!(|| "MSM to compute commitment to random poly");
+                let scalars: Vec<E::ScalarField> = cfg_into_iter!(p_hat.terms())
+                    .map(|(coeff, _)| coeff.clone())
+                    .collect();
+                let random_commitment =
+                    <E::G1 as VariableBaseMSM>::msm_unchecked(&powers_of_gamma_g, &scalars)
+                        .into_affine();
+                end_timer!(msm_time);
+                (random_commitment, Some(p_hat))
+            }
+            None => (E::G1Affine::zero(), None),
+        };
+
+        // Base commitment
         let rest_zero = rest_zero.unwrap_or(1 << poly.num_vars());
         let scalars: Vec<_> = cfg_iter!(poly.evaluations[..rest_zero])
             .map(|x| x.into_bigint())
             .collect();
-        Self::Commitment {
-            nv: ck.nv,
-            g_product: E::G1::msm_bigint(&ck.powers_of_g[0], scalars.as_slice()).into_affine(),
-        }
+        let base_commitmet = E::G1::msm_bigint(&ck.powers_of_g[0], scalars.as_slice());
+        // Outputting the final commitment
+        (
+            Self::Commitment {
+                nv: ck.nv,
+                g_product: (base_commitmet + hiding_commitment).into_affine(),
+            },
+            prover_state,
+        )
     }
 
     fn batch_commit(
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         rest_zeros: &[Option<usize>],
-        equifficients: Option<&[Self::Equifficient]>,
-    ) -> Self::BatchedCommitment {
+        hiding_bounds: &[Option<usize>],
+        equifficients: Option<&[E::ScalarField]>,
+    ) -> (Self::BatchedCommitment, Self::ProverBatchedZKState) {
         let timer_indiv_comm = start_timer!(|| "Individual commits");
         #[cfg(feature = "parallel")]
         use rayon::iter::once;
         #[cfg(not(feature = "parallel"))]
         use std::iter::once;
-        let mut individual_comms = cfg_iter!(polys)
+        let (mut individual_comms, mut prover_states): (
+            Vec<Self::Commitment>,
+            Vec<Self::ProverZKState>,
+        ) = cfg_iter!(polys)
             .zip(rest_zeros)
-            .map(|(poly, rest_zero)| Self::commit(ck, poly, *rest_zero))
+            .zip(hiding_bounds)
+            .map(|((poly, rest_zero), hiding_bound)| {
+                let mut local_rng = ark_std::rand::thread_rng();
+                Self::commit(ck, poly, &mut local_rng, *hiding_bound, *rest_zero)
+            })
             .chain(once({
                 let g = match equifficients {
                     Some(e) => E::G1::msm(&ck.consistency_pk, e).unwrap(),
                     None => E::G1::zero(),
                 };
-                MLCommitment {
-                    nv: 0,
-                    g_product: g.into_affine(),
-                }
+                (
+                    MLCommitment {
+                        nv: 0,
+                        g_product: g.into_affine(),
+                    },
+                    None,
+                )
             }))
-            .collect::<Vec<_>>();
+            .unzip();
         end_timer!(timer_indiv_comm);
         let consistency_comm = individual_comms.pop().unwrap().g_product;
-        Self::BatchedCommitment {
-            individual_comms,
-            consistency_comm: equifficients.map(|_| consistency_comm),
-        }
+        let _ = prover_states.pop().unwrap();
+        (
+            Self::BatchedCommitment {
+                individual_comms,
+                consistency_comm: equifficients.map(|_| consistency_comm),
+            },
+            prover_states,
+        )
     }
 
     fn open(
@@ -206,6 +297,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         poly: &Self::Polynomial,
         point: &Self::EvaluationPoint,
         _comm: &Self::Commitment,
+        state: &Self::ProverZKState,
     ) -> Self::OpeningProof {
         let nv = poly.num_vars();
         let mut current_r = poly.to_evaluations();
@@ -213,11 +305,10 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         let zero = <E::ScalarField as PrimeField>::BigInt::from(0u8);
         let mut current_q = vec![zero; 1 << (nv - 1)];
 
-        let mut all_scalars = Vec::with_capacity(nv);
+        let mut w_scalars = Vec::with_capacity(nv);
         let compute_scalars_time = start_timer!(|| "Compute scalars");
-        for i in 0..nv {
+        for (i, &point_at_k) in point.iter().enumerate() {
             let k = nv - i;
-            let point_at_k = point[i];
             current_q.truncate(1 << (k - 1));
             last_r.truncate(1 << (k - 1));
             cfg_chunks!(current_r, 2)
@@ -230,17 +321,26 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                     *q = t.into_bigint();
                 });
             std::mem::swap(&mut current_r, &mut last_r);
-            all_scalars.push(current_q.clone());
+            w_scalars.push(current_q.clone());
         }
         end_timer!(compute_scalars_time);
-
+        let mut w_hat_scalars = Vec::with_capacity(nv);
         let msm_time = start_timer!(|| "MSM");
-        let proofs = cfg_iter!(all_scalars)
-            .zip(&ck.powers_of_g[1..])
-            .map(|(scalars, powers)| E::G1::msm_bigint(&powers, &scalars).into_affine())
+        let all_msms = cfg_iter!(w_scalars)
+            .chain(cfg_iter!(w_hat_scalars))
+            .zip(
+                cfg_iter!(ck.powers_of_g[1..])
+                    .chain(cfg_iter!(ck.powers_of_gamma_g.as_ref().unwrap()[1..])),
+            )
+            .map(|(scalars, powers)| E::G1::msm_bigint(powers, scalars).into_affine())
             .collect::<Vec<_>>();
+        let proof_g1: Vec<E::G1Affine> = (all_msms[..all_msms.len() / 2])
+            .iter()
+            .zip(all_msms[(all_msms.len() / 2)..].iter())
+            .map(|(a, b)| (*a + *b).into_affine())
+            .collect();
         end_timer!(msm_time);
-        proofs
+        (proof_g1, state.as_ref().map(|s| s.evaluate(point)))
     }
 
     fn batch_open(
@@ -248,12 +348,19 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         polys: &[Self::Polynomial],
         point: &Self::EvaluationPoint,
         comms: &Self::BatchedCommitment,
+        batch_state: &Self::ProverBatchedZKState,
     ) -> Self::BatchedOpeningProof {
         let timer_batch_polys = start_timer!(|| "Batching Polys");
-        let batched_poly = Self::produce_batched_poly(polys, comms);
+        let (batched_poly, p_hat) = Self::produce_batched_poly_state(polys, comms, batch_state);
         end_timer!(timer_batch_polys);
         let timer_open_batched_polys = start_timer!(|| "Open batched polys");
-        let result = Self::open(ck, &batched_poly, point, &comms.individual_comms[0]);
+        let result = Self::open(
+            ck,
+            &batched_poly,
+            point,
+            &comms.individual_comms[0],
+            &Some(p_hat),
+        );
         end_timer!(timer_open_batched_polys);
         result
     }
@@ -268,18 +375,24 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         let verify_time = start_timer!(|| "EPC Verify");
         let lhs = {
             let mut left_input = comm.g_product.into_group() - &vk.g.mul(*eval);
+            // This is for ZK
+            if let Some(v_bar) = &proof.1 {
+                scalars.push((-*v_bar).into_bigint());
+            }
+
             let point_bigint = point.iter().map(|x| x.into_bigint()).collect::<Vec<_>>();
-            left_input += msm_bigint_wnaf::<E::G1>(proof, point_bigint.as_slice());
+            left_input += msm_bigint_wnaf::<E::G1>(&proof.0, point_bigint.as_slice());
 
             let right_input = vk.h_prep.clone();
             (left_input.into().into(), right_input)
         };
         let mut rhs = {
             let left_inputs = proof
+                .0
                 .iter()
                 .map(|x| E::G1Prepared::from(-*x))
                 .collect::<Vec<_>>();
-            let right_inputs = vk.h_mask_random_prep.clone();
+            let right_inputs = vk.powers_of_h_prep.clone();
             (left_inputs, right_inputs)
         };
         rhs.0.push(lhs.0);
@@ -337,12 +450,20 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
                 // 3. Computing `-eval * vk.g`
                 //
                 // Part 1 above generates the batched commitment
-                g_products.extend(proof.clone());
+                g_products.extend(proof.0.clone());
                 g_products.push(vk.g);
-                let scalars = challs_bigint
+                // This is for ZK
+                if let Some(gamma_g) = vk.gamma_g {
+                    g_products.push(gamma_g);
+                }
+                let mut scalars = challs_bigint
                     .chain(point_bigint)
                     .chain(std::iter::once((-*eval).into_bigint()))
                     .collect::<Vec<_>>();
+                // This is for ZK
+                if let Some(v_bar) = &proof.1 {
+                    scalars.push((-*v_bar).into_bigint());
+                }
                 let left_input = msm_bigint_wnaf::<E::G1>(&g_products, scalars.as_slice());
 
                 let right_input = vk.h_prep.clone();
@@ -350,10 +471,11 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
             };
             let mut rhs = {
                 let left_inputs = proof
+                    .0
                     .iter()
                     .map(|x| E::G1Prepared::from(-*x))
                     .collect::<Vec<_>>();
-                let right_inputs = vk.h_mask_random_prep.clone();
+                let right_inputs = vk.powers_of_h_prep.clone();
                 (left_inputs, right_inputs)
             };
             rhs.0.push(lhs.0);
@@ -368,6 +490,40 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
 }
 
 impl<E: Pairing> MultilinearEPC<E> {
+    pub(crate) fn generate_mask_polynomial<F: Field>(
+        mask_rng: &mut impl RngCore,
+        num_variables: usize,
+        deg: usize,
+        sum_to_zero: bool,
+    ) -> SparsePolynomial<F, SparseTerm> {
+        let mut mask_polynomials: Vec<Vec<F>> = Vec::new();
+        let mut sum_g = F::zero();
+        for _ in 0..num_variables {
+            let mut mask_poly = Vec::<F>::with_capacity(deg + 1);
+            mask_poly.push(F::rand(mask_rng));
+            sum_g += mask_poly[0] + mask_poly[0];
+            for i in 1..deg + 1 {
+                mask_poly.push(F::rand(mask_rng));
+                sum_g += mask_poly[i];
+            }
+            mask_polynomials.push(mask_poly);
+        }
+        if sum_to_zero {
+            mask_polynomials[0][0] -= sum_g / F::from(2u8);
+        }
+        let mut terms: Vec<(F, SparseTerm)> = Vec::new();
+        for (var, variables_coef) in mask_polynomials.iter().enumerate() {
+            variables_coef
+                .iter()
+                .enumerate()
+                .for_each(|(degree, coef)| {
+                    terms.push((coef.clone(), SparseTerm::new(vec![(var, degree)])))
+                });
+        }
+
+        SparsePolynomial::from_coefficients_vec(num_variables, terms)
+    }
+
     fn verify_consistency(
         vk: &MLVerifyingKey<E>,
         consistency_comm: E::G1Affine,
@@ -424,10 +580,14 @@ impl<E: Pairing> MultilinearEPC<E> {
         table
     }
 
-    pub fn produce_batched_poly(
+    pub fn produce_batched_poly_state(
         polys: &[DenseMLE<E::ScalarField>],
         comms: &MLBatchedCommitment<E>,
-    ) -> DenseMLE<E::ScalarField> {
+        state: &Vec<Option<SparsePolynomial<E::ScalarField, SparseTerm>>>,
+    ) -> (
+        DenseMLE<E::ScalarField>,
+        SparsePolynomial<E::ScalarField, SparseTerm>,
+    ) {
         let comms = &comms.individual_comms;
         let num_vars = polys[0].num_vars();
         for poly in polys {
@@ -436,15 +596,32 @@ impl<E: Pairing> MultilinearEPC<E> {
         let challenges = Self::produce_opening_batch_challs(comms);
         let mut batched_poly =
             DenseMLE::from_evaluations_vec(num_vars, vec![E::ScalarField::zero(); 1 << num_vars]);
-        for (poly, challenge) in polys.iter().zip(challenges) {
+        for (poly, challenge) in polys.iter().zip(&challenges) {
             cfg_iter!(poly.evaluations)
                 .zip(&mut batched_poly.evaluations)
                 .for_each(|(eval, batched_eval)| {
-                    *batched_eval += challenge * eval;
+                    *batched_eval += *challenge * eval;
                 });
         }
+        let mut batched_state = SparsePolynomial::zero();
+        for (poly, chall) in state.into_iter().zip(challenges.iter()) {
+            let mut p = poly.as_ref().unwrap().clone();
+            p.terms.iter_mut().for_each(|(coeff, _)| {
+                *coeff *= chall;
+            });
+            batched_state += &p;
+        }
 
-        batched_poly
+        (batched_poly, batched_state)
+    }
+    /// Convert polynomial coefficients to `BigInt`
+    fn convert_to_bigints(
+        p: &SparsePolynomial<E::ScalarField, SparseTerm>,
+    ) -> Vec<<E::ScalarField as PrimeField>::BigInt> {
+        let plain_coeffs = ark_std::cfg_into_iter!(p.terms())
+            .map(|(coeff, _)| coeff.into_bigint())
+            .collect();
+        plain_coeffs
     }
 
     pub fn produce_opening_batch_challs(comms: &[MLCommitment<E>]) -> Vec<E::ScalarField> {

@@ -21,6 +21,7 @@ use shared_utils::transcript::IOPTranscript;
 impl<E: Pairing> Garuda<E> {
     pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
         pk: &ProvingKey<E>,
+        zk: bool,
         circuit: C,
     ) -> Result<Proof<E>, SynthesisError> {
         let timer_prove = start_timer!(|| "Prove");
@@ -55,8 +56,13 @@ impl<E: Pairing> Garuda<E> {
         let timer_epc_commit = start_timer!(|| "EPC Commit");
         let num_constraints = index.predicate_num_constraints.values().sum::<usize>();
         let rest_zeros = vec![Some(num_constraints); mw_polys.len()];
-        let w_batched_comm =
-            MultilinearEPC::batch_commit(&pk.epc_ck, &mw_polys, &rest_zeros, Some(&w_assignment));
+        let w_batched_comm = MultilinearEPC::batch_commit(
+            &pk.epc_ck,
+            &mw_polys,
+            &rest_zeros,
+            &vec![Some(10); mw_polys.len()],
+            Some(&w_assignment),
+        );
         transcript
             .append_serializable_element(b"batched_commitments", &w_batched_comm)
             .unwrap();

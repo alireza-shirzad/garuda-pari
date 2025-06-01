@@ -1,5 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+
+
 #[allow(type_alias_bounds)]
 /// Evaluations over {0,1}^n for G1
 pub type EvaluationHyperCubeOnG1<E: Pairing> = Vec<E::G1Affine>;
@@ -27,6 +29,11 @@ pub struct MLCommitmentKey<E: Pairing> {
     pub g: E::G1Affine,
     /// generator for G2
     pub h: E::G2Affine,
+    /// `\gamma` times the generater of G1
+    pub gamma_g: Option<E::G1Affine>,
+    /// Group elements of the form `{ \beta^j \gamma G }`, where `i` ranges
+    /// from 0 to `num_vars-1` and `j` ranges from `1` to `supported_degree+1`.
+    pub powers_of_gamma_g: Option<Vec<Vec<E::G1Affine>>>,
     pub consistency_pk: Vec<E::G1Affine>,
 }
 
@@ -43,6 +50,8 @@ pub struct MLVerifyingKey<E: Pairing> {
     /// g^t1, g^t2, ...
     pub h_mask_random: Vec<E::G2Affine>,
     pub h_mask_random_prep: Vec<E::G2Prepared>,
+    /// The generator of G1 that is used for making a commitment hiding.
+    pub gamma_g: Option<E::G1Affine>,
     pub consistency_vk: Vec<E::G2Affine>,
     pub consistency_vk_prep: Vec<E::G2Prepared>,
 }
@@ -79,6 +88,7 @@ impl<E: Pairing> CanonicalDeserialize for MLVerifyingKey<E> {
     ) -> Result<Self, ark_serialize::SerializationError> {
         let nv = CanonicalDeserialize::deserialize_with_mode(&mut reader, compress, validate)?;
         let g = CanonicalDeserialize::deserialize_with_mode(&mut reader, compress, validate)?;
+        let gamma_g = CanonicalDeserialize::deserialize_with_mode(&mut reader, compress, validate)?;
         let h = CanonicalDeserialize::deserialize_with_mode(&mut reader, compress, validate)?;
         let h_mask_random =
             Vec::<E::G2Affine>::deserialize_with_mode(&mut reader, compress, validate)?;
@@ -95,6 +105,7 @@ impl<E: Pairing> CanonicalDeserialize for MLVerifyingKey<E> {
             h_mask_random_prep,
             consistency_vk_prep,
             h_prep,
+            gamma_g,
             nv,
         })
     }
@@ -127,7 +138,7 @@ impl<E: Pairing> ark_serialize::Valid for MLVerifyingKey<E> {
 /// Public Parameter used by prover
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
 pub struct MLTrapdoor<E: Pairing> {
-    pub tau: Vec<E::ScalarField>,
+    pub beta: Vec<E::ScalarField>,
     pub consistency_challanges: Vec<E::ScalarField>,
 }
 
@@ -152,4 +163,5 @@ pub struct MLBatchedCommitment<E: Pairing> {
 pub struct MLProof<E: Pairing> {
     /// Evaluation of quotients
     pub proofs: Vec<E::G1Affine>,
+    pub random_poly_at_beta: Option<E::ScalarField>,
 }

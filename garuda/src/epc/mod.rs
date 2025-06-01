@@ -1,4 +1,4 @@
-use ark_std::rand::RngCore;
+use ark_std::rand::{Rng, RngCore};
 
 pub mod data_structures;
 pub mod multilinear;
@@ -6,12 +6,13 @@ pub trait EPC {
     type PublicParameters;
     type OpeningProof;
     type BatchedOpeningProof;
-    type Equifficient;
     type CommitmentKey;
     type VerifyingKey;
     type Evaluation;
     type EvaluationPoint;
     type Trapdoor;
+    type ProverZKState;
+    type ProverBatchedZKState;
     type Commitment;
     type BatchedCommitment;
     type Polynomial;
@@ -22,6 +23,7 @@ pub trait EPC {
     fn setup(
         rng: impl RngCore,
         pp: &Self::PublicParameters,
+        hiding_bound: Option<usize>,
         equifficient_constrinats: &Self::EquifficientConstraint,
     ) -> (Self::CommitmentKey, Self::VerifyingKey, Self::Trapdoor);
 
@@ -30,22 +32,26 @@ pub trait EPC {
     fn commit(
         ck: &Self::CommitmentKey,
         poly: &Self::Polynomial,
+        rng: &mut impl Rng,
+        hiding_bound: Option<usize>,
         rest_zero: Option<usize>,
-    ) -> Self::Commitment;
+    ) -> (Self::Commitment, Self::ProverZKState);
 
     /// The second component of the `polys` tuple is `rest_zero` as in the `commit` function.
     fn batch_commit(
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         rest_zeros: &[Option<usize>],
+        hiding_bounds: &[Option<usize>],
         equifficients: Option<&[Self::Equifficient]>,
-    ) -> Self::BatchedCommitment;
+    ) -> (Self::BatchedCommitment, Self::ProverBatchedZKState);
 
     fn open(
         ck: &Self::CommitmentKey,
         poly: &Self::Polynomial,
         point: &Self::EvaluationPoint,
         comm: &Self::Commitment,
+        state: &Self::ProverZKState,
     ) -> Self::OpeningProof;
 
     fn batch_open(
@@ -53,6 +59,7 @@ pub trait EPC {
         polys: &[Self::Polynomial],
         points: &Self::EvaluationPoint,
         comms: &Self::BatchedCommitment,
+        state: &Self::ProverBatchedZKState,
     ) -> Self::BatchedOpeningProof;
 
     #[allow(dead_code)]

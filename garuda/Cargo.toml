@@ -24,7 +24,8 @@ ark-ff = { workspace = true }
 ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-poly = { workspace = true }
-ark-relations = { workspace = true}
+ark-poly-commit = { workspace = true }
+ark-relations = { workspace = true }
 merlin = { workspace = true }
 displaydoc = { workspace = true }
 tracing = { workspace = true, optional = true }
