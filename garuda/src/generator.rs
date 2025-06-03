@@ -22,9 +22,16 @@ use ark_relations::{
         transpose, ConstraintSynthesizer, ConstraintSystem, Label, Matrix, OptimizationGoal,
         SynthesisError, SynthesisMode, R1CS_PREDICATE_LABEL,
     },
+    lc,
     utils::IndexMap,
 };
-use ark_std::{cfg_iter, end_timer, rand::RngCore, start_timer, vec::Vec, UniformRand};
+use ark_std::{
+    cfg_iter, end_timer,
+    rand::{rngs::ThreadRng, RngCore},
+    start_timer,
+    vec::Vec,
+    UniformRand,
+};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -39,7 +46,7 @@ impl<E: Pairing> Garuda<E> {
         E::ScalarField: Field,
     {
         let timer_generator = start_timer!(|| "Generator");
-        let mut index = Self::circuit_to_keygen_cs(circuit).unwrap();
+        let mut index = Self::circuit_to_keygen_cs(circuit, zk).unwrap();
         let timer_indexer = start_timer!(|| "Constraint System Startup");
         end_timer!(timer_indexer);
 
@@ -60,8 +67,12 @@ impl<E: Pairing> Garuda<E> {
             Self::build_equifficient_constraints(&mut index);
         end_timer!(timer_epc_equif_constrs_gen);
         start_timer!(|| "Generating EPC Keys");
+        let hiding_bound = match zk {
+            true => Some(1),
+            false => None,
+        };
         let (epc_ck, epc_vk, _epc_tr) =
-            MultilinearEPC::<E>::setup(rng, &epc_pp, Some(3), &equifficient_constrinats);
+            MultilinearEPC::<E>::setup(rng, &epc_pp, hiding_bound, &equifficient_constrinats);
         end_timer!(timer_epc_startup);
         end_timer!(timer_epc_startup);
 
@@ -102,12 +113,14 @@ impl<E: Pairing> Garuda<E> {
 
     pub fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
+        zk: bool,
     ) -> Result<Index<E::ScalarField>, SynthesisError>
     where
         E: Pairing,
         E::ScalarField: Field,
         E::ScalarField: std::convert::From<i32>,
     {
+        const ZK_BOUND: usize = 5;
         // Start up the constraint System and synthesize the circuit
         let timer_cs_startup = start_timer!(|| "Constraint System Startup");
         let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
@@ -120,6 +133,15 @@ impl<E: Pairing> Garuda<E> {
         let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
         circuit.generate_constraints(cs.clone())?;
         end_timer!(timer_synthesize_circuit);
+
+        if zk {
+            let timer_zk = start_timer!(|| "ZK Setup");
+            for i in 0..ZK_BOUND {
+                cs.new_witness_variable(|| Ok(E::ScalarField::from(i as i32)))?;
+                cs.enforce_r1cs_constraint(lc!(), lc!(), lc!())?;
+            }
+            end_timer!(timer_zk);
+        }
 
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
@@ -212,6 +234,7 @@ impl<E: Pairing> Garuda<E> {
                     epc_ck,
                     &sel_polys,
                     &vec![None; sel_polys.len()],
+                    None::<&mut ThreadRng>,
                     &vec![None; sel_polys.len()],
                     None,
                 );

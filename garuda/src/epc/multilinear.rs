@@ -6,9 +6,13 @@ use super::{
     EPC,
 };
 use crate::to_bytes;
-use ark_crypto_primitives::crh::{sha256::Sha256, CRHScheme};
-use ark_ec::scalar_mul::BatchMulPreprocessing;
-use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup, VariableBaseMSM};
+use ark_crypto_primitives::crh::{
+    sha256::{digest::KeyInit, Sha256},
+    CRHScheme,
+};
+use ark_ec::{
+    pairing::Pairing, scalar_mul::BatchMulPreprocessing, AffineRepr, CurveGroup, VariableBaseMSM,
+};
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_poly::multivariate::Term;
@@ -18,12 +22,18 @@ use ark_poly::{
     DenseMultilinearExtension as DenseMLE, MultilinearExtension, Polynomial,
     SparseMultilinearExtension,
 };
-use ark_std::{cfg_chunks, cfg_into_iter, cfg_iter, cfg_iter_mut, marker::PhantomData, rand::Rng, UniformRand};
+use ark_std::{
+    cfg_chunks, cfg_into_iter, cfg_iter, cfg_iter_mut, marker::PhantomData, rand::Rng, UniformRand,
+};
 use ark_std::{collections::LinkedList, end_timer, start_timer};
 use ark_std::{rand::RngCore, One, Zero};
 #[cfg(feature = "parallel")]
+use rayon::iter::once;
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use shared_utils::msm_bigint_wnaf;
+#[cfg(not(feature = "parallel"))]
+use std::iter::once;
 
 use std::{ops::Mul, os::macos::raw::stat};
 pub struct MultilinearEPC<E: Pairing> {
@@ -188,14 +198,19 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
     fn commit(
         ck: &Self::CommitmentKey,
         poly: &Self::Polynomial,
-        rng: &mut impl Rng,
+        rng: Option<&mut impl Rng>,
         hiding_bound: Option<usize>,
         rest_zero: Option<usize>,
     ) -> (Self::Commitment, Self::ProverState) {
         let (hiding_commitment, prover_state) = match hiding_bound {
             Some(hiding_bound) => {
                 let p_hat: SparsePolynomial<E::ScalarField, SparseTerm> =
-                    Self::generate_mask_polynomial(rng, poly.num_vars(), hiding_bound, false);
+                    Self::generate_mask_polynomial(
+                        rng.unwrap(),
+                        poly.num_vars(),
+                        hiding_bound,
+                        false,
+                    );
                 // Get the powers of `\gamma G` corresponding to the terms of `rand`
                 let powers_of_gamma_g = p_hat
                     .terms()
@@ -214,7 +229,7 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
 
                 let msm_time = start_timer!(|| "MSM to compute commitment to random poly");
                 let scalars: Vec<E::ScalarField> = cfg_into_iter!(p_hat.terms())
-                    .map(|(coeff, _)| coeff.clone())
+                    .map(|(coeff, _)| *coeff)
                     .collect();
                 let random_commitment =
                     <E::G1 as VariableBaseMSM>::msm_unchecked(&powers_of_gamma_g, &scalars)
@@ -245,14 +260,12 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         rest_zeros: &[Option<usize>],
+        _rng: Option<&mut impl Rng>,
         hiding_bounds: &[Option<usize>],
         equifficients: Option<&[E::ScalarField]>,
     ) -> (Self::BatchedCommitment, Self::ProverBatchedState) {
         let timer_indiv_comm = start_timer!(|| "Individual commits");
-        #[cfg(feature = "parallel")]
-        use rayon::iter::once;
-        #[cfg(not(feature = "parallel"))]
-        use std::iter::once;
+
         let (mut individual_comms, mut prover_states): (
             Vec<Self::Commitment>,
             Vec<Self::ProverState>,
@@ -260,8 +273,9 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
             .zip(rest_zeros)
             .zip(hiding_bounds)
             .map(|((poly, rest_zero), hiding_bound)| {
+                //TODO: Fix this: We're not using the passed rng, but creating a new one here for multithreading
                 let mut local_rng = ark_std::rand::thread_rng();
-                Self::commit(ck, poly, &mut local_rng, *hiding_bound, *rest_zero)
+                Self::commit(ck, poly, Some(&mut local_rng), *hiding_bound, *rest_zero)
             })
             .chain(once({
                 let g = match equifficients {
@@ -278,6 +292,7 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
             }))
             .unzip();
         end_timer!(timer_indiv_comm);
+        // Seperate out the consistency stuff from the individual commitments
         let consistency_comm = individual_comms.pop().unwrap().g_product;
         let _ = prover_states.pop().unwrap();
         (
@@ -682,7 +697,10 @@ impl<E: Pairing> MultilinearEPC<E> {
         }
         let mut batched_state = SparsePolynomial::zero();
         for (poly, chall) in state.iter().zip(challenges.iter()) {
-            let mut p = poly.as_ref().unwrap().clone();
+            let mut p = poly
+                .as_ref()
+                .unwrap_or(&SparsePolynomial::from_coefficients_slice(num_vars, &[]))
+                .clone();
             p.terms.iter_mut().for_each(|(coeff, _)| {
                 *coeff *= chall;
             });

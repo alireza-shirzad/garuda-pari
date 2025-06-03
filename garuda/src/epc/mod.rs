@@ -1,10 +1,10 @@
 use ark_ff::Field;
 use ark_std::rand::{Rng, RngCore};
 
-mod test;
 pub mod data_structures;
 pub mod multilinear;
-pub trait EPC<F:Field> {
+mod test;
+pub trait EPC<F: Field> {
     type PublicParameters;
     type OpeningProof;
     type BatchedOpeningProof;
@@ -33,7 +33,7 @@ pub trait EPC<F:Field> {
     fn commit(
         ck: &Self::CommitmentKey,
         poly: &Self::Polynomial,
-        rng: &mut impl Rng,
+        rng: Option<&mut impl Rng>,
         hiding_bound: Option<usize>,
         rest_zero: Option<usize>,
     ) -> (Self::Commitment, Self::ProverState);
@@ -43,6 +43,7 @@ pub trait EPC<F:Field> {
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         rest_zeros: &[Option<usize>],
+        rng: Option<&mut impl Rng>,
         hiding_bounds: &[Option<usize>],
         equifficients: Option<&[F]>,
     ) -> (Self::BatchedCommitment, Self::ProverBatchedState);

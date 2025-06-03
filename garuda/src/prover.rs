@@ -7,14 +7,19 @@ use crate::{
     Garuda,
 };
 use ark_ec::pairing::Pairing;
+use ark_ff::Zero;
 use ark_poly::multivariate::{SparsePolynomial, SparseTerm};
-use ark_relations::gr1cs::{
-    self,
-    instance_outliner::{outline_r1cs, InstanceOutliner},
-    predicate::Predicate,
-    ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError,
-    R1CS_PREDICATE_LABEL,
+use ark_relations::{
+    gr1cs::{
+        self,
+        instance_outliner::{outline_r1cs, InstanceOutliner},
+        predicate::Predicate,
+        ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError,
+        R1CS_PREDICATE_LABEL,
+    },
+    lc,
 };
+use ark_std::UniformRand;
 use ark_std::{end_timer, rand::RngCore, rc::Rc, start_timer, sync::Arc};
 use shared_utils::transcript::IOPTranscript;
 
@@ -25,7 +30,8 @@ impl<E: Pairing> Garuda<E> {
         circuit: C,
     ) -> Result<Proof<E>, SynthesisError> {
         let timer_prove = start_timer!(|| "Prove");
-        let (mut index, x_assignment, w_assignment) = Self::circuit_to_prover_cs(circuit)?;
+        let (mut index, x_assignment, w_assignment) =
+            Self::circuit_to_prover_cs(circuit, zk_rng.is_some())?;
         // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
         let timer_extract_i_x_w =
             start_timer!(|| "Extract NP index, intance, witness and extended witness");
@@ -48,19 +54,29 @@ impl<E: Pairing> Garuda<E> {
         // Generate the w polynomials, i.e. w_i = M_i * (0||w) and z polynomials, i.e. z_i = M_i * z
         // Line 3-a figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_generate_w_z_polys = start_timer!(|| "Generate Mw, Mz Polynomials");
-        let (mw_polys, mz_polys) = Self::generate_w_z_polys(&mut index, &z_assignment);
+        let (mut mw_polys, mz_polys) = Self::generate_w_z_polys(&mut index, &z_assignment);
         end_timer!(timer_generate_w_z_polys);
         //
         // EPC-Commit to the witness polynomials, i.e. generate c_i = EPC.Comm(w_i)
         // Line 3-b figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_epc_commit = start_timer!(|| "EPC Commit");
         let num_constraints = index.predicate_num_constraints.values().sum::<usize>();
-        let rest_zeros = vec![Some(num_constraints); mw_polys.len()];
+        let mut rest_zeros = vec![Some(num_constraints); mw_polys.len()];
+        let mut hiding_bound = vec![None; mw_polys.len()];
+        if zk_rng.is_some() {
+            hiding_bound.push(Some(1));
+            mw_polys.push(DenseMLE::from_evaluations_vec(
+                mw_polys[0].num_vars,
+                vec![E::ScalarField::zero(); mw_polys[0].evaluations.len()],
+            ));
+            rest_zeros.push(Some(0));
+        }
         let w_batched_comm = MultilinearEPC::batch_commit(
             &pk.epc_ck,
             &mw_polys,
             &rest_zeros,
-            &vec![Some(3); mw_polys.len()],
+            zk_rng,
+            &hiding_bound,
             Some(&w_assignment),
         );
         transcript
@@ -94,7 +110,7 @@ impl<E: Pairing> Garuda<E> {
             _ => pk
                 .sel_polys
                 .as_ref()
-                .map(|sel_polys| evaluate_batch(&sel_polys, &zero_check_proof.point)),
+                .map(|sel_polys| evaluate_batch(sel_polys, &zero_check_proof.point)),
         };
         end_timer!(timer_eval_sel_polys);
         end_timer!(timer_eval_polys);
@@ -118,7 +134,7 @@ impl<E: Pairing> Garuda<E> {
 
         let polys_to_be_opened: Vec<_> = mw_polys
             .into_iter()
-            .chain(pk.sel_polys.iter().cloned().flat_map(|c| c))
+            .chain(pk.sel_polys.iter().flatten().cloned())
             .collect();
 
         // open the commitments
@@ -154,6 +170,7 @@ impl<E: Pairing> Garuda<E> {
 
     pub fn circuit_to_prover_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
+        zk: bool,
     ) -> Result<
         (
             Index<E::ScalarField>,
@@ -162,6 +179,7 @@ impl<E: Pairing> Garuda<E> {
         ),
         SynthesisError,
     > {
+        const ZK_BOUND: usize = 5;
         // Start up the constraint System and synthesize the circuit
         let timer_cs_startup = start_timer!(|| "Building Constraint System");
         let cs = ConstraintSystem::new_ref();
@@ -177,7 +195,16 @@ impl<E: Pairing> Garuda<E> {
         let timer_synthesize_circuit = start_timer!(|| "Synthesize Circuit");
         circuit.generate_constraints(cs.clone())?;
         end_timer!(timer_synthesize_circuit);
-
+        //TODO: Fix this, The rng should be downstreamed from the prover
+        let mut local_rng = ark_std::rand::thread_rng();
+        if zk {
+            let timer_zk = start_timer!(|| "ZK Setup");
+            for _ in 0..ZK_BOUND {
+                cs.new_witness_variable(|| Ok(E::ScalarField::rand(&mut local_rng)))?;
+                cs.enforce_r1cs_constraint(lc!(), lc!(), lc!())?;
+            }
+            end_timer!(timer_zk);
+        }
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
         end_timer!(timer_inlining);

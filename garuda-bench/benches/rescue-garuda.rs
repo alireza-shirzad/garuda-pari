@@ -34,6 +34,7 @@ fn bench<E: Pairing>(
     num_prover_iterations: u32,
     num_verifier_iterations: u32,
     num_thread: usize,
+    zk: bool,
 ) -> BenchResult
 where
     E::ScalarField: PrimeField + Absorb,
@@ -70,10 +71,10 @@ where
         let setup_circuit = circuit.clone();
 
         let start = ark_std::time::Instant::now();
-        let _cs = Garuda::<E>::circuit_to_keygen_cs(circuit.clone()).unwrap();
+        let _cs = Garuda::<E>::circuit_to_keygen_cs(circuit.clone(), zk).unwrap();
         keygen_prep_time += start.elapsed();
         let start = ark_std::time::Instant::now();
-        let (ipk, ivk) = Garuda::<E>::keygen(setup_circuit, true, &mut rng);
+        let (ipk, ivk) = Garuda::<E>::keygen(setup_circuit, zk, &mut rng);
         pk = Some(ipk);
         vk = Some(ivk);
         keygen_time += start.elapsed();
@@ -88,16 +89,17 @@ where
         .serialized_size(ark_serialize::Compress::Yes);
     let mut proof = None;
     for _ in 0..num_prover_iterations {
+        let zk_rng = if zk { Some(&mut rng) } else { None };
         let prover_circuit = circuit.clone();
 
         let start = ark_std::time::Instant::now();
 
-        let _cs = Garuda::<E>::circuit_to_prover_cs(circuit.clone()).unwrap();
+        let _cs = Garuda::<E>::circuit_to_prover_cs(circuit.clone(),zk).unwrap();
         prover_prep_time += start.elapsed();
         let start = ark_std::time::Instant::now();
         proof = pk
             .as_ref()
-            .map(|pk| Garuda::prove(pk, Some(&mut rng), prover_circuit).unwrap());
+            .map(|pk| Garuda::prove(pk, zk_rng, prover_circuit).unwrap());
         prover_time += start.elapsed();
     }
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
@@ -144,6 +146,7 @@ where
 fn main() {
     //////////// Benchamrk the Verifier ////////////////
     const MAX_LOG2_INPUT_SIZE: usize = 20;
+    const ZK: bool = true;
     let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
@@ -179,7 +182,7 @@ fn main() {
                 "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}t-{INPUT_BENCHMARK}.csv",
                 1
             );
-            let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1).save_to_csv(&filename);
+            let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
         }
     });
 
@@ -222,7 +225,7 @@ fn main() {
                     "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}t.csv",
                     num_thread
                 );
-                let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread)
+                let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
                     .save_to_csv(&filename);
             }
         });
