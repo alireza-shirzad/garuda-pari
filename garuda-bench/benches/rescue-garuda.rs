@@ -97,7 +97,7 @@ where
         let start = ark_std::time::Instant::now();
         proof = pk
             .as_ref()
-            .map(|pk| Garuda::prove(pk, true, prover_circuit).unwrap());
+            .map(|pk| Garuda::prove(pk, Some(&mut rng), prover_circuit).unwrap());
         prover_time += start.elapsed();
     }
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);

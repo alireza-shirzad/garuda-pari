@@ -15,13 +15,13 @@ use ark_relations::gr1cs::{
     ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError,
     R1CS_PREDICATE_LABEL,
 };
-use ark_std::{end_timer, rc::Rc, start_timer, sync::Arc};
+use ark_std::{end_timer, rand::RngCore, rc::Rc, start_timer, sync::Arc};
 use shared_utils::transcript::IOPTranscript;
 
 impl<E: Pairing> Garuda<E> {
-    pub fn prove<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn prove<C: ConstraintSynthesizer<E::ScalarField>, R: RngCore>(
         pk: &ProvingKey<E>,
-        zk: bool,
+        zk_rng: Option<&mut R>,
         circuit: C,
     ) -> Result<Proof<E>, SynthesisError> {
         let timer_prove = start_timer!(|| "Prove");
@@ -38,7 +38,7 @@ impl<E: Pairing> Garuda<E> {
         let mut transcript = IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
         let verifier_key = &pk.verifying_key;
         transcript
-            .append_serializable_element(b"vk", &verifier_key)
+            .append_serializable_element(b"vk", verifier_key)
             .unwrap();
         transcript
             .append_serializable_element(b"input", &x_assignment[1..])
@@ -60,11 +60,11 @@ impl<E: Pairing> Garuda<E> {
             &pk.epc_ck,
             &mw_polys,
             &rest_zeros,
-            &vec![Some(10); mw_polys.len()],
+            &vec![Some(3); mw_polys.len()],
             Some(&w_assignment),
         );
         transcript
-            .append_serializable_element(b"batched_commitments", &w_batched_comm)
+            .append_serializable_element(b"batched_commitments", &w_batched_comm.0)
             .unwrap();
         end_timer!(timer_epc_commit);
 
@@ -103,6 +103,7 @@ impl<E: Pairing> Garuda<E> {
         // We will batch-open these commitments
         // Note that selector polynomials are only present when there are more than one predicate
         let comms_to_be_opened = w_batched_comm
+            .0
             .individual_comms
             .iter()
             .copied()
@@ -130,19 +131,20 @@ impl<E: Pairing> Garuda<E> {
             &zero_check_proof.point,
             &MLBatchedCommitment {
                 individual_comms: comms_to_be_opened,
-                consistency_comm: w_batched_comm.consistency_comm,
+                consistency_comm: w_batched_comm.0.consistency_comm,
             },
+            &w_batched_comm.1,
         );
         end_timer!(timer_open_comms);
 
         // Construct the proof
         // Line 10 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let result = Ok(Proof {
-            w_batched_comm,
+            w_batched_comm: w_batched_comm.0,
             zero_check_proof,
             sel_poly_evals,
             w_poly_evals,
-            batched_opening_proof: opening_proof,
+            batched_opening_proof: opening_proof.0,
         });
 
         end_timer!(timer_prove);

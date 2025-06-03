@@ -28,13 +28,13 @@ async fn main() {
     let cs = ConstraintSystem::<Fr>::new_ref();
     circom.clone().generate_constraints(cs.clone()).unwrap();
     let start = Instant::now();
-    let (pk, vk) = Garuda::<E>::keygen(circom.clone(), &mut rng);
+    let (pk, vk) = Garuda::<E>::keygen(circom.clone(), true, &mut rng);
     let duration = start.elapsed();
     println!("Keygen took: {:?}", duration);
     let circom = circom.clone();
     let instance = circom.get_public_inputs().unwrap();
     let start = Instant::now();
-    let proof = Garuda::prove(&pk, circom).unwrap();
+    let proof = Garuda::prove(&pk, Some(&mut rng), circom).unwrap();
     let duration = start.elapsed();
     println!("Prover took: {:?}", duration);
     let start = Instant::now();

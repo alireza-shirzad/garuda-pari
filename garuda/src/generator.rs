@@ -61,7 +61,7 @@ impl<E: Pairing> Garuda<E> {
         end_timer!(timer_epc_equif_constrs_gen);
         start_timer!(|| "Generating EPC Keys");
         let (epc_ck, epc_vk, _epc_tr) =
-            MultilinearEPC::<E>::setup(rng, &epc_pp, Some(10), &equifficient_constrinats);
+            MultilinearEPC::<E>::setup(rng, &epc_pp, Some(3), &equifficient_constrinats);
         end_timer!(timer_epc_startup);
         end_timer!(timer_epc_startup);
 
@@ -215,7 +215,7 @@ impl<E: Pairing> Garuda<E> {
                     &vec![None; sel_polys.len()],
                     None,
                 );
-                (Some(sel_polys), Some(sel_comms))
+                (Some(sel_polys), Some(sel_comms.0))
             }
         }
     }

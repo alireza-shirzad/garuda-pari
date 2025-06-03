@@ -25,22 +25,21 @@ use ark_std::{rand::RngCore, One, Zero};
 use rayon::prelude::*;
 use shared_utils::msm_bigint_wnaf;
 
-use std::ops::Mul;
+use std::{ops::Mul, os::macos::raw::stat};
 pub struct MultilinearEPC<E: Pairing> {
     _p1: PhantomData<E>,
 }
 
-impl<E: Pairing> EPC for MultilinearEPC<E> {
+impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
     type PublicParameters = MLPublicParameters<E>;
     type OpeningProof = (Vec<E::G1Affine>, Option<E::ScalarField>);
     type BatchedOpeningProof = Self::OpeningProof;
     type CommitmentKey = MLCommitmentKey<E>;
     type VerifyingKey = MLVerifyingKey<E>;
-    type Evaluation = E::ScalarField;
     type EvaluationPoint = Vec<E::ScalarField>;
     type Trapdoor = MLTrapdoor<E>;
-    type ProverZKState = Option<SparsePolynomial<E::ScalarField, SparseTerm>>;
-    type ProverBatchedZKState = Vec<Self::ProverZKState>;
+    type ProverState = Option<SparsePolynomial<E::ScalarField, SparseTerm>>;
+    type ProverBatchedState = Vec<Self::ProverState>;
     type Commitment = MLCommitment<E>;
     type BatchedCommitment = MLBatchedCommitment<E>;
     type Polynomial = DenseMLE<E::ScalarField>;
@@ -194,7 +193,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         rng: &mut impl Rng,
         hiding_bound: Option<usize>,
         rest_zero: Option<usize>,
-    ) -> (Self::Commitment, Self::ProverZKState) {
+    ) -> (Self::Commitment, Self::ProverState) {
         let (hiding_commitment, prover_state) = match hiding_bound {
             Some(hiding_bound) => {
                 let p_hat: SparsePolynomial<E::ScalarField, SparseTerm> =
@@ -250,7 +249,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         rest_zeros: &[Option<usize>],
         hiding_bounds: &[Option<usize>],
         equifficients: Option<&[E::ScalarField]>,
-    ) -> (Self::BatchedCommitment, Self::ProverBatchedZKState) {
+    ) -> (Self::BatchedCommitment, Self::ProverBatchedState) {
         let timer_indiv_comm = start_timer!(|| "Individual commits");
         #[cfg(feature = "parallel")]
         use rayon::iter::once;
@@ -258,7 +257,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         use std::iter::once;
         let (mut individual_comms, mut prover_states): (
             Vec<Self::Commitment>,
-            Vec<Self::ProverZKState>,
+            Vec<Self::ProverState>,
         ) = cfg_iter!(polys)
             .zip(rest_zeros)
             .zip(hiding_bounds)
@@ -297,7 +296,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         poly: &Self::Polynomial,
         point: &Self::EvaluationPoint,
         _comm: &Self::Commitment,
-        state: &Self::ProverZKState,
+        state: &Self::ProverState,
     ) -> Self::OpeningProof {
         let nv = poly.num_vars();
         let mut current_r = poly.to_evaluations();
@@ -324,22 +323,52 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
             w_scalars.push(current_q.clone());
         }
         end_timer!(compute_scalars_time);
-        let mut w_hat_scalars = Vec::with_capacity(nv);
-        let msm_time = start_timer!(|| "MSM");
-        let all_msms = cfg_iter!(w_scalars)
-            .chain(cfg_iter!(w_hat_scalars))
-            .zip(
-                cfg_iter!(ck.powers_of_g[1..])
-                    .chain(cfg_iter!(ck.powers_of_gamma_g.as_ref().unwrap()[1..])),
-            )
-            .map(|(scalars, powers)| E::G1::msm_bigint(powers, scalars).into_affine())
-            .collect::<Vec<_>>();
-        let proof_g1: Vec<E::G1Affine> = (all_msms[..all_msms.len() / 2])
-            .iter()
-            .zip(all_msms[(all_msms.len() / 2)..].iter())
-            .map(|(a, b)| (*a + *b).into_affine())
-            .collect();
-        end_timer!(msm_time);
+        let proof_g1 = match state {
+            Some(sparse_random_poly) => {
+                let mut w = cfg_iter!(w_scalars)
+                    .zip(cfg_iter!(ck.powers_of_g[1..]))
+                    .map(|(scalars, powers)| E::G1::msm_bigint(powers, scalars))
+                    .collect::<Vec<_>>();
+                let hiding_witnesses = Self::divide_at_point(sparse_random_poly, point);
+                ark_std::cfg_iter_mut!(w)
+                    .enumerate()
+                    .for_each(|(i, witness)| {
+                        let hiding_witness = &hiding_witnesses[i];
+                        // Get the powers of `\gamma G` corresponding to the terms of `hiding_witness`
+                        let powers_of_gamma_g = hiding_witness
+                            .terms()
+                            .iter()
+                            .map(|(_, term)| {
+                                // Implicit Assumption: Each monomial in `hiding_witness` is univariate
+                                let vars = term.vars();
+                                match term.is_constant() {
+                                    true => ck.gamma_g.unwrap(),
+                                    false => {
+                                        ck.powers_of_gamma_g.as_ref().unwrap()[vars[0]][term.degree() - 1]
+                                    }
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        // Convert coefficients to BigInt
+                        // let hiding_witness_ints = Self::convert_to_bigints(hiding_witness);
+                        let hiding_witness_coeffs = hiding_witness
+                            .terms()
+                            .into_iter().map(|(coeff, _)| coeff.clone())
+                            .collect::<Vec<_>>();
+                        // Compute MSM and add result to witness
+                        *witness += &<E::G1 as VariableBaseMSM>::msm_unchecked(
+                            &powers_of_gamma_g,
+                            &hiding_witness_coeffs,
+                        );
+                    });
+                w.into_iter().map(|w| w.into_affine()).collect()
+            }
+            None => cfg_iter!(w_scalars)
+                .zip(cfg_iter!(ck.powers_of_g[1..]))
+                .map(|(scalars, powers)| E::G1::msm_bigint(powers, scalars).into_affine())
+                .collect::<Vec<_>>(),
+        };
+
         (proof_g1, state.as_ref().map(|s| s.evaluate(point)))
     }
 
@@ -348,7 +377,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         polys: &[Self::Polynomial],
         point: &Self::EvaluationPoint,
         comms: &Self::BatchedCommitment,
-        batch_state: &Self::ProverBatchedZKState,
+        batch_state: &Self::ProverBatchedState,
     ) -> Self::BatchedOpeningProof {
         let timer_batch_polys = start_timer!(|| "Batching Polys");
         let (batched_poly, p_hat) = Self::produce_batched_poly_state(polys, comms, batch_state);
@@ -369,15 +398,15 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         vk: &Self::VerifyingKey,
         comm: &Self::Commitment,
         point: &Self::EvaluationPoint,
-        eval: &Self::Evaluation,
+        eval: E::ScalarField,
         proof: &Self::OpeningProof,
     ) -> bool {
         let verify_time = start_timer!(|| "EPC Verify");
         let lhs = {
-            let mut left_input = comm.g_product.into_group() - &vk.g.mul(*eval);
+            let mut left_input = comm.g_product.into_group() - &vk.g.mul(eval);
             // This is for ZK
             if let Some(v_bar) = &proof.1 {
-                scalars.push((-*v_bar).into_bigint());
+                // scalars.push((-*v_bar).into_bigint());
             }
 
             let point_bigint = point.iter().map(|x| x.into_bigint()).collect::<Vec<_>>();
@@ -406,7 +435,7 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
         vk: &Self::VerifyingKey,
         comm: &Self::BatchedCommitment,
         point: &Self::EvaluationPoint,
-        evals: &[Self::Evaluation],
+        evals: &[E::ScalarField],
         proof: &Self::BatchedOpeningProof,
         constrained_num: usize,
     ) -> bool {
@@ -490,6 +519,57 @@ impl<E: Pairing> EPC for MultilinearEPC<E> {
 }
 
 impl<E: Pairing> MultilinearEPC<E> {
+    fn divide_at_point<P>(p: &P, point: &P::Point) -> Vec<P>
+    where
+        P: DenseMVPolynomial<E::ScalarField> + Sync,
+        P::Point: std::ops::Index<usize, Output = E::ScalarField>,
+    {
+        let num_vars = p.num_vars();
+        if p.is_zero() {
+            return vec![P::zero(); num_vars];
+        }
+        let mut quotients = Vec::with_capacity(num_vars);
+        // `cur` represents the current dividend
+        let mut cur = p.clone();
+        // Divide `cur` by `X_i - z_i`
+        for i in 0..num_vars {
+            let mut quotient_terms = Vec::new();
+            let mut remainder_terms = Vec::new();
+            for (mut coeff, term) in cur.terms() {
+                // Since the final remainder is guaranteed to be 0, all the constant terms
+                // cancel out so we don't need to keep track of them
+                if term.is_constant() {
+                    continue;
+                }
+                // If the current term contains `X_i` then divide appropiately,
+                // otherwise add it to the remainder
+                let mut term_vec = (&*term).to_vec();
+                match term_vec.binary_search_by(|(var, _)| var.cmp(&i)) {
+                    Ok(idx) => {
+                        // Repeatedly divide the term by `X_i - z_i` until the remainder
+                        // doesn't contain any `X_i`s
+                        while term_vec[idx].1 > 1 {
+                            // First divide by `X_i` and add the term to the quotient
+                            term_vec[idx] = (i, term_vec[idx].1 - 1);
+                            quotient_terms.push((coeff, P::Term::new(term_vec.clone())));
+                            // Then compute the remainder term in-place
+                            coeff *= &point[i];
+                        }
+                        // Since `X_i` is power 1, we can remove it entirely
+                        term_vec.remove(idx);
+                        quotient_terms.push((coeff, P::Term::new(term_vec.clone())));
+                        remainder_terms.push((point[i] * &coeff, P::Term::new(term_vec)));
+                    }
+                    Err(_) => remainder_terms.push((coeff, term.clone())),
+                }
+            }
+            quotients.push(P::from_coefficients_vec(num_vars, quotient_terms));
+            // Set the current dividend to be the remainder of this division
+            cur = P::from_coefficients_vec(num_vars, remainder_terms);
+        }
+        quotients
+    }
+
     pub(crate) fn generate_mask_polynomial<F: Field>(
         mask_rng: &mut impl RngCore,
         num_variables: usize,
@@ -604,7 +684,7 @@ impl<E: Pairing> MultilinearEPC<E> {
                 });
         }
         let mut batched_state = SparsePolynomial::zero();
-        for (poly, chall) in state.into_iter().zip(challenges.iter()) {
+        for (poly, chall) in state.iter().zip(challenges.iter()) {
             let mut p = poly.as_ref().unwrap().clone();
             p.terms.iter_mut().for_each(|(coeff, _)| {
                 *coeff *= chall;

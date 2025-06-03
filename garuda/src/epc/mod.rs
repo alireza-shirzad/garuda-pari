@@ -1,18 +1,19 @@
+use ark_ff::Field;
 use ark_std::rand::{Rng, RngCore};
 
+mod test;
 pub mod data_structures;
 pub mod multilinear;
-pub trait EPC {
+pub trait EPC<F:Field> {
     type PublicParameters;
     type OpeningProof;
     type BatchedOpeningProof;
     type CommitmentKey;
     type VerifyingKey;
-    type Evaluation;
     type EvaluationPoint;
     type Trapdoor;
-    type ProverZKState;
-    type ProverBatchedZKState;
+    type ProverState;
+    type ProverBatchedState;
     type Commitment;
     type BatchedCommitment;
     type Polynomial;
@@ -35,7 +36,7 @@ pub trait EPC {
         rng: &mut impl Rng,
         hiding_bound: Option<usize>,
         rest_zero: Option<usize>,
-    ) -> (Self::Commitment, Self::ProverZKState);
+    ) -> (Self::Commitment, Self::ProverState);
 
     /// The second component of the `polys` tuple is `rest_zero` as in the `commit` function.
     fn batch_commit(
@@ -43,15 +44,15 @@ pub trait EPC {
         polys: &[Self::Polynomial],
         rest_zeros: &[Option<usize>],
         hiding_bounds: &[Option<usize>],
-        equifficients: Option<&[Self::Equifficient]>,
-    ) -> (Self::BatchedCommitment, Self::ProverBatchedZKState);
+        equifficients: Option<&[F]>,
+    ) -> (Self::BatchedCommitment, Self::ProverBatchedState);
 
     fn open(
         ck: &Self::CommitmentKey,
         poly: &Self::Polynomial,
         point: &Self::EvaluationPoint,
         comm: &Self::Commitment,
-        state: &Self::ProverZKState,
+        state: &Self::ProverState,
     ) -> Self::OpeningProof;
 
     fn batch_open(
@@ -59,7 +60,7 @@ pub trait EPC {
         polys: &[Self::Polynomial],
         points: &Self::EvaluationPoint,
         comms: &Self::BatchedCommitment,
-        state: &Self::ProverBatchedZKState,
+        state: &Self::ProverBatchedState,
     ) -> Self::BatchedOpeningProof;
 
     #[allow(dead_code)]
@@ -67,7 +68,7 @@ pub trait EPC {
         vk: &Self::VerifyingKey,
         comm: &Self::Commitment,
         point: &Self::EvaluationPoint,
-        eval: &Self::Evaluation,
+        eval: F,
         proof: &Self::OpeningProof,
     ) -> bool;
 
@@ -75,7 +76,7 @@ pub trait EPC {
         vk: &Self::VerifyingKey,
         comm: &Self::BatchedCommitment,
         point: &Self::EvaluationPoint,
-        evals: &[Self::Evaluation],
+        evals: &[F],
         proofs: &Self::BatchedOpeningProof,
         constrained_num: usize,
     ) -> bool;

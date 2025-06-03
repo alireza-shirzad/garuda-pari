@@ -48,8 +48,8 @@ pub struct MLVerifyingKey<E: Pairing> {
     pub h: E::G2Affine,
     pub h_prep: E::G2Prepared,
     /// g^t1, g^t2, ...
-    pub h_mask_random: Vec<E::G2Affine>,
-    pub h_mask_random_prep: Vec<E::G2Prepared>,
+    pub powers_of_h: Vec<E::G2Affine>,
+    pub powers_of_h_prep: Vec<E::G2Prepared>,
     /// The generator of G1 that is used for making a commitment hiding.
     pub gamma_g: Option<E::G1Affine>,
     pub consistency_vk: Vec<E::G2Affine>,
@@ -65,7 +65,7 @@ impl<E: Pairing> ark_serialize::CanonicalSerialize for MLVerifyingKey<E> {
         CanonicalSerialize::serialize_with_mode(&self.nv, &mut writer, compress)?;
         CanonicalSerialize::serialize_with_mode(&self.g, &mut writer, compress)?;
         CanonicalSerialize::serialize_with_mode(&self.h, &mut writer, compress)?;
-        CanonicalSerialize::serialize_with_mode(&self.h_mask_random, &mut writer, compress)?;
+        CanonicalSerialize::serialize_with_mode(&self.powers_of_h, &mut writer, compress)?;
         CanonicalSerialize::serialize_with_mode(&self.consistency_vk, &mut writer, compress)?;
         Ok(())
     }
@@ -74,7 +74,7 @@ impl<E: Pairing> ark_serialize::CanonicalSerialize for MLVerifyingKey<E> {
         size += CanonicalSerialize::serialized_size(&self.nv, compress);
         size += CanonicalSerialize::serialized_size(&self.g, compress);
         size += CanonicalSerialize::serialized_size(&self.h, compress);
-        size += CanonicalSerialize::serialized_size(&self.h_mask_random, compress);
+        size += CanonicalSerialize::serialized_size(&self.powers_of_h, compress);
         size += CanonicalSerialize::serialized_size(&self.consistency_vk, compress);
         size
     }
@@ -90,19 +90,19 @@ impl<E: Pairing> CanonicalDeserialize for MLVerifyingKey<E> {
         let g = CanonicalDeserialize::deserialize_with_mode(&mut reader, compress, validate)?;
         let gamma_g = CanonicalDeserialize::deserialize_with_mode(&mut reader, compress, validate)?;
         let h = CanonicalDeserialize::deserialize_with_mode(&mut reader, compress, validate)?;
-        let h_mask_random =
+        let powers_of_h =
             Vec::<E::G2Affine>::deserialize_with_mode(&mut reader, compress, validate)?;
         let consistency_vk =
             Vec::<E::G2Affine>::deserialize_with_mode(&mut reader, compress, validate)?;
         let h_prep = E::G2Prepared::from(h);
-        let h_mask_random_prep = h_mask_random.iter().copied().map(Into::into).collect();
+        let powers_of_h_prep = powers_of_h.iter().copied().map(Into::into).collect();
         let consistency_vk_prep = consistency_vk.iter().copied().map(Into::into).collect();
         Ok(MLVerifyingKey {
             g,
             h,
-            h_mask_random,
+            powers_of_h,
             consistency_vk,
-            h_mask_random_prep,
+            powers_of_h_prep,
             consistency_vk_prep,
             h_prep,
             gamma_g,
@@ -115,7 +115,7 @@ impl<E: Pairing> ark_serialize::Valid for MLVerifyingKey<E> {
         ark_serialize::Valid::check(&self.nv)?;
         ark_serialize::Valid::check(&self.g)?;
         ark_serialize::Valid::check(&self.h)?;
-        ark_serialize::Valid::check(&self.h_mask_random)?;
+        ark_serialize::Valid::check(&self.powers_of_h)?;
         ark_serialize::Valid::check(&self.consistency_vk)?;
         Ok(())
     }
@@ -129,7 +129,7 @@ impl<E: Pairing> ark_serialize::Valid for MLVerifyingKey<E> {
         ark_serialize::Valid::batch_check(batch.iter().map(|v| &v.nv))?;
         ark_serialize::Valid::batch_check(batch.iter().map(|v| &v.g))?;
         ark_serialize::Valid::batch_check(batch.iter().map(|v| &v.h))?;
-        ark_serialize::Valid::batch_check(batch.iter().map(|v| &v.h_mask_random))?;
+        ark_serialize::Valid::batch_check(batch.iter().map(|v| &v.powers_of_h))?;
         ark_serialize::Valid::batch_check(batch.iter().map(|v| &v.consistency_vk))?;
         Ok(())
     }
