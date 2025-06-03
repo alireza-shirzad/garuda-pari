@@ -71,7 +71,7 @@ pub struct Proof<E: Pairing> {
     /// Evaluation of the w polynomials on the random point outputed by the zerocheck
     pub w_poly_evals: Vec<E::ScalarField>,
     /// A bathced opening proof for the w polynomials and the selector polynomials on the random point outputed by the zerocheck
-    pub batched_opening_proof: Vec<E::G1Affine>,
+    pub batched_opening_proof: (Vec<E::G1Affine>, Option<E::ScalarField>),
 }
 
 #[derive(Debug, Clone)]

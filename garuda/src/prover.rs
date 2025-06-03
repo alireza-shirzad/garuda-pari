@@ -144,7 +144,7 @@ impl<E: Pairing> Garuda<E> {
             zero_check_proof,
             sel_poly_evals,
             w_poly_evals,
-            batched_opening_proof: opening_proof.0,
+            batched_opening_proof: opening_proof,
         });
 
         end_timer!(timer_prove);

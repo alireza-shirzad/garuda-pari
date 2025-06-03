@@ -18,7 +18,7 @@ use ark_poly::{
     DenseMultilinearExtension as DenseMLE, MultilinearExtension, Polynomial,
     SparseMultilinearExtension,
 };
-use ark_std::{cfg_chunks, cfg_into_iter, cfg_iter, marker::PhantomData, rand::Rng, UniformRand};
+use ark_std::{cfg_chunks, cfg_into_iter, cfg_iter, cfg_iter_mut, marker::PhantomData, rand::Rng, UniformRand};
 use ark_std::{collections::LinkedList, end_timer, start_timer};
 use ark_std::{rand::RngCore, One, Zero};
 #[cfg(feature = "parallel")]
@@ -53,21 +53,21 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
         hiding_bound: Option<usize>,
         equifficient_constraints: &Self::EquifficientConstraint,
     ) -> (Self::CommitmentKey, Self::VerifyingKey, Self::Trapdoor) {
-        // beta_is, the random evaluation points
+        // beta_i's, the random evaluation points
         let beta: Vec<E::ScalarField> = (0..pp.num_var)
             .map(|_| E::ScalarField::rand(&mut rng))
             .collect();
-        // alpha_is, the random consistency challenges
+        // alpha_i's, the random consistency challenges
         let consistency_challanges: Vec<E::ScalarField> = (0..pp.num_constraints)
             .map(|_| E::ScalarField::rand(&mut rng))
             .collect();
-
+        // Preparing the lagrange basis set in the clear
         let mut powers_of_g = Vec::new();
         let mut eq: LinkedList<DenseMLE<E::ScalarField>> =
             LinkedList::from_iter(Self::eq_extension(&beta));
         let mut eq_arr = LinkedList::new();
         let mut base = eq.pop_back().unwrap().evaluations;
-
+        // Compute the lagrange basis set on the exponent
         for i in (0..pp.num_var).rev() {
             eq_arr.push_front(Self::remove_dummy_variable(&base, i));
             if i != 0 {
@@ -79,14 +79,12 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
                     .collect();
             }
         }
-
         let mut pp_powers = Vec::new();
         for i in 0..pp.num_var {
             let eq = eq_arr.pop_front().unwrap();
             let pp_k_powers = (0..(1 << (pp.num_var - i))).map(|x| eq[x]);
             pp_powers.extend(pp_k_powers);
         }
-
         let g_table = BatchMulPreprocessing::new(pp.generators.g, 1 << pp.num_var);
         let h_table = BatchMulPreprocessing::new(pp.generators.h, pp.num_var);
         let pp_g = g_table.batch_mul(&pp_powers);
@@ -106,12 +104,12 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
             Some(hiding_bound) => {
                 let gamma_g = E::G1::rand(&mut rng);
                 let mut powers_of_gamma_g = vec![Vec::new(); pp.num_var];
-                let gamma_g_table = BatchMulPreprocessing::new(gamma_g, hiding_bound + 1);
+                let gamma_g_table = BatchMulPreprocessing::new(gamma_g, hiding_bound);
 
-                ark_std::cfg_iter_mut!(powers_of_gamma_g)
+                cfg_iter_mut!(powers_of_gamma_g)
                     .enumerate()
                     .for_each(|(i, v)| {
-                        let mut powers_of_beta_i = Vec::with_capacity(hiding_bound + 1);
+                        let mut powers_of_beta_i = Vec::with_capacity(hiding_bound);
                         let mut cur = E::ScalarField::one();
                         for _ in 0..=hiding_bound {
                             cur *= &beta[i];
@@ -343,9 +341,8 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
                                 let vars = term.vars();
                                 match term.is_constant() {
                                     true => ck.gamma_g.unwrap(),
-                                    false => {
-                                        ck.powers_of_gamma_g.as_ref().unwrap()[vars[0]][term.degree() - 1]
-                                    }
+                                    false => ck.powers_of_gamma_g.as_ref().unwrap()[vars[0]]
+                                        [term.degree() - 1],
                                 }
                             })
                             .collect::<Vec<_>>();
@@ -353,7 +350,8 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
                         // let hiding_witness_ints = Self::convert_to_bigints(hiding_witness);
                         let hiding_witness_coeffs = hiding_witness
                             .terms()
-                            .into_iter().map(|(coeff, _)| coeff.clone())
+                            .into_iter()
+                            .map(|(coeff, _)| coeff.clone())
                             .collect::<Vec<_>>();
                         // Compute MSM and add result to witness
                         *witness += &<E::G1 as VariableBaseMSM>::msm_unchecked(
@@ -368,7 +366,6 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
                 .map(|(scalars, powers)| E::G1::msm_bigint(powers, scalars).into_affine())
                 .collect::<Vec<_>>(),
         };
-
         (proof_g1, state.as_ref().map(|s| s.evaluate(point)))
     }
 
@@ -403,10 +400,10 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
     ) -> bool {
         let verify_time = start_timer!(|| "EPC Verify");
         let lhs = {
-            let mut left_input = comm.g_product.into_group() - &vk.g.mul(eval);
+            let mut left_input = comm.g_product.into_group() - vk.g.mul(eval);
             // This is for ZK
             if let Some(v_bar) = &proof.1 {
-                // scalars.push((-*v_bar).into_bigint());
+                left_input -= &vk.gamma_g.unwrap().mul(*v_bar);
             }
 
             let point_bigint = point.iter().map(|x| x.into_bigint()).collect::<Vec<_>>();
