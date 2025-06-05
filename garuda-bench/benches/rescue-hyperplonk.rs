@@ -24,8 +24,10 @@ use hp_subroutines::MultilinearUniversalParams;
 use hp_subroutines::PolyIOP;
 use hp_subroutines::PolynomialCommitmentScheme;
 
-use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
+
+#[cfg(feature = "parallel")]
+use rayon::ThreadPoolBuilder;
 
 fn bench<E: Pairing>(
     num_invocations: usize,
@@ -124,16 +126,6 @@ fn num_constr_from_num_invoc(num_invocations: usize) -> usize {
 }
 
 fn main() {
-    let num_thread = env::var("NUM_THREAD")
-        .unwrap_or_else(|_| "default".to_string())
-        .parse::<usize>()
-        .unwrap();
-
-    ThreadPoolBuilder::new()
-        .num_threads(num_thread)
-        .build_global()
-        .unwrap();
-
     const MAX_LOG_VAR: usize = 25;
     let jf_gate = CustomizedGates::jellyfish_turbo_plonk_gate();
     let srs_file_path: String = format!("srs_{}.bin", MAX_LOG_VAR);
@@ -159,17 +151,45 @@ fn main() {
     let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
-    for num_invocation in &num_invocations {
-        let _ = bench::<Bls12_381>(
-            *num_invocation,
-            20,
-            1,
-            1,
-            100,
-            num_thread,
-            &jf_gate,
-            &pcs_srs,
-        )
-        .save_to_csv("hyperplonk.csv");
+
+    #[cfg(feature = "parallel")]
+    {
+        const num_thread: usize = 4;
+        ThreadPoolBuilder::new()
+            .num_threads(num_thread)
+            .build_global()
+            .unwrap();
+
+        for num_invocation in &num_invocations {
+            let _ = bench::<Bls12_381>(
+                *num_invocation,
+                20,
+                1,
+                1,
+                100,
+                num_thread,
+                &jf_gate,
+                &pcs_srs,
+            )
+            .save_to_csv("hyperplonk.csv");
+        }
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        const num_thread: usize = 1;
+        for num_invocation in &num_invocations {
+            let _ = bench::<Bls12_381>(
+                *num_invocation,
+                20,
+                1,
+                1,
+                100,
+                num_thread,
+                &jf_gate,
+                &pcs_srs,
+            )
+            .save_to_csv("hyperplonk.csv");
+        }
     }
 }

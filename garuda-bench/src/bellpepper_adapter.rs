@@ -7,12 +7,15 @@ use ark_r1cs_std::{
 use ark_relations::gr1cs::{
     ConstraintSystemRef, Namespace, SynthesisError as arkSynthesisError, R1CS_PREDICATE_LABEL,
 };
+use ark_std::{cfg_into_iter, cfg_iter};
 use bellpepper_core::{
     num::AllocatedNum, Circuit, ConstraintSystem, LinearCombination,
     SynthesisError as bpSynthesisError,
 };
 use core::borrow::Borrow;
 use ff::PrimeField as novaPrimeField;
+
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 pub trait AllocIoVar<V: ?Sized, A: arkField>: Sized + AllocVar<V, A> {
@@ -114,35 +117,25 @@ impl<N: novaPrimeField<Repr = [u8; 32]>> FCircuit<N> {
         let instance_assignment = ark_cs.instance_assignment().unwrap();
         assert_eq!(instance_assignment[0], A::one());
 
-        let input_assignments: Vec<N> = ark_cs
-            .witness_assignment()
-            .unwrap()
-            .par_iter()
+        let input_assignments: Vec<N> = cfg_iter!(ark_cs.witness_assignment().unwrap())
             .map(|f| ark_to_nova_field(f))
             .collect();
 
-        let wit_assignments: Vec<N> = ark_cs
-            .witness_assignment()
-            .unwrap()
-            .par_iter()
+        let wit_assignments: Vec<N> = cfg_iter!(ark_cs.witness_assignment().unwrap())
             .map(|f| ark_to_nova_field(f))
             .collect();
 
         let ark_matrices = &ark_cs.to_matrices().unwrap()[R1CS_PREDICATE_LABEL];
-        let lcs = (0..ark_matrices[0].len())
-            .into_par_iter()
+        let lcs = cfg_into_iter!((0..ark_matrices[0].len()))
             .map(|i| {
                 (
-                    ark_matrices[0][i]
-                        .par_iter()
+                    cfg_iter!(ark_matrices[0][i])
                         .map(|(val, index)| (ark_to_nova_field(val), *index))
                         .collect(),
-                    ark_matrices[1][i]
-                        .par_iter()
+                    cfg_iter!(ark_matrices[1][i])
                         .map(|(val, index)| (ark_to_nova_field(val), *index))
                         .collect(),
-                    ark_matrices[2][i]
-                        .par_iter()
+                    cfg_iter!(ark_matrices[2][i])
                         .map(|(val, index)| (ark_to_nova_field(val), *index))
                         .collect(),
                 )

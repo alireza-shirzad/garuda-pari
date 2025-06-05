@@ -110,7 +110,6 @@ pub fn zk_sumcheck_prover_wrapper<E: Pairing, R: RngCore>(
             let challenge = transcript
                 .get_and_append_challenge(b"mask_commitment")
                 .unwrap();
-            dbg!(challenge);
             let mask = Some((mask_poly.clone(), challenge));
 
             let proof = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::prove(
@@ -194,7 +193,7 @@ pub fn zk_sumcheck_verifier_wrapper<E: Pairing, S: CryptographicSponge>(
         _ => panic!("Mask verification data is inconsistent"),
     };
 
-    let subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
+    let mut subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
         claimed_sum,
         &proof.iop_proof,
         aux_info,
@@ -232,7 +231,6 @@ pub fn zk_sumcheck_verifier_wrapper<E: Pairing, S: CryptographicSponge>(
         (None, None, None, None) => {}
         _ => panic!("Mask verification data is inconsistent"),
     }
-
     subclaim
 }
 

@@ -8,9 +8,6 @@ use ark_std::test_rng;
 use garuda::Garuda;
 use rand::{RngCore, SeedableRng};
 
-// Keygen took: 19.18047725s
-// Prover took: 58.543421709s
-// Verifier took: 5.030917ms
 #[tokio::main]
 async fn main() {
     type E = Bn254;
@@ -42,34 +39,3 @@ async fn main() {
     let duration = start.elapsed();
     println!("Verifier took: {:?}", duration);
 }
-// #[derive(Debug, Deserialize)]
-// #[serde(untagged)]
-// enum BigIntOrVec {
-//     Single(String),
-//     Vec(Vec<String>),
-// }
-
-// pub fn load_bigint_map<P: AsRef<Path>>(
-//     path: P,
-// ) -> Result<HashMap<String, Vec<BigInt>>, Box<dyn std::error::Error>> {
-//     let file = File::open(path)?;
-//     let reader = BufReader::new(file);
-
-//     let raw: HashMap<String, BigIntOrVec> = serde_json::from_reader(reader)?;
-
-//     let parsed = raw
-//         .into_iter()
-//         .map(|(k, v)| {
-//             let vec = match v {
-//                 BigIntOrVec::Single(s) => vec![s.parse::<BigInt>()?],
-//                 BigIntOrVec::Vec(vs) => vs
-//                     .into_iter()
-//                     .map(|s| s.parse::<BigInt>())
-//                     .collect::<Result<_, _>>()?,
-//             };
-//             Ok((k, vec))
-//         })
-//         .collect::<Result<HashMap<_, _>, Box<dyn std::error::Error>>>()?;
-
-//     Ok(parsed)
-// }

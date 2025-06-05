@@ -108,7 +108,7 @@ impl<E: Pairing> Garuda<E> {
             let num_vars = succinct_index.log_num_constraints;
             let masking_pp = MarlinPST13::setup(max_degree, Some(num_vars), &mut rng).unwrap();
             let masking_ck_vk =
-                MarlinPST13::trim(&masking_pp, max_degree, max_degree, None).unwrap();
+                MarlinPST13::trim(&masking_pp, max_degree, 1, None).unwrap();
             (Some(masking_ck_vk.0), Some(masking_ck_vk.1))
         } else {
             (None, None)

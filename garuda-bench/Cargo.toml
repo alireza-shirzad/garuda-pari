@@ -98,7 +98,6 @@ harness = false
 
 
 [features]
-default = ["std", "parallel"]
 std = [
     "garuda/std",
     "ark-ff/std",
