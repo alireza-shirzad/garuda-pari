@@ -35,7 +35,7 @@ use shared_utils::msm_bigint_wnaf;
 #[cfg(not(feature = "parallel"))]
 use std::iter::once;
 
-use std::{ops::Mul, os::macos::raw::stat};
+use std::{ops::Mul};
 pub struct MultilinearEPC<E: Pairing> {
     _p1: PhantomData<E>,
 }
