@@ -16,7 +16,9 @@ ark-poly = { workspace = true }
 ark-crypto-primitives = { workspace = true }
 ark-r1cs-std = { workspace = true, features = ["std"] }
 ark-relations = { workspace = true }
-ark-groth16 = { workspace = true, default-features = false, features = ["parallel"] }
+ark-groth16 = { workspace = true, default-features = false, features = [
+    "parallel",
+] }
 ark-bls12-381 = { workspace = true }
 ark-spartan = { git = "https://github.com/alireza-shirzad/spartan.git", default-features = false }
 ark-pallas = { version = "0.5.0", default-features = false, features = [
@@ -50,7 +52,7 @@ bls12_381 = { version = "0.8.0" }
 ark-bn254 = { git = "https://github.com/arkworks-rs/algebra", default-features = false, features = [
     "curve",
 ] }
-ark-circom = { path = "../../circom-compat" }
+ark-circom = { git = "https://github.com/alireza-shirzad/circom-compat.git" }
 tokio = { version = "1.0", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
@@ -122,6 +124,3 @@ parallel = [
 
 r1cs = ["ark-crypto-primitives/r1cs"]
 gr1cs = ["ark-crypto-primitives/gr1cs"]
-
-
-

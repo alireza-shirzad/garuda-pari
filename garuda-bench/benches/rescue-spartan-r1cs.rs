@@ -2,6 +2,7 @@
 use ark_crypto_primitives::crh::{rescue::CRH, CRHScheme};
 use ark_relations::gr1cs::ConstraintSynthesizer as arkConstraintSynthesizer;
 use ark_relations::gr1cs::ConstraintSystem as arkConstraintSystem;
+use ark_std::cfg_iter;
 use ark_std::test_rng;
 use ark_std::UniformRand;
 use garuda::ConstraintSystemRef;
@@ -52,8 +53,7 @@ fn run_bench(
     type S = spartan2::spartan::snark::RelaxedR1CSSNARK<G, EE>;
     let (pk, vk) = SNARK::<G, S, FCircuit<bls12_381::Scalar>>::setup(f_circuit.clone()).unwrap();
     let snark = SNARK::prove(&pk, f_circuit).unwrap();
-    let input_assignments: Vec<bls12_381::Scalar> = vec![expected_image; input_size - 1]
-        .par_iter()
+    let input_assignments: Vec<bls12_381::Scalar> =cfg_iter!(vec![expected_image; input_size - 1])
         .map(ark_to_nova_field)
         .collect();
     snark.verify(&vk, &input_assignments).unwrap();
