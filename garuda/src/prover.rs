@@ -181,7 +181,7 @@ impl<E: Pairing> Garuda<E> {
         ),
         SynthesisError,
     > {
-        const ZK_BOUND: usize = 5;
+        const ZK_BOUND: usize = 3;
         // Start up the constraint System and synthesize the circuit
         let timer_cs_startup = start_timer!(|| "Building Constraint System");
         let cs = ConstraintSystem::new_ref();
@@ -198,12 +198,16 @@ impl<E: Pairing> Garuda<E> {
         circuit.generate_constraints(cs.clone())?;
         end_timer!(timer_synthesize_circuit);
         //TODO: Fix this, The rng should be downstreamed from the prover
-        let mut local_rng = ark_std::rand::thread_rng();
         if zk {
             let timer_zk = start_timer!(|| "ZK Setup");
             for _ in 0..ZK_BOUND {
-                cs.new_witness_variable(|| Ok(E::ScalarField::rand(&mut local_rng)))?;
-                cs.enforce_r1cs_constraint(lc!(), lc!(), lc!())?;
+                let a = E::ScalarField::from(100);
+                let b = E::ScalarField::from(200);
+                let c = a * b;
+                let a_wit = cs.new_witness_variable(|| Ok(a))?;
+                let b_wit = cs.new_witness_variable(|| Ok(b))?;
+                let c_wit = cs.new_witness_variable(|| Ok(c))?;
+                cs.enforce_r1cs_constraint(lc!() + a_wit, lc!() + b_wit, lc!() + c_wit)?;
             }
             end_timer!(timer_zk);
         }

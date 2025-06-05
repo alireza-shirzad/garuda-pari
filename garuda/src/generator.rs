@@ -100,15 +100,15 @@ impl<E: Pairing> Garuda<E> {
         // If it's zk, generate the commitment keys for the sumcheck masking polynomials
 
         let (mask_ck, mask_vk) = if zk {
-            let max_degree = 1 + succinct_index.predicate_max_deg
+            let max_degree = 1
+                + succinct_index.predicate_max_deg
                 + match succinct_index.num_predicates {
                     1 => 0,
                     _ => 1,
                 };
             let num_vars = succinct_index.log_num_constraints;
             let masking_pp = MarlinPST13::setup(max_degree, Some(num_vars), &mut rng).unwrap();
-            let masking_ck_vk =
-                MarlinPST13::trim(&masking_pp, max_degree, 1, None).unwrap();
+            let masking_ck_vk = MarlinPST13::trim(&masking_pp, max_degree, 1, None).unwrap();
             (Some(masking_ck_vk.0), Some(masking_ck_vk.1))
         } else {
             (None, None)
@@ -118,7 +118,7 @@ impl<E: Pairing> Garuda<E> {
             sel_batched_comm,
             epc_vk,
             succinct_index,
-            mask_vk
+            mask_vk,
         };
 
         let pk: ProvingKey<E> = ProvingKey {
@@ -143,7 +143,7 @@ impl<E: Pairing> Garuda<E> {
         E::ScalarField: Field,
         E::ScalarField: std::convert::From<i32>,
     {
-        const ZK_BOUND: usize = 5;
+        const ZK_BOUND: usize = 3;
         // Start up the constraint System and synthesize the circuit
         let timer_cs_startup = start_timer!(|| "Constraint System Startup");
         let cs: gr1cs::ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
@@ -159,9 +159,15 @@ impl<E: Pairing> Garuda<E> {
 
         if zk {
             let timer_zk = start_timer!(|| "ZK Setup");
+
             for i in 0..ZK_BOUND {
-                cs.new_witness_variable(|| Ok(E::ScalarField::from(i as i32)))?;
-                cs.enforce_r1cs_constraint(lc!(), lc!(), lc!())?;
+                let a = E::ScalarField::from(100);
+                let b = E::ScalarField::from(200);
+                let c = a * b;
+                let a_wit = cs.new_witness_variable(|| Ok(a))?;
+                let b_wit = cs.new_witness_variable(|| Ok(b))?;
+                let c_wit = cs.new_witness_variable(|| Ok(c))?;
+                cs.enforce_r1cs_constraint(lc!() + a_wit, lc!() + b_wit, lc!() + c_wit)?;
             }
             end_timer!(timer_zk);
         }

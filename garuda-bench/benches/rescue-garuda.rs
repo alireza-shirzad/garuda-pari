@@ -144,14 +144,16 @@ where
     }
 }
 
+const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
+const MAX_LOG2_INPUT_SIZE: usize = 20;
+const ZK: bool = true;
+
 #[cfg(feature = "parallel")]
 fn main() {
     //////////// Benchamrk the Verifier ////////////////
-    const ZK: bool = true;
     let zk_string = if ZK { "-zk" } else { "" };
     //////////// Benchamrk the prover ////////////////
 
-    const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
     let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
@@ -198,8 +200,6 @@ fn main() {
 #[cfg(not(feature = "parallel"))]
 fn main() {
     //////////// Benchmark the Verifier ////////////////
-    const MAX_LOG2_INPUT_SIZE: usize = 20;
-    const ZK: bool = true;
     let zk_string = if ZK { "-zk" } else { "" };
     let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
         .map(|i| 2_usize.pow(i as u32))
@@ -235,7 +235,6 @@ fn main() {
 
     //////////// Benchmark the Prover ////////////////
 
-    const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
     let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
