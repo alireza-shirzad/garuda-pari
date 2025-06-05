@@ -26,7 +26,7 @@ impl<E: Pairing> Garuda<E> {
         let mut transcript: IOPTranscript<<E as Pairing>::ScalarField> =
             IOPTranscript::<E::ScalarField>::new(Self::SNARK_NAME.as_bytes());
         let _ = transcript.append_serializable_element(b"vk", vk);
-        let _ = transcript.append_serializable_element(b"input", &public_input);
+        let _ = transcript.append_serializable_element(b"input", public_input);
         let _ =
             transcript.append_serializable_element(b"batched_commitments", &proof.w_batched_comm);
 
@@ -77,8 +77,8 @@ impl<E: Pairing> Garuda<E> {
             &zero_check_subclaim.point,
             &zero_check_subclaim.expected_evaluation,
             &px,
-            &proof,
-            &vk,
+            proof,
+            vk,
         ) {
             panic!("Final Evaluation check in zerocheck failed");
         }
