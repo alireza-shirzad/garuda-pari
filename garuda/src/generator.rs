@@ -100,7 +100,7 @@ impl<E: Pairing> Garuda<E> {
         // If it's zk, generate the commitment keys for the sumcheck masking polynomials
 
         let (mask_ck, mask_vk) = if zk {
-            let max_degree = succinct_index.predicate_max_deg
+            let max_degree = 1 + succinct_index.predicate_max_deg
                 + match succinct_index.num_predicates {
                     1 => 0,
                     _ => 1,

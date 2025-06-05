@@ -181,6 +181,9 @@ pub fn zk_sumcheck_verifier_wrapper<E: Pairing, S: CryptographicSponge>(
     aux_info: &VPAuxInfo<E::ScalarField>,
     transcript: &mut IOPTranscript<E::ScalarField>,
 ) -> SumCheckSubClaim<E::ScalarField> {
+    let challenge = transcript
+        .get_and_append_challenge(b"mask_commitment")
+        .unwrap();
     let subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
         claimed_sum,
         &proof.iop_proof,

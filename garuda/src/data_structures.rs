@@ -150,3 +150,4 @@ pub struct ZKIOPProof<E: Pairing> {
     pub mask_opening: Option<MaskOpeningProof<E>>,
     pub mask_evaluation: Option<E::ScalarField>,
 }
+
