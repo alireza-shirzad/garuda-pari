@@ -12,7 +12,6 @@ pub mod prelude;
 mod structs;
 mod sum_check;
 mod zero_check;
-
 #[derive(Clone, Debug, Default, Copy, PartialEq, Eq)]
 /// Struct for PolyIOP protocol.
 /// It has an associated type `F` that defines the prime field the multi-variate

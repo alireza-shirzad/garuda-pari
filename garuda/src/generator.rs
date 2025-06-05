@@ -1,6 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use ark_poly::SparseMultilinearExtension;
+use ark_poly_commit::{marlin_pst13_pc::MarlinPST13, PolynomialCommitment};
 use rayon::iter::repeatn;
 use std::rc::Rc;
 
@@ -46,8 +47,10 @@ impl<E: Pairing> Garuda<E> {
         E::ScalarField: Field,
     {
         let timer_generator = start_timer!(|| "Generator");
-        let mut index = Self::circuit_to_keygen_cs(circuit, zk).unwrap();
+
+        // Start up the constraint system and synthesize the circuit
         let timer_indexer = start_timer!(|| "Constraint System Startup");
+        let mut index = Self::circuit_to_keygen_cs(circuit, zk).unwrap();
         end_timer!(timer_indexer);
 
         // Generate the public parameters for the multilinear EPC
@@ -66,14 +69,14 @@ impl<E: Pairing> Garuda<E> {
         let equifficient_constrinats: Vec<Vec<SparseMultilinearExtension<E::ScalarField>>> =
             Self::build_equifficient_constraints(&mut index);
         end_timer!(timer_epc_equif_constrs_gen);
-        start_timer!(|| "Generating EPC Keys");
+        let timer_epc_keys = start_timer!(|| "Generating EPC Keys");
         let hiding_bound = match zk {
             true => Some(1),
             false => None,
         };
         let (epc_ck, epc_vk, _epc_tr) =
-            MultilinearEPC::<E>::setup(rng, &epc_pp, hiding_bound, &equifficient_constrinats);
-        end_timer!(timer_epc_startup);
+            MultilinearEPC::<E>::setup(&mut rng, &epc_pp, hiding_bound, &equifficient_constrinats);
+        end_timer!(timer_epc_keys);
         end_timer!(timer_epc_startup);
 
         // Generate the selector polynomials, If there is only one predicate, then there is no need for selector polynomials, returns None
@@ -93,16 +96,36 @@ impl<E: Pairing> Garuda<E> {
             predicate_types: index.predicate_types.clone(),
             r1cs_num_constraints: index.predicate_num_constraints[R1CS_PREDICATE_LABEL],
         };
+
+        // If it's zk, generate the commitment keys for the sumcheck masking polynomials
+
+        let (mask_ck, mask_vk) = if zk {
+            let max_degree = succinct_index.predicate_max_deg
+                + match succinct_index.num_predicates {
+                    1 => 0,
+                    _ => 1,
+                };
+            let num_vars = succinct_index.log_num_constraints;
+            let masking_pp = MarlinPST13::setup(max_degree, Some(num_vars), &mut rng).unwrap();
+            let masking_ck_vk =
+                MarlinPST13::trim(&masking_pp, max_degree, max_degree, None).unwrap();
+            (Some(masking_ck_vk.0), Some(masking_ck_vk.1))
+        } else {
+            (None, None)
+        };
+
         let vk: VerifyingKey<E> = VerifyingKey {
             sel_batched_comm,
             epc_vk,
             succinct_index,
+            mask_vk
         };
 
         let pk: ProvingKey<E> = ProvingKey {
             sel_polys,
             verifying_key: vk.clone(),
             epc_ck,
+            mask_ck,
         };
 
         end_timer!(timer_key_generation);
@@ -234,7 +257,7 @@ impl<E: Pairing> Garuda<E> {
                     epc_ck,
                     &sel_polys,
                     &vec![None; sel_polys.len()],
-                    None::<&mut ThreadRng>,
+                    &None::<&mut ThreadRng>,
                     &vec![None; sel_polys.len()],
                     None,
                 );

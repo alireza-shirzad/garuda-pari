@@ -8,6 +8,8 @@
 
 use crate::arithmetic::VirtualPolynomial;
 use ark_ff::PrimeField;
+use ark_poly_commit::marlin_pc::Commitment as MaskCommitment;
+use ark_poly_commit::marlin_pst13_pc::Proof as MaskOpeningProof;
 use ark_serialize::CanonicalSerialize;
 
 /// An IOP proof is a collections of
@@ -28,7 +30,7 @@ pub struct IOPProverMessage<F: PrimeField> {
 }
 
 /// Prover State of a PolyIOP.
-pub struct IOPProverState<F: PrimeField> {
+pub struct IOPProverStateInner<F: PrimeField> {
     /// sampled randomness given by the verifier
     pub challenges: Vec<F>,
     /// the current round number
@@ -40,6 +42,28 @@ pub struct IOPProverState<F: PrimeField> {
     pub(crate) extrapolation_aux: Vec<(Vec<F>, Vec<F>)>,
 }
 
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, CanonicalSerialize)]
+pub struct MaskProverState<F: PrimeField> {
+    /// Masking polynomials from Libra (2019-317)
+    pub mask_polynomials: Vec<Vec<F>>,
+    /// ZK challenge
+    pub challenge: F,
+    /// Partial sum from front
+    pub front_partial_sum: F,
+    /// Partial sum from end
+    pub tail_partial_sum: Vec<F>,
+    /// The current round number
+    pub round: usize,
+    /// Number of variables
+    pub num_vars: usize,
+    /// Max number of multiplicands in a product
+    pub max_multiplicands: usize,
+}
+pub struct IOPProverState<F: PrimeField> {
+    pub(crate) inner: IOPProverStateInner<F>,
+    pub(crate) mask_state: Option<MaskProverState<F>>,
+}
 /// Prover State of a PolyIOP
 pub struct IOPVerifierState<F: PrimeField> {
     pub(crate) round: usize,
@@ -51,3 +75,4 @@ pub struct IOPVerifierState<F: PrimeField> {
     /// a list storing the randomness sampled by the verifier at each round
     pub(crate) challenges: Vec<F>,
 }
+

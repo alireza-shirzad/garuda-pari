@@ -22,7 +22,7 @@ pub trait EPC<F: Field> {
     type EquifficientConstraint;
 
     fn setup(
-        rng: impl RngCore,
+        rng: &mut impl RngCore,
         pp: &Self::PublicParameters,
         hiding_bound: Option<usize>,
         equifficient_constrinats: &Self::EquifficientConstraint,
@@ -43,7 +43,7 @@ pub trait EPC<F: Field> {
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         rest_zeros: &[Option<usize>],
-        rng: Option<&mut impl Rng>,
+        rng: &Option<&mut impl Rng>,
         hiding_bounds: &[Option<usize>],
         equifficients: Option<&[F]>,
     ) -> (Self::BatchedCommitment, Self::ProverBatchedState);

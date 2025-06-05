@@ -58,18 +58,18 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
     type EquifficientConstraint = Vec<Self::PolynomialBasis>;
 
     fn setup(
-        mut rng: impl RngCore,
+        rng: &mut impl RngCore,
         pp: &Self::PublicParameters,
         hiding_bound: Option<usize>,
         equifficient_constraints: &Self::EquifficientConstraint,
     ) -> (Self::CommitmentKey, Self::VerifyingKey, Self::Trapdoor) {
         // beta_i's, the random evaluation points
         let beta: Vec<E::ScalarField> = (0..pp.num_var)
-            .map(|_| E::ScalarField::rand(&mut rng))
+            .map(|_| E::ScalarField::rand(rng))
             .collect();
         // alpha_i's, the random consistency challenges
         let consistency_challanges: Vec<E::ScalarField> = (0..pp.num_constraints)
-            .map(|_| E::ScalarField::rand(&mut rng))
+            .map(|_| E::ScalarField::rand(rng))
             .collect();
         // Preparing the lagrange basis set in the clear
         let mut powers_of_g = Vec::new();
@@ -112,7 +112,7 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
         // Preparing the zk srs, if hiding_bound is set
         let (gamma_g, powers_of_gamma_g) = match hiding_bound {
             Some(hiding_bound) => {
-                let gamma_g = E::G1::rand(&mut rng);
+                let gamma_g = E::G1::rand(rng);
                 let mut powers_of_gamma_g = vec![Vec::new(); pp.num_var];
                 let gamma_g_table = BatchMulPreprocessing::new(gamma_g, hiding_bound);
 
@@ -260,7 +260,7 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
         ck: &Self::CommitmentKey,
         polys: &[Self::Polynomial],
         rest_zeros: &[Option<usize>],
-        _rng: Option<&mut impl Rng>,
+        _rng: &Option<&mut impl Rng>,
         hiding_bounds: &[Option<usize>],
         equifficients: Option<&[E::ScalarField]>,
     ) -> (Self::BatchedCommitment, Self::ProverBatchedState) {

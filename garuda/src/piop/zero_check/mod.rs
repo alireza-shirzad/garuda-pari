@@ -11,6 +11,7 @@ use std::fmt::Debug;
 use crate::arithmetic::eq_eval;
 use crate::piop::{errors::PolyIOPErrors, sum_check::SumCheck, PolyIOP};
 use ark_ff::PrimeField;
+use ark_poly::multivariate::{SparsePolynomial, SparseTerm};
 use ark_serialize::CanonicalSerialize;
 use ark_std::{end_timer, start_timer};
 
@@ -46,6 +47,7 @@ pub trait ZeroCheck<F: PrimeField>: SumCheck<F> {
     /// {0,1}^`num_vars` is zero.
     fn prove(
         poly: &Self::VirtualPolynomial,
+        mask: Option<(SparsePolynomial<F, SparseTerm>, F)>,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::ZeroCheckProof, PolyIOPErrors>;
 
@@ -63,13 +65,14 @@ impl<F: PrimeField> ZeroCheck<F> for PolyIOP<F> {
 
     fn prove(
         poly: &Self::VirtualPolynomial,
+        mask: Option<(SparsePolynomial<F, SparseTerm>, F)>,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::ZeroCheckProof, PolyIOPErrors> {
         let start = start_timer!(|| "zero check prove");
         let length = poly.aux_info.num_variables;
         let r = transcript.get_and_append_challenge_vectors(b"0check r", length)?;
         let f_hat = poly.build_f_hat(r.as_ref())?;
-        let res = <Self as SumCheck<F>>::prove(&f_hat, transcript);
+        let res = <Self as SumCheck<F>>::prove(&f_hat, mask, transcript);
 
         end_timer!(start);
         res

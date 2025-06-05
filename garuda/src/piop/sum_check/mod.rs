@@ -13,7 +13,10 @@ use super::{
 };
 use crate::arithmetic::{VPAuxInfo, VirtualPolynomial};
 use ark_ff::PrimeField;
-use ark_poly::DenseMultilinearExtension;
+use ark_poly::{
+    multivariate::{SparsePolynomial, SparseTerm},
+    DenseMultilinearExtension,
+};
 use ark_std::{end_timer, start_timer};
 use shared_utils::transcript::IOPTranscript;
 use std::{fmt::Debug, sync::Arc};
@@ -26,16 +29,15 @@ pub trait SumCheck<F: PrimeField> {
     type VirtualPolynomial;
     type VPAuxInfo;
     type MultilinearExtension;
-
     type SumCheckProof: Clone + Debug + Default + PartialEq;
     type Transcript;
     type SumCheckSubClaim: Clone + Debug + Default + PartialEq;
-
     /// Generate proof of the sum of polynomial over {0,1}^`num_vars`
     ///
     /// The polynomial is represented in the form of a VirtualPolynomial.
     fn prove(
         poly: &Self::VirtualPolynomial,
+        mask: Option<(SparsePolynomial<F, SparseTerm>, F)>,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::SumCheckProof, PolyIOPErrors>;
 
@@ -58,7 +60,11 @@ where
 
     /// Initialize the prover state to argue for the sum of the input polynomial
     /// over {0,1}^`num_vars`.
-    fn init(polynomial: &Self::VirtualPolynomial) -> Result<Self, PolyIOPErrors>;
+    fn init(
+        polynomial: &Self::VirtualPolynomial,
+        // If the prover is zk, it should get (masking polynomial, combining challenge)
+        mask: Option<(SparsePolynomial<F, SparseTerm>, F)>,
+    ) -> Result<Self, PolyIOPErrors>;
 
     /// Receive message from verifier, generate prover message, and proceed to
     /// next round.
@@ -66,6 +72,7 @@ where
     /// Main algorithm used is from section 3.2 of [XZZPS19](https://eprint.iacr.org/2019/317.pdf#subsection.3.2).
     fn prove_round_and_update_state(
         &mut self,
+        zk: bool,
         challenge: &Option<F>,
     ) -> Result<Self::ProverMessage, PolyIOPErrors>;
 }
@@ -128,29 +135,31 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
 
     fn prove(
         poly: &Self::VirtualPolynomial,
+        mask: Option<(SparsePolynomial<F, SparseTerm>, F)>,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::SumCheckProof, PolyIOPErrors> {
         let start = start_timer!(|| "sum check prove");
-
+        let is_zk = mask.is_some();
         transcript.append_serializable_element(b"aux info", &poly.aux_info)?;
 
-        let mut prover_state = IOPProverState::init(poly)?;
+        let mut prover_state = IOPProverState::init(poly, mask)?;
+
         let mut challenge = None;
         let mut prover_msgs = Vec::with_capacity(poly.aux_info.num_variables);
-        for _ in 0..poly.aux_info.num_variables {
-            let prover_msg = prover_state.prove_round_and_update_state(&challenge)?;
+        for _i in 0..poly.aux_info.num_variables {
+            let prover_msg = prover_state.prove_round_and_update_state(is_zk, &challenge)?;
             transcript.append_serializable_element(b"prover msg", &prover_msg)?;
             prover_msgs.push(prover_msg);
             challenge = Some(transcript.get_and_append_challenge(b"Internal round")?);
         }
         // pushing the last challenge point to the state
         if let Some(p) = challenge {
-            prover_state.challenges.push(p)
+            prover_state.inner.challenges.push(p)
         };
 
         end_timer!(start);
         Ok(IOPProof {
-            point: prover_state.challenges,
+            point: prover_state.inner.challenges,
             proofs: prover_msgs,
         })
     }

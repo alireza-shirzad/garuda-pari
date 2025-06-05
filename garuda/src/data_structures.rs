@@ -7,6 +7,11 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
+use ark_poly::multivariate::{SparsePolynomial, SparseTerm};
+use ark_poly_commit::marlin_pst13_pc::CommitterKey as MaskCommitterKey;
+use ark_poly_commit::marlin_pst13_pc::VerifierKey as MaskVerifierKey;
+
+use ark_poly_commit::marlin_pc::Commitment as MaskCommitment;
 use ark_relations::{
     gr1cs::{predicate::Predicate, ConstraintSystem, Label, Matrix},
     utils::IndexMap,
@@ -14,6 +19,7 @@ use ark_relations::{
 use ark_serialize::CanonicalSerialize;
 use ark_std::log2;
 
+use ark_poly_commit::marlin_pst13_pc::Proof as MaskOpeningProof;
 /// The proving key for GARUDA
 #[derive(CanonicalSerialize, Clone)]
 pub struct ProvingKey<E>
@@ -27,6 +33,8 @@ where
     pub sel_polys: Option<Vec<DenseMultilinearExtension<E::ScalarField>>>,
     /// A copy of the Garuda verificatyion key
     pub verifying_key: VerifyingKey<E>,
+    /// The commitment key to commit to the sumcheck masking polynomials
+    pub mask_ck: Option<MaskCommitterKey<E, SparsePolynomial<E::ScalarField, SparseTerm>>>,
 }
 
 /// The verifying key for GARUDA
@@ -38,6 +46,8 @@ pub struct VerifyingKey<E: Pairing> {
     pub sel_batched_comm: Option<MLBatchedCommitment<E>>,
     /// The verification key for the multilinear EPC
     pub epc_vk: MLVerifyingKey<E>,
+    /// The verification key to commit to the sumcheck masking polynomials
+    pub mask_vk: Option<MaskVerifierKey<E>>,
 }
 
 /// The succinct index for GARUDA
@@ -65,7 +75,7 @@ pub struct Proof<E: Pairing> {
     /// Batched EPC commitment to ML-extension of M1.w, M2.w, ..., Mt.w where t:max_arity and M1, M2, ..., Mt are the stacked matrices
     pub w_batched_comm: MLBatchedCommitment<E>,
     /// Zero-Check PIOP proof for the grand polynomial
-    pub zero_check_proof: IOPProof<E::ScalarField>,
+    pub zero_check_proof: ZKIOPProof<E>,
     /// Evaluation of the selector polynomials on the random point outputed by the zerocheck
     pub sel_poly_evals: Option<Vec<E::ScalarField>>,
     /// Evaluation of the w polynomials on the random point outputed by the zerocheck
@@ -131,4 +141,12 @@ impl<F: Field> Index<F> {
 
         predicates_max_degree
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, CanonicalSerialize)]
+pub struct ZKIOPProof<E: Pairing> {
+    pub iop_proof: IOPProof<E::ScalarField>,
+    pub mask_com: Option<MaskCommitment<E>>,
+    pub mask_opening: Option<MaskOpeningProof<E>>,
+    pub mask_evaluation: Option<E::ScalarField>,
 }

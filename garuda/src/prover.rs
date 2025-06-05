@@ -1,3 +1,4 @@
+use crate::zk::zk_zerocheck_prover_wrapper;
 use crate::{
     arithmetic::{DenseMultilinearExtension as DenseMLE, VirtualPolynomial},
     data_structures::{Index, Proof, ProvingKey},
@@ -29,9 +30,9 @@ impl<E: Pairing> Garuda<E> {
         zk_rng: Option<&mut R>,
         circuit: C,
     ) -> Result<Proof<E>, SynthesisError> {
+        let is_zk = &zk_rng.is_some();
         let timer_prove = start_timer!(|| "Prove");
-        let (mut index, x_assignment, w_assignment) =
-            Self::circuit_to_prover_cs(circuit, zk_rng.is_some())?;
+        let (mut index, x_assignment, w_assignment) = Self::circuit_to_prover_cs(circuit, *is_zk)?;
         // Extract the index (i), input (x), witness (w), and the full assignment z=(x||w) from the constraint system
         let timer_extract_i_x_w =
             start_timer!(|| "Extract NP index, intance, witness and extended witness");
@@ -63,7 +64,7 @@ impl<E: Pairing> Garuda<E> {
         let num_constraints = index.predicate_num_constraints.values().sum::<usize>();
         let mut rest_zeros = vec![Some(num_constraints); mw_polys.len()];
         let mut hiding_bound = vec![None; mw_polys.len()];
-        if zk_rng.is_some() {
+        if *is_zk {
             hiding_bound.push(Some(1));
             mw_polys.push(DenseMLE::from_evaluations_vec(
                 mw_polys[0].num_vars,
@@ -75,7 +76,7 @@ impl<E: Pairing> Garuda<E> {
             &pk.epc_ck,
             &mw_polys,
             &rest_zeros,
-            zk_rng,
+            &zk_rng,
             &hiding_bound,
             Some(&w_assignment),
         );
@@ -93,7 +94,8 @@ impl<E: Pairing> Garuda<E> {
 
         // grand_poly.print_evals();
         let timer_zero_check = start_timer!(|| "Zero Check");
-        let zero_check_proof = PolyIOP::prove(&grand_poly, &mut transcript).unwrap();
+        let zero_check_proof =
+            zk_zerocheck_prover_wrapper(&grand_poly, &mut transcript, zk_rng, pk.mask_ck.as_ref());
         end_timer!(timer_zero_check);
 
         // Evaluate the selector and witness polynomials on the challenge point outputed by the zero-check
@@ -101,7 +103,7 @@ impl<E: Pairing> Garuda<E> {
 
         let timer_eval_polys = start_timer!(|| "Evaluate Polynomials");
         let timer_eval_mw_polys = start_timer!(|| "Evaluate M.w Polynomials");
-        let w_poly_evals = evaluate_batch(&mw_polys, &zero_check_proof.point);
+        let w_poly_evals = evaluate_batch(&mw_polys, &zero_check_proof.iop_proof.point);
         end_timer!(timer_eval_mw_polys);
 
         let timer_eval_sel_polys = start_timer!(|| "Evaluate Selector Polynomials");
@@ -110,7 +112,7 @@ impl<E: Pairing> Garuda<E> {
             _ => pk
                 .sel_polys
                 .as_ref()
-                .map(|sel_polys| evaluate_batch(sel_polys, &zero_check_proof.point)),
+                .map(|sel_polys| evaluate_batch(sel_polys, &zero_check_proof.iop_proof.point)),
         };
         end_timer!(timer_eval_sel_polys);
         end_timer!(timer_eval_polys);
@@ -144,7 +146,7 @@ impl<E: Pairing> Garuda<E> {
         let opening_proof = MultilinearEPC::batch_open(
             &pk.epc_ck,
             &polys_to_be_opened,
-            &zero_check_proof.point,
+            &zero_check_proof.iop_proof.point,
             &MLBatchedCommitment {
                 individual_comms: comms_to_be_opened,
                 consistency_comm: w_batched_comm.0.consistency_comm,

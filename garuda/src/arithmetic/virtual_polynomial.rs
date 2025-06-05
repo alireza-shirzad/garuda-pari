@@ -270,6 +270,16 @@ impl<F: PrimeField> VirtualPolynomial<F> {
         Ok(res)
     }
 
+    pub fn evaluations(&self) -> Vec<F> {
+        let mut evals = Vec::new();
+        for i in 0..1 << self.aux_info.num_variables {
+            let point = bit_decompose(i, self.aux_info.num_variables);
+            let point_fr: Vec<F> = point.iter().map(|&x| F::from(x)).collect();
+            evals.push(self.evaluate(point_fr.as_ref()).unwrap())
+        }
+        evals
+    }
+
     /// Print out the evaluation map for testing. Panic if the num_vars > 5.
     pub fn print_evals(&self) {
         // if self.aux_info.num_variables > 5 {

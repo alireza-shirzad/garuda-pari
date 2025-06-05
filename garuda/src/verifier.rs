@@ -1,3 +1,4 @@
+use crate::zk::{zk_zerocheck_verifier_wrapper, DummySponge};
 use crate::{
     arithmetic::VPAuxInfo,
     data_structures::{Proof, VerifyingKey},
@@ -11,7 +12,6 @@ use ark_poly::{Polynomial, SparseMultilinearExtension};
 use ark_relations::gr1cs::predicate::{polynomial_constraint::PolynomialPredicate, Predicate};
 use ark_std::{end_timer, marker::PhantomData, start_timer};
 use shared_utils::transcript::IOPTranscript;
-
 impl<E: Pairing> Garuda<E> {
     pub fn verify(proof: &Proof<E>, vk: &VerifyingKey<E>, public_input: &[E::ScalarField]) -> bool
     where
@@ -61,12 +61,13 @@ impl<E: Pairing> Garuda<E> {
             num_variables: vk.succinct_index.log_num_constraints,
             phantom: PhantomData,
         };
-        let zero_check_subclaim = PolyIOP::verify(
+
+        let zero_check_subclaim = zk_zerocheck_verifier_wrapper::<E, DummySponge>(
+            &vk.mask_vk,
             &proof.zero_check_proof,
             &zero_check_auxiliary_info,
             &mut transcript,
-        )
-        .unwrap();
+        );
         end_timer!(timer_zerocheck);
 
         // Performing the last step of the zerocheck

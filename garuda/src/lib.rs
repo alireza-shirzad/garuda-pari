@@ -12,6 +12,7 @@ mod prover;
 mod tests;
 mod utils;
 mod verifier;
+mod zk;
 
 /// The SNARK of [[Garuda]](https://eprint.iacr.org/2024/1245.pdf).
 pub struct Garuda<E: Pairing> {

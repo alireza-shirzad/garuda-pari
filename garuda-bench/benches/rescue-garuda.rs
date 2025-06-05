@@ -146,7 +146,7 @@ where
 fn main() {
     //////////// Benchamrk the Verifier ////////////////
     const MAX_LOG2_INPUT_SIZE: usize = 20;
-    const ZK: bool = true;
+    const ZK: bool = false;
     let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
