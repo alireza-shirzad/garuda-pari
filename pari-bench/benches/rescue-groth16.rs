@@ -21,8 +21,8 @@ use ark_std::{
     test_rng,
 };
 
+use pari_bench::create_test_rescue_parameter;
 use pari_bench::RescueDemo;
-use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::env;
@@ -40,7 +40,7 @@ where
     num_bigint::BigUint: From<<E::ScalarField as PrimeField>::BigInt>,
 {
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
-    let config = RescueConfig::<E::ScalarField>::test_conf();
+    let config = create_test_rescue_parameter(&mut rng);
 
     let mut rescue_input = Vec::new();
     for _ in 0..9 {
@@ -55,7 +55,9 @@ where
     }
 
     let mut prover_time = Duration::new(0, 0);
+    let mut prover_prep_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
+    let mut keygen_prep_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
     let circuit = RescueDemo {
         input: Some(rescue_input.clone()),
@@ -80,12 +82,14 @@ where
 
     let prover_circuit = circuit.clone();
 
-    let mut proof = Groth16::<E>::prove(&pk, prover_circuit, &mut rng).unwrap();
+    // let mut proof = Groth16::<E>::prove(&pk, prover_circuit, &mut rng).unwrap();
+    let mut proof = Groth16::<E>::create_proof_with_reduction_no_zk(prover_circuit, &pk).unwrap();
 
     for _ in 0..num_prover_iterations {
         let prover_circuit = circuit.clone();
         let start = ark_std::time::Instant::now();
-        proof = Groth16::<E>::prove(&pk, prover_circuit, &mut rng).unwrap();
+        // proof = Groth16::<E>::prove(&pk, prover_circuit, &mut rng).unwrap();
+        proof = Groth16::<E>::create_proof_with_reduction_no_zk(prover_circuit, &pk).unwrap();
         prover_time += start.elapsed();
     }
 
@@ -122,18 +126,19 @@ where
         vk_size,
         proof_size,
         prover_time: (prover_time / num_prover_iterations),
+        prover_prep_time: (prover_prep_time / num_prover_iterations),
+        prover_corrected_time: ((prover_time - prover_prep_time) / num_prover_iterations),
         verifier_time: (verifier_time / num_verifier_iterations),
         keygen_time: (keygen_time / num_keygen_iterations),
+        keygen_prep_time: (keygen_prep_time / num_keygen_iterations),
+        keygen_corrected_time: ((keygen_time - keygen_prep_time) / num_keygen_iterations),
     }
 }
 
+#[cfg(feature = "parallel")]
 fn main() {
-    let num_thread = env::var("NUM_THREAD")
-        .unwrap_or_else(|_| "default".to_string())
-        .parse::<usize>()
-        .unwrap();
-
-    ThreadPoolBuilder::new()
+    let num_thread = 4;
+    rayon::ThreadPoolBuilder::new()
         .num_threads(num_thread)
         .build_global()
         .unwrap();
@@ -141,7 +146,8 @@ fn main() {
     /////////// Benchmark Groth16 for different input sizes ///////////
     let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
     for &input_size in &num_inputs {
-        let _ = bench::<Bls12_381>(1, input_size, 1, 1, 100, num_thread).save_to_csv("groth16.csv");
+        let _ = bench::<Bls12_381>(1, input_size, 1, 1, 100, num_thread)
+            .save_to_csv(&format!("rescue-groth16-{}t-input.csv", num_thread));
     }
 
     /////////// Benchmark Groth16 for different circuit sizes ///////////
@@ -150,7 +156,28 @@ fn main() {
         .map(|i| 2_usize.pow(i as u32))
         .collect();
     for &num_invocation in &num_invocations {
-        let _ =
-            bench::<Bls12_381>(num_invocation, 20, 1, 1, 1, num_thread).save_to_csv("groth16.csv");
+        let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 1, num_thread)
+            .save_to_csv(&format!("rescue-groth16-{}t.csv", num_thread));
+    }
+}
+
+#[cfg(not(feature = "parallel"))]
+fn main() {
+    let num_thread = 1;
+    /////////// Benchmark Groth16 for different input sizes ///////////
+    let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
+    for &input_size in &num_inputs {
+        let _ = bench::<Bls12_381>(1, input_size, 1, 1, 100, num_thread)
+            .save_to_csv(&format!("rescue-groth16-{}t-input.csv", num_thread));
+    }
+
+    /////////// Benchmark Groth16 for different circuit sizes ///////////
+    const MAX_LOG2_NUM_INVOCATIONS: usize = 20;
+    let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    for &num_invocation in &num_invocations {
+        let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 1, num_thread)
+            .save_to_csv(&format!("rescue-groth16-{}t.csv", num_thread));
     }
 }

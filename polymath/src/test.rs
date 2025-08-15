@@ -68,12 +68,12 @@ impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF> for Circuit1<Constra
             Ok(a)
         })?;
 
-        cs.enforce_r1cs_constraint(lc!() + a, lc!() + b, lc!() + c)?;
-        cs.enforce_r1cs_constraint(lc!() + a, lc!() + b, lc!() + c)?;
-        cs.enforce_r1cs_constraint(lc!() + a, lc!() + b, lc!() + c)?;
-        cs.enforce_r1cs_constraint(lc!() + a, lc!() + b, lc!() + c)?;
-        cs.enforce_r1cs_constraint(lc!() + a, lc!() + b, lc!() + c)?;
-        cs.enforce_r1cs_constraint(lc!() + a, lc!() + b, lc!() + c)?;
+        cs.enforce_r1cs_constraint(|| lc!() + a, || lc!() + b, || lc!() + c)?;
+        cs.enforce_r1cs_constraint(|| lc!() + a, || lc!() + b, || lc!() + c)?;
+        cs.enforce_r1cs_constraint(|| lc!() + a, || lc!() + b, || lc!() + c)?;
+        cs.enforce_r1cs_constraint(|| lc!() + a, || lc!() + b, || lc!() + c)?;
+        cs.enforce_r1cs_constraint(|| lc!() + a, || lc!() + b, || lc!() + c)?;
+        cs.enforce_r1cs_constraint(|| lc!() + a, || lc!() + b, || lc!() + c)?;
 
         Ok(())
     }

@@ -200,7 +200,7 @@ impl<E: Pairing> Pari<E> {
         (pk, vk)
     }
 
-    fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
+    pub fn circuit_to_keygen_cs<C: ConstraintSynthesizer<E::ScalarField>>(
         circuit: C,
     ) -> Result<ConstraintSystem<E::ScalarField>, SynthesisError>
     where

@@ -16,7 +16,7 @@ use ark_std::{
     rand::{RngCore, SeedableRng},
     test_rng,
 };
-use pari_bench::RescueDemo;
+use pari_bench::{create_test_rescue_parameter, RescueDemo};
 use polymath::Polymath;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
@@ -38,7 +38,7 @@ where
     num_bigint::BigUint: From<<E::ScalarField as PrimeField>::BigInt>,
 {
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
-    let config = RescueConfig::<E::ScalarField>::test_conf();
+    let config = create_test_rescue_parameter(&mut rng);
 
     let mut rescue_input = Vec::new();
     for _ in 0..9 {
@@ -51,8 +51,9 @@ where
         let output = vec![expected_image; 9];
         expected_image = CRH::evaluate(&config, output.clone()).unwrap();
     }
-
+    let mut prover_prep_time = Duration::new(0, 0);
     let mut prover_time = Duration::new(0, 0);
+    let mut keygen_prep_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
     let circuit = RescueDemo {
@@ -108,6 +109,10 @@ where
         vk_size,
         proof_size,
         prover_time: (prover_time / num_prover_iterations),
+        prover_prep_time: (prover_prep_time / num_prover_iterations),
+        prover_corrected_time: ((prover_time - prover_prep_time) / num_prover_iterations),
+        keygen_prep_time: (keygen_prep_time / num_keygen_iterations),
+        keygen_corrected_time: ((keygen_time - keygen_prep_time) / num_keygen_iterations),
         verifier_time: (verifier_time / num_verifier_iterations),
         keygen_time: (keygen_time / num_keygen_iterations),
     }

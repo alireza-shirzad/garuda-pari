@@ -1,21 +1,16 @@
-use ark_bls12_381_v4::Bls12_381;
-use ark_crypto_primitives_v4::sponge::Absorb;
-use ark_ec_v4::pairing::Pairing;
-use ark_ec_v4::AffineRepr;
-use ark_ff_v4::PrimeField;
+use ark_bls12_381::Bls12_381;
+use ark_ec::pairing::Pairing;
 use ark_relations::utils::HashBuilder;
 use ark_relations::utils::IndexMap;
-use ark_serialize_v4::{CanonicalDeserialize, CanonicalSerialize};
-
+use ark_serialize::CanonicalDeserialize;
+use ark_serialize::CanonicalSerialize;
 use ark_std::any::type_name;
-use ark_std::env;
 use ark_std::fs::File;
 use ark_std::log2;
 use ark_std::ops::Neg;
 use ark_std::path::Path;
 use ark_std::test_rng;
 use ark_std::time::Duration;
-
 use hp_hyperplonk::prelude::CustomizedGates;
 use hp_hyperplonk::prelude::MockCircuit;
 use hp_hyperplonk::HyperPlonkSNARK;
@@ -40,10 +35,7 @@ fn bench<E: Pairing>(
     pcs_srs: &MultilinearUniversalParams<E>,
 ) -> BenchResult
 where
-    E::ScalarField: PrimeField + Absorb,
     E::G1Affine: Neg<Output = E::G1Affine>,
-    <E::G1Affine as AffineRepr>::BaseField: PrimeField,
-    num_bigint::BigUint: From<<E::ScalarField as PrimeField>::BigInt>,
 {
     let mut prover_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
@@ -75,7 +67,7 @@ where
         &circuit.witnesses,
     )
     .unwrap();
-    let proof_size = proof.serialized_size(ark_serialize_v4::Compress::Yes);
+    let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
     for _ in 0..num_keygen_iterations {
         let start = ark_std::time::Instant::now();
         proof = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, MultilinearKzgPCS<E>>>::prove(
@@ -161,6 +153,8 @@ fn main() {
             .unwrap();
 
         for num_invocation in &num_invocations {
+            use ark_bls12_381::Bls12_381;
+
             let _ = bench::<Bls12_381>(
                 *num_invocation,
                 20,

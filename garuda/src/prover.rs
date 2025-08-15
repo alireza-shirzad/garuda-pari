@@ -207,7 +207,7 @@ impl<E: Pairing> Garuda<E> {
                 let a_wit = cs.new_witness_variable(|| Ok(a))?;
                 let b_wit = cs.new_witness_variable(|| Ok(b))?;
                 let c_wit = cs.new_witness_variable(|| Ok(c))?;
-                cs.enforce_r1cs_constraint(lc!() + a_wit, lc!() + b_wit, lc!() + c_wit)?;
+                cs.enforce_r1cs_constraint(|| lc!() + a_wit, || lc!() + b_wit, || lc!() + c_wit)?;
             }
             end_timer!(timer_zk);
         }

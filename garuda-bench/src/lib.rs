@@ -3,6 +3,7 @@ pub const RESCUE_APPLICATION_NAME: &str = "rescue";
 
 pub mod bellpepper_adapter;
 
+use ark_crypto_primitives::sponge::rescue::constraints::RESCUE_PREDICATE;
 use ark_crypto_primitives::{
     crh::{
         rescue::constraints::{CRHGadget, CRHParametersVar},
@@ -17,7 +18,6 @@ use garuda::ConstraintSystemRef;
 use num_bigint::BigUint;
 use rand::Rng;
 use std::str::FromStr;
-
 pub const RESCUE_ROUNDS: usize = 12;
 pub const WIDTH: usize = 9;
 
@@ -36,23 +36,23 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
     rng: &mut impl Rng,
 ) -> RescueConfig<F> {
     let mut mds = vec![vec![]; 4];
-    for i in 0..4 {
+    for mds_row in mds.iter_mut() {
         for _ in 0..4 {
-            mds[i].push(F::rand(rng));
+            mds_row.push(F::rand(rng));
         }
     }
 
     let mut ark = vec![vec![]; 25];
-    for i in 0..(2 * RESCUE_ROUNDS + 1) {
+    for row in ark.iter_mut() {
         for _ in 0..4 {
-            ark[i].push(F::rand(rng));
+            row.push(F::rand(rng));
         }
     }
     let alpha_inv: BigUint = BigUint::from_str(
         "20974350070050476191779096203274386335076221000211055129041463479975432473805",
     )
     .unwrap();
-    RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1, 1)
+    RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1)
 }
 
 impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
@@ -66,7 +66,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
                 2,
                 vec![(F::from(1i8), vec![(0, 5)]), (F::from(-1i8), vec![(1, 1)])],
             );
-            cs.register_predicate("XXX", pow_pred).unwrap();
+            cs.register_predicate(RESCUE_PREDICATE, pow_pred).unwrap();
         }
         let params_g =
             CRHParametersVar::<F>::new_witness(cs.clone(), || Ok(self.config.clone())).unwrap();

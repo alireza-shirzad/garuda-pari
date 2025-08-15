@@ -14,27 +14,27 @@ use ark_std::{
     rand::{Rng, RngCore, SeedableRng},
     test_rng,
 };
+use garuda_bench::RESCUE_APPLICATION_NAME;
 use garuda_bench::{create_test_rescue_parameter, RescueDemo, WIDTH};
 use libspartan::{InputsAssignment, Instance, SNARKGens, VarsAssignment, SNARK};
 use merlin::Transcript;
 use rand::rngs::StdRng;
+#[cfg(feature = "parallel")]
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::cmp::max;
-use std::env;
 use std::ops::Neg;
 use std::time::Duration;
-
 #[cfg(feature = "gr1cs")]
-fn run_bench<E: Pairing>(
-    _bench_name: &str,
+fn bench<E: Pairing>(
     num_invocations: usize,
     input_size: usize,
     num_keygen_iterations: u32,
     num_prover_iterations: u32,
     num_verifier_iterations: u32,
     num_thread: usize,
+    _zk: bool,
 ) -> BenchResult
 where
     E::ScalarField: PrimeField + Absorb,
@@ -145,26 +145,88 @@ where
         keygen_corrected_time: ((keygen_time) / num_keygen_iterations),
     }
 }
+const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
+const MAX_LOG2_INPUT_SIZE: usize = 20;
+const ZK: bool = false;
 
+#[cfg(feature = "parallel")]
 fn main() {
-    let num_thread = env::var("NUM_THREAD")
-        .unwrap_or_else(|_| "default".to_string())
-        .parse::<usize>()
-        .unwrap();
+    //////////// Benchamrk the Verifier ////////////////
+    let zk_string = if ZK { "-zk" } else { "" };
+    //////////// Benchamrk the prover ////////////////
 
-    ThreadPoolBuilder::new()
-        .num_threads(num_thread)
-        .build_global()
-        .unwrap();
-
-    /////////// Benchmark Pari for different circuit sizes ///////////
-    const MAX_LOG2_NUM_INVOCATIONS: usize = 30;
     let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
-    for invocation in &num_invocations {
-        let _ = run_bench::<Bls12_381>("bench", *invocation, 20, 1, 1, 100, num_thread)
-            .save_to_csv("spartan-ccs.csv");
+
+    for &num_thread in &[4] {
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(num_thread)
+            .build()
+            .expect("Failed to build thread pool");
+        pool.install(|| {
+            for &num_invocation in &num_invocations {
+                let filename = format!(
+                    "{RESCUE_APPLICATION_NAME}-spartan-ccs{}-{}t.csv",
+                    zk_string, num_thread
+                );
+                let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
+                    .save_to_csv(&filename);
+            }
+        });
+    }
+}
+
+#[cfg(not(feature = "parallel"))]
+fn main() {
+    //////////// Benchmark the Verifier ////////////////
+    let zk_string = if ZK { "-zk" } else { "" };
+    use garuda_bench::INPUT_BENCHMARK;
+    let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+
+    for &input_size in &input_sizes {
+        let filename = format!(
+            "{RESCUE_APPLICATION_NAME}-spartan-ccs{}-{}t-{INPUT_BENCHMARK}.csv",
+            zk_string, 1
+        );
+        let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
+    }
+
+    //////////// Benchmark the Prover ////////////////
+
+    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
+        .collect();
+    let num_thread = 1;
+    for &num_invocation in &num_invocations {
+        const GARUDA_VARIANT: &str = {
+            #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
+            {
+                "garuda-gr1cs"
+            }
+
+            #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
+            {
+                "garuda-r1cs"
+            }
+
+            #[cfg(not(any(
+                all(feature = "gr1cs", not(feature = "r1cs")),
+                all(feature = "r1cs", not(feature = "gr1cs"))
+            )))]
+            {
+                compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
+            }
+        };
+
+        let filename = format!(
+            "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}-{}t.csv",
+            zk_string, num_thread
+        );
+        let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
+            .save_to_csv(&filename);
     }
 }
 

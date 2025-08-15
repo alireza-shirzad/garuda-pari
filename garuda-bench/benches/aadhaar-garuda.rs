@@ -8,9 +8,7 @@ use ark_std::test_rng;
 use garuda::Garuda;
 use rand::{RngCore, SeedableRng};
 
-// Keygen took: 19.18047725s
-// Prover took: 58.543421709s
-// Verifier took: 5.030917ms
+
 #[tokio::main]
 async fn main() {
     type E = Bn254;

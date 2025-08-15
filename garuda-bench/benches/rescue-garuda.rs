@@ -18,7 +18,6 @@ use ark_std::{
     test_rng,
 };
 use garuda::Garuda;
-use garuda_bench::INPUT_BENCHMARK;
 use garuda_bench::RESCUE_APPLICATION_NAME;
 use garuda_bench::{create_test_rescue_parameter, RescueDemo};
 #[cfg(feature = "parallel")]
@@ -146,7 +145,7 @@ where
 
 const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
 const MAX_LOG2_INPUT_SIZE: usize = 20;
-const ZK: bool = true;
+const ZK: bool = false;
 
 #[cfg(feature = "parallel")]
 fn main() {
@@ -201,6 +200,7 @@ fn main() {
 fn main() {
     //////////// Benchmark the Verifier ////////////////
     let zk_string = if ZK { "-zk" } else { "" };
+    use garuda_bench::INPUT_BENCHMARK;
     let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
