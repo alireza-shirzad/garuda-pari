@@ -48,6 +48,7 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
             row.push(F::rand(rng));
         }
     }
+    // Compute alpha^{-1} mod (p - 1) for the active field so parameters stay valid across curves.
     let alpha_inv = compute_alpha_inv::<F>(5);
     RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1)
 }
@@ -60,10 +61,10 @@ fn compute_alpha_inv<F: PrimeField>(alpha: u64) -> BigUint {
     let alpha = BigUint::from(alpha);
 
     // Extended Euclidean algorithm to find the inverse of `alpha` mod (p - 1)
-    let mut t = BigInt::zero();
-    let mut new_t = BigInt::one();
-    let mut r = BigInt::from(modulus_minus_one.clone());
-    let mut new_r = BigInt::from(alpha);
+    let mut t = BigInt::zero(); // Bezout coefficient for modulus_minus_one
+    let mut new_t = BigInt::one(); // Bezout coefficient for alpha
+    let mut r = BigInt::from(modulus_minus_one.clone()); // remainder for modulus_minus_one
+    let mut new_r = BigInt::from(alpha); // remainder for alpha
 
     while new_r != BigInt::zero() {
         let quotient = &r / &new_r;
