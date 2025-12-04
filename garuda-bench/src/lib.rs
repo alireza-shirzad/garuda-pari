@@ -11,13 +11,13 @@ use ark_crypto_primitives::{
     },
     sponge::rescue::RescueConfig,
 };
-use ark_ff::PrimeField;
+use ark_ff::{BigInteger, PrimeField};
 use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
 use ark_relations::gr1cs::{ConstraintSynthesizer, SynthesisError};
 use garuda::ConstraintSystemRef;
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
+use num_traits::{One, Zero};
 use rand::Rng;
-use std::str::FromStr;
 pub const RESCUE_ROUNDS: usize = 12;
 pub const WIDTH: usize = 9;
 
@@ -48,11 +48,37 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
             row.push(F::rand(rng));
         }
     }
-    let alpha_inv: BigUint = BigUint::from_str(
-        "20974350070050476191779096203274386335076221000211055129041463479975432473805",
-    )
-    .unwrap();
+    let alpha_inv = compute_alpha_inv::<F>(5);
     RescueConfig::<F>::new(RESCUE_ROUNDS, 5, alpha_inv, mds, ark, 3, 1)
+}
+
+/// Compute the modular inverse of `alpha` modulo `p - 1`, where `p` is the field modulus.
+fn compute_alpha_inv<F: PrimeField>(alpha: u64) -> BigUint {
+    // modulus minus one for the field as a BigUint
+    let modulus_minus_one =
+        BigUint::from_bytes_le(&F::MODULUS.to_bytes_le()) - BigUint::from(1u32);
+    let alpha = BigUint::from(alpha);
+
+    // Extended Euclidean algorithm to find the inverse of `alpha` mod (p - 1)
+    let mut t = BigInt::zero();
+    let mut new_t = BigInt::one();
+    let mut r = BigInt::from(modulus_minus_one.clone());
+    let mut new_r = BigInt::from(alpha);
+
+    while new_r != BigInt::zero() {
+        let quotient = &r / &new_r;
+        (t, new_t) = (new_t.clone(), &t - &quotient * &new_t);
+        (r, new_r) = (new_r.clone(), &r - &quotient * &new_r);
+    }
+
+    // If gcd(alpha, p-1) != 1 there is no inverse; this should not happen for valid parameters.
+    assert_eq!(r, BigInt::one(), "alpha and p-1 are not coprime");
+
+    if t < BigInt::zero() {
+        t += BigInt::from(modulus_minus_one);
+    }
+
+    t.to_biguint().expect("inverse should be positive")
 }
 
 impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>

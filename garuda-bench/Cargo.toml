@@ -21,7 +21,7 @@ ark-bls12-381 = { workspace = true }
 ark-spartan = { workspace = true }
 ark-pallas = { workspace = true }
 ark-bn254 = { workspace = true }
-ark-circom = {workspace = true}
+ark-circom = { workspace = true }
 # Other dependencies
 merlin = { workspace = true }
 displaydoc = { workspace = true }
@@ -35,10 +35,12 @@ bellpepper-core = { workspace = true }
 bellpepper = { workspace = true }
 ff = { workspace = true }
 bls12_381 = { workspace = true }
-tokio = {workspace = true}
-tracing-subscriber = {workspace = true}
-serde = {workspace = true}
-serde_json = {workspace = true}
+ark-curve25519 = { workspace = true }
+num-traits = "0.2"
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 [[bench]]
 name = "aadhaar-garuda"
 path = "benches/aadhaar-garuda.rs"

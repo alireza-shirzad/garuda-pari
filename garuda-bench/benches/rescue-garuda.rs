@@ -205,33 +205,33 @@ fn main() {
         .map(|i| 2_usize.pow(i as u32))
         .collect();
 
-    for &input_size in &input_sizes {
-        const GARUDA_VARIANT: &str = {
-            #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
-            {
-                "garuda-gr1cs"
-            }
+    // for &input_size in &input_sizes {
+    //     const GARUDA_VARIANT: &str = {
+    //         #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
+    //         {
+    //             "garuda-gr1cs"
+    //         }
 
-            #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
-            {
-                "garuda-r1cs"
-            }
+    //         #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
+    //         {
+    //             "garuda-r1cs"
+    //         }
 
-            #[cfg(not(any(
-                all(feature = "gr1cs", not(feature = "r1cs")),
-                all(feature = "r1cs", not(feature = "gr1cs"))
-            )))]
-            {
-                compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
-            }
-        };
+    //         #[cfg(not(any(
+    //             all(feature = "gr1cs", not(feature = "r1cs")),
+    //             all(feature = "r1cs", not(feature = "gr1cs"))
+    //         )))]
+    //         {
+    //             compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
+    //         }
+    //     };
 
-        let filename = format!(
-            "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}{}-{}t-{INPUT_BENCHMARK}.csv",
-            zk_string, 1
-        );
-        let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
-    }
+    //     let filename = format!(
+    //         "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}{}-{}t-{INPUT_BENCHMARK}.csv",
+    //         zk_string, 1
+    //     );
+    //     let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
+    // }
 
     //////////// Benchmark the Prover ////////////////
 
