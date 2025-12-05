@@ -1,9 +1,8 @@
-use ark_bls12_381::Bls12_381;
+use ark_curve25519::EdwardsProjective;
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::CRHScheme;
 use ark_crypto_primitives::sponge::Absorb;
-use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_relations::gr1cs::OptimizationGoal;
@@ -27,7 +26,7 @@ use std::cmp::max;
 use std::ops::Neg;
 use std::time::Duration;
 #[cfg(feature = "gr1cs")]
-fn bench<E: Pairing>(
+fn bench<G: CurveGroup>(
     num_invocations: usize,
     input_size: usize,
     num_keygen_iterations: u32,
@@ -37,22 +36,21 @@ fn bench<E: Pairing>(
     _zk: bool,
 ) -> BenchResult
 where
-    E::ScalarField: PrimeField + Absorb,
-    E::G1Affine: Neg<Output = E::G1Affine>,
-    <E::G1Affine as AffineRepr>::BaseField: PrimeField,
-    num_bigint::BigUint: From<<E::ScalarField as PrimeField>::BigInt>,
+    G::ScalarField: PrimeField + Absorb,
+    G::Affine: Neg<Output = G::Affine>,
+    num_bigint::BigUint: From<<G::ScalarField as PrimeField>::BigInt>,
 {
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
     let config = create_test_rescue_parameter(&mut rng);
     let mut input = Vec::new();
     for _ in 0..WIDTH {
-        input.push(<E::ScalarField>::rand(&mut rng));
+        input.push(<G::ScalarField>::rand(&mut rng));
     }
-    let mut expected_image = CRH::<E::ScalarField>::evaluate(&config, input.clone()).unwrap();
+    let mut expected_image = CRH::<G::ScalarField>::evaluate(&config, input.clone()).unwrap();
 
     for _i in 0..(num_invocations - 1) {
         let output = vec![expected_image; WIDTH];
-        expected_image = CRH::<E::ScalarField>::evaluate(&config, output.clone()).unwrap();
+        expected_image = CRH::<G::ScalarField>::evaluate(&config, output.clone()).unwrap();
     }
 
     let mut prover_time = Duration::new(0, 0);
@@ -60,7 +58,7 @@ where
     let mut verifier_time = Duration::new(0, 0);
     let pk_size: usize = 0;
     let vk_size: usize = 0;
-    let circuit = RescueDemo::<E::ScalarField> {
+    let circuit = RescueDemo::<G::ScalarField> {
         input: Some(input.clone()),
         num_instances: input_size,
         image: Some(expected_image),
@@ -68,17 +66,17 @@ where
         num_invocations,
     };
     let circuit = circuit.clone();
-    let cs: ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+    let cs: ConstraintSystemRef<G::ScalarField> = ConstraintSystem::new_ref();
     cs.set_optimization_goal(OptimizationGoal::Constraints);
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
     let (num_cons, num_vars, num_inputs, num_non_zero_entries, inst, vars, inputs) =
         arkwork_r1cs_adapter(cs, rng);
-    let mut gens = SNARKGens::<E::G1>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+    let mut gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
     let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
     for _ in 0..num_keygen_iterations {
         let start = ark_std::time::Instant::now();
-        gens = SNARKGens::<E::G1>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+        gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
         (comm, decomm) = SNARK::encode(&inst, &gens);
         keygen_time += start.elapsed();
     }
@@ -118,13 +116,13 @@ where
     }
     verifier_time += start.elapsed();
 
-    let cs: ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
+    let cs: ConstraintSystemRef<G::ScalarField> = ConstraintSystem::new_ref();
     cs.set_optimization_goal(OptimizationGoal::Constraints);
     circuit.generate_constraints(cs.clone()).unwrap();
     cs.finalize();
 
     BenchResult {
-        curve: type_name::<E::G1>().to_string(),
+        curve: type_name::<G>().to_string(),
         num_constraints: num_cons,
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_invocations,
@@ -170,7 +168,7 @@ fn main() {
                     "{RESCUE_APPLICATION_NAME}-spartan-ccs{}-{}t.csv",
                     zk_string, num_thread
                 );
-                let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
+                let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
                     .save_to_csv(&filename);
             }
         });
@@ -191,7 +189,7 @@ fn main() {
             "{RESCUE_APPLICATION_NAME}-spartan-ccs{}-{}t-{INPUT_BENCHMARK}.csv",
             zk_string, 1
         );
-        let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
+        let _ = bench::<EdwardsProjective>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
     }
 
     //////////// Benchmark the Prover ////////////////
@@ -225,7 +223,7 @@ fn main() {
             "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}-{}t.csv",
             zk_string, num_thread
         );
-        let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
+        let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
             .save_to_csv(&filename);
     }
 }

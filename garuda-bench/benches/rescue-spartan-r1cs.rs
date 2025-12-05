@@ -1,7 +1,7 @@
-use ark_curve25519::EdwardsProjective;
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::CRHScheme;
 use ark_crypto_primitives::sponge::Absorb;
+use ark_curve25519::EdwardsProjective;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use ark_relations::gr1cs::ConstraintSystem;

@@ -68,6 +68,11 @@ path = "benches/aptos-groth16.rs"
 harness = false
 
 [[bench]]
+name = "aptos-spartan"
+path = "benches/aptos-spartan.rs"
+harness = false
+
+[[bench]]
 name = "rescue-spartan-r1cs"
 path = "benches/rescue-spartan-r1cs.rs"
 harness = false
