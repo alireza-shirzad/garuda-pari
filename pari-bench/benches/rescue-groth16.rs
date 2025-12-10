@@ -119,6 +119,7 @@ where
         num_invocations,
         num_thread,
         input_size: cs.num_instance_variables(),
+        num_nonzero_entries: 0,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
         num_verifier_iterations: num_verifier_iterations as usize,

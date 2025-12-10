@@ -1,7 +1,7 @@
-use ark_curve25519::EdwardsProjective;
 use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::CRHScheme;
 use ark_crypto_primitives::sponge::Absorb;
+use ark_curve25519::EdwardsProjective;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use ark_relations::gr1cs::ConstraintSystem;
@@ -127,6 +127,7 @@ where
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_invocations,
         input_size,
+        num_nonzero_entries: 0,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
@@ -179,18 +180,18 @@ fn main() {
 fn main() {
     //////////// Benchmark the Verifier ////////////////
     let zk_string = if ZK { "-zk" } else { "" };
-    use garuda_bench::INPUT_BENCHMARK;
-    let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
-        .map(|i| 2_usize.pow(i as u32))
-        .collect();
+    // use garuda_bench::INPUT_BENCHMARK;
+    // let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
+    //     .map(|i| 2_usize.pow(i as u32))
+    //     .collect();
 
-    for &input_size in &input_sizes {
-        let filename = format!(
-            "{RESCUE_APPLICATION_NAME}-spartan-ccs{}-{}t-{INPUT_BENCHMARK}.csv",
-            zk_string, 1
-        );
-        let _ = bench::<EdwardsProjective>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
-    }
+    // for &input_size in &input_sizes {
+    //     let filename = format!(
+    //         "{RESCUE_APPLICATION_NAME}-spartan-ccs{}-{}t-{INPUT_BENCHMARK}.csv",
+    //         zk_string, 1
+    //     );
+    //     let _ = bench::<EdwardsProjective>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
+    // }
 
     //////////// Benchmark the Prover ////////////////
 
@@ -202,12 +203,12 @@ fn main() {
         const GARUDA_VARIANT: &str = {
             #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
             {
-                "garuda-gr1cs"
+                "spartan-ccs"
             }
 
             #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
             {
-                "garuda-r1cs"
+                "spartan-r1cs"
             }
 
             #[cfg(not(any(

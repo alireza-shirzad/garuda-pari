@@ -40,7 +40,6 @@ where
     G::Affine: Neg<Output = G::Affine>,
     num_bigint::BigUint: From<<G::ScalarField as PrimeField>::BigInt>,
 {
-    dbg!(num_invocations);
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
     let config = create_test_rescue_parameter(&mut rng);
     let mut input = Vec::new();
@@ -108,14 +107,14 @@ where
         );
         prover_time += start.elapsed();
     }
-    // let start = ark_std::time::Instant::now();
-    // for _ in 0..num_verifier_iterations {
-    //     let mut verifier_transcript = Transcript::new(b"benchmark");
-    //     let _ = proof
-    //         .verify(&comm, &inputs, &mut verifier_transcript, &gens)
-    //         .is_ok();
-    // }
-    // verifier_time += start.elapsed();
+    let start = ark_std::time::Instant::now();
+    for _ in 0..num_verifier_iterations {
+        let mut verifier_transcript = Transcript::new(b"benchmark");
+        let _ = proof
+            .verify(&comm, &inputs, &mut verifier_transcript, &gens)
+            .is_ok();
+    }
+    verifier_time += start.elapsed();
 
     let cs: ConstraintSystemRef<G::ScalarField> = ConstraintSystem::new_ref();
     cs.set_optimization_goal(OptimizationGoal::Constraints);
@@ -128,6 +127,7 @@ where
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_invocations,
         input_size,
+        num_nonzero_entries: 0,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
@@ -203,12 +203,12 @@ fn main() {
         const GARUDA_VARIANT: &str = {
             #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
             {
-                "garuda-gr1cs"
+                "spartan-ccs"
             }
 
             #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
             {
-                "garuda-r1cs"
+                "spartan-r1cs"
             }
 
             #[cfg(not(any(
@@ -241,7 +241,6 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
     VarsAssignment<F>,
     InputsAssignment<F>,
 ) {
-    dbg!(&cs.num_constraints());
     assert!(cs.is_satisfied().unwrap());
     assert_eq!(cs.num_predicates(), 1);
     let num_cons = cs.num_constraints();

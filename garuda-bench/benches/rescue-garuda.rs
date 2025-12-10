@@ -126,6 +126,7 @@ where
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_invocations,
         input_size,
+        num_nonzero_entries: 0,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,

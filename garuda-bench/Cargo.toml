@@ -37,7 +37,6 @@ ff = { workspace = true }
 bls12_381 = { workspace = true }
 ark-curve25519 = { workspace = true }
 num-traits = "0.2"
-spartan2 = { version = "0.7", default-features = false }
 bellpepper-core-04 = { package = "bellpepper-core", version = "0.4", default-features = false }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -49,6 +48,11 @@ path = "benches/aadhaar-garuda.rs"
 harness = false
 
 [[bench]]
+name = "aadhaar-spartan"
+path = "benches/aadhaar-spartan.rs"
+harness = false
+
+[[bench]]
 name = "aadhaar-groth16"
 path = "benches/aadhaar-groth16.rs"
 harness = false
@@ -56,6 +60,27 @@ harness = false
 [[bench]]
 name = "rescue-garuda"
 path = "benches/rescue-garuda.rs"
+harness = false
+
+
+[[bench]]
+name = "random-garuda"
+path = "benches/random_garuda.rs"
+harness = false
+
+[[bench]]
+name = "random-garuda-addition"
+path = "benches/random_garuda_addition.rs"
+harness = false
+
+[[bench]]
+name = "random-spartan"
+path = "benches/random-spartan.rs"
+harness = false
+
+[[bench]]
+name = "random-spartan-addition"
+path = "benches/random-spartan-addition.rs"
 harness = false
 
 
@@ -72,11 +97,6 @@ harness = false
 [[bench]]
 name = "aptos-spartan"
 path = "benches/aptos-spartan.rs"
-harness = false
-
-[[bench]]
-name = "aptos-spartan2"
-path = "benches/aptos-spartan2.rs"
 harness = false
 
 [[bench]]
