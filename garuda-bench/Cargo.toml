@@ -84,6 +84,11 @@ path = "benches/random-spartan.rs"
 harness = false
 
 [[bench]]
+name = "random-spartan-ccs"
+path = "benches/random-spartan-ccs.rs"
+harness = false
+
+[[bench]]
 name = "random-spartan-addition"
 path = "benches/random-spartan-addition.rs"
 harness = false
