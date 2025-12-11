@@ -74,6 +74,11 @@ path = "benches/random_garuda_addition.rs"
 harness = false
 
 [[bench]]
+name = "random-garuda-gr1cs"
+path = "benches/random_garuda_gr1cs.rs"
+harness = false
+
+[[bench]]
 name = "random-spartan"
 path = "benches/random-spartan.rs"
 harness = false
