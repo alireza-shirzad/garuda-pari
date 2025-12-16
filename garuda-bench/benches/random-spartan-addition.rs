@@ -60,8 +60,9 @@ impl<F: Field + UniformRand> RandomCircuit<F> {
         let a_counts = distribute_counts(nonzero_per_matrix, num_constraints);
         let b_counts = distribute_counts(nonzero_per_matrix, num_constraints);
         let c_counts = distribute_counts(nonzero_per_matrix, num_constraints);
-        let total_nonzero_entries: usize =
-            a_counts.iter().sum::<usize>() + b_counts.iter().sum::<usize>() + c_counts.iter().sum::<usize>();
+        let total_nonzero_entries: usize = a_counts.iter().sum::<usize>()
+            + b_counts.iter().sum::<usize>()
+            + c_counts.iter().sum::<usize>();
 
         let mut constraints = Vec::with_capacity(num_constraints);
 
@@ -286,14 +287,6 @@ where
         }
     }
     verifier_time += start.elapsed();
-    if !verified {
-        eprintln!(
-            "Verification failed; skipping entry (constraints={}, nonzero_per_matrix={})",
-            num_constraints, nonzero_per_matrix
-        );
-        return None;
-    }
-
     Some(BenchResult {
         curve: type_name::<G>().to_string(),
         num_constraints: cs.num_constraints(),
@@ -358,18 +351,9 @@ fn circuit_to_spartan_instance<F: PrimeField>(
         }
     }
 
-    let mut a: Vec<(usize, usize, F)> = a_map
-        .into_iter()
-        .map(|((r, c), v)| (r, c, v))
-        .collect();
-    let mut b: Vec<(usize, usize, F)> = b_map
-        .into_iter()
-        .map(|((r, c), v)| (r, c, v))
-        .collect();
-    let mut c: Vec<(usize, usize, F)> = c_map
-        .into_iter()
-        .map(|((r, c), v)| (r, c, v))
-        .collect();
+    let mut a: Vec<(usize, usize, F)> = a_map.into_iter().map(|((r, c), v)| (r, c, v)).collect();
+    let mut b: Vec<(usize, usize, F)> = b_map.into_iter().map(|((r, c), v)| (r, c, v)).collect();
+    let mut c: Vec<(usize, usize, F)> = c_map.into_iter().map(|((r, c), v)| (r, c, v)).collect();
 
     // Spartan expects the entries to be within the column bounds; we only keep non-zero coeffs.
     a.retain(|(_, _, v)| !v.is_zero());
@@ -408,51 +392,19 @@ fn next_power_of_two(n: usize) -> usize {
     }
 }
 
-const FIXED_NUM_CONSTRAINTS: usize = 512;
+const FIXED_NUM_CONSTRAINTS: usize = 2usize.pow(18);
 const FIXED_INPUT_SIZE: usize = 0;
-const MIN_LOG2_NONZERO: usize = 1;
-const MAX_LOG2_NONZERO: usize = 30;
+const NONZERO_MULTIPLIERS: [usize; 5] = [2, 4, 8, 16, 32];
 const NUM_KEYGEN_ITERATIONS: u32 = 1;
 const NUM_PROVER_ITERATIONS: u32 = 1;
 const NUM_VERIFIER_ITERATIONS: u32 = 20;
 const ZK: bool = false;
 
-#[cfg(feature = "parallel")]
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<usize> = (MIN_LOG2_NONZERO..=MAX_LOG2_NONZERO)
-        .map(|i| 1 << i)
-        .collect();
-    for &num_thread in &[4] {
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build()
-            .expect("Failed to build thread pool");
-        pool.install(|| {
-            for &nonzero_per_matrix in configs.iter() {
-                let filename = format!("random-spartan-addition{}-{}t.csv", zk_string, num_thread);
-                let Some(result) = bench::<EdwardsProjective>(
-                    FIXED_NUM_CONSTRAINTS,
-                    nonzero_per_matrix,
-                    NUM_KEYGEN_ITERATIONS,
-                    NUM_PROVER_ITERATIONS,
-                    NUM_VERIFIER_ITERATIONS,
-                    num_thread,
-                    ZK,
-                ) else {
-                    continue;
-                };
-                let _ = result.save_to_csv(&filename);
-            }
-        });
-    }
-}
-
-#[cfg(not(feature = "parallel"))]
-fn main() {
-    let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<usize> = (MIN_LOG2_NONZERO..=MAX_LOG2_NONZERO)
-        .map(|i| 1 << i)
+    let configs: Vec<usize> = NONZERO_MULTIPLIERS
+        .iter()
+        .map(|mult| mult * FIXED_NUM_CONSTRAINTS)
         .collect();
     for &nonzero_per_matrix in configs.iter() {
         let filename = format!("random-spartan-addition{}-{}t.csv", zk_string, 1);
