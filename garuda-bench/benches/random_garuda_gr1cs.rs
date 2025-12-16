@@ -4,7 +4,7 @@ use ark_ec::AffineRepr;
 use ark_ff::{Field, PrimeField};
 use ark_relations::gr1cs::{
     predicate::PredicateConstraintSystem, ConstraintSynthesizer, ConstraintSystem,
-    ConstraintSystemRef, R1CS_PREDICATE_LABEL, SynthesisError, Variable,
+    ConstraintSystemRef, SynthesisError, Variable, R1CS_PREDICATE_LABEL,
 };
 use ark_relations::lc;
 use ark_serialize::CanonicalSerialize;
@@ -151,19 +151,13 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for RandomCircuit<F> {
         // Register predicates: standard R1CS and degree-5 multiplication.
         let r1cs_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
             3,
-            vec![
-                (F::one(), vec![(0, 1), (1, 1)]),
-                (-F::one(), vec![(2, 1)]),
-            ],
+            vec![(F::one(), vec![(0, 1), (1, 1)]), (-F::one(), vec![(2, 1)])],
         );
         cs.register_predicate(R1CS_PREDICATE_LABEL, r1cs_pred)?;
 
         let deg5_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
             2,
-            vec![
-                (F::one(), vec![(0, 5)]),
-                (-F::one(), vec![(1, 1)]),
-            ],
+            vec![(F::one(), vec![(0, 5)]), (-F::one(), vec![(1, 1)])],
         );
         cs.register_predicate(DEG5_LABEL, deg5_pred)?;
 
@@ -181,22 +175,19 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for RandomCircuit<F> {
             cs.enforce_constraint_arity_3(
                 R1CS_PREDICATE_LABEL,
                 || {
-                    constraint
-                        .a_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.a_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
                 || {
-                    constraint
-                        .b_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.b_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
                 || {
-                    constraint
-                        .c_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.c_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
             )?;
         }
@@ -205,16 +196,14 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for RandomCircuit<F> {
             cs.enforce_constraint_arity_2(
                 DEG5_LABEL,
                 || {
-                    constraint
-                        .x_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.x_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
                 || {
-                    constraint
-                        .y_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.y_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
             )?;
         }
@@ -355,42 +344,6 @@ const NUM_PROVER_ITERATIONS: u32 = 1;
 const NUM_VERIFIER_ITERATIONS: u32 = 20;
 const ZK: bool = false;
 
-#[cfg(feature = "parallel")]
-fn main() {
-    let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)
-        .map(|i| {
-            let num_constraints = 1 << i;
-            let nonzero_per_matrix = 1 << i; // mirror random-garuda sweep: double nonzeros with constraints
-            (num_constraints, nonzero_per_matrix)
-        })
-        .collect();
-    for &num_thread in &[4] {
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build()
-            .expect("Failed to build thread pool");
-        pool.install(|| {
-            for &(num_constraints, nonzero_per_matrix) in configs.iter() {
-                let filename = format!("random-garuda-gr1cs{}-{}t.csv", zk_string, num_thread);
-                let Some(result) = bench::<Bls12_381>(
-                    num_constraints,
-                    nonzero_per_matrix,
-                    NUM_KEYGEN_ITERATIONS,
-                    NUM_PROVER_ITERATIONS,
-                    NUM_VERIFIER_ITERATIONS,
-                    num_thread,
-                    ZK,
-                ) else {
-                    continue;
-                };
-                let _ = result.save_to_csv(&filename);
-            }
-        });
-    }
-}
-
-#[cfg(not(feature = "parallel"))]
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
     let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)

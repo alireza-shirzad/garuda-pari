@@ -142,6 +142,16 @@ path = "benches/rescue-spartan-ccs.rs"
 harness = false
 
 [[bench]]
+name = "rescue-spartan-nizk-ccs"
+path = "benches/rescue-spartan-nizk-ccs.rs"
+harness = false
+
+[[bench]]
+name = "rescue-spartan-nizk-r1cs"
+path = "benches/rescue-spartan-nizk-r1cs.rs"
+harness = false
+
+[[bench]]
 name = "rescue-hyperplonk"
 path = "benches/rescue-hyperplonk.rs"
 harness = false

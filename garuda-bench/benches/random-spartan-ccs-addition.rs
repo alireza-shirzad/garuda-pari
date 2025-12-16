@@ -2,11 +2,11 @@ use ark_curve25519::{EdwardsProjective, Fr as CurveFr};
 use ark_ff::{Field, PrimeField};
 use ark_relations::gr1cs::{
     predicate::PredicateConstraintSystem, ConstraintSynthesizer, ConstraintSystemRef,
-    R1CS_PREDICATE_LABEL, SynthesisError, Variable,
+    SynthesisError, Variable, R1CS_PREDICATE_LABEL,
 };
 use ark_relations::lc;
+use ark_relations::utils::{HashBuilder, IndexMap};
 use ark_serialize::CanonicalSerialize;
-use ark_relations::utils::IndexMap;
 use ark_std::UniformRand;
 use ark_std::{
     rand::RngCore,
@@ -57,7 +57,8 @@ struct RandomCircuit<F: Field> {
 
 impl<F: Field + UniformRand> RandomCircuit<F> {
     fn new(nonzero_per_matrix: usize, rng: &mut impl Rng) -> Self {
-        let mut witness_values = Vec::with_capacity(1 + (FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS) * 6);
+        let mut witness_values =
+            Vec::with_capacity(1 + (FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS) * 6);
         witness_values.push(F::zero()); // index 0 reserved for zero
 
         let mut r1cs_constraints = Vec::with_capacity(FIXED_R1CS_CONSTRAINTS);
@@ -96,7 +97,7 @@ impl<F: Field + UniformRand> RandomCircuit<F> {
 
         for _ in 0..FIXED_DEG5_CONSTRAINTS {
             let x = rand_nonzero(rng);
-        let y = x * x * x * x * x;
+            let y = x * x * x * x * x;
             let x_idx = witness_values.len();
             witness_values.push(x);
             let y_idx = witness_values.len();
@@ -169,22 +170,19 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for RandomCircuit<F> {
             cs.enforce_constraint_arity_3(
                 R1CS_PREDICATE_LABEL,
                 || {
-                    constraint
-                        .a_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.a_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
                 || {
-                    constraint
-                        .b_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.b_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
                 || {
-                    constraint
-                        .c_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.c_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
             )?;
         }
@@ -193,16 +191,14 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for RandomCircuit<F> {
             cs.enforce_constraint_arity_2(
                 DEG5_LABEL,
                 || {
-                    constraint
-                        .x_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.x_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
                 || {
-                    constraint
-                        .y_terms
-                        .iter()
-                        .fold(lc!(), |acc, (coeff, t)| acc + (*coeff, t.to_variable(&witness_vars)))
+                    constraint.y_terms.iter().fold(lc!(), |acc, (coeff, t)| {
+                        acc + (*coeff, t.to_variable(&witness_vars))
+                    })
                 },
             )?;
         }
@@ -242,7 +238,12 @@ fn circuit_to_spartan_instance<F: PrimeField>(
         };
 
     for constraint in circuit.r1cs_constraints.iter() {
-        add_row(&constraint.a_terms, &constraint.b_terms, &constraint.c_terms, row_idx);
+        add_row(
+            &constraint.a_terms,
+            &constraint.b_terms,
+            &constraint.c_terms,
+            row_idx,
+        );
         row_idx += 1;
     }
 
@@ -344,6 +345,13 @@ fn bench_spartan(
 
     let (num_cons, num_vars, num_inputs, num_non_zero_entries, inst, vars, inputs) =
         circuit_to_spartan_instance(&circuit);
+    // Report logical GR1CS counts (pre-expansion) to match garuda-gr1cs-addition configs.
+    let logical_num_constraints = FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS;
+    let logical_num_nonzero_entries = (3 * nonzero_per_matrix * FIXED_R1CS_CONSTRAINTS)
+        + (2 * nonzero_per_matrix * FIXED_DEG5_CONSTRAINTS);
+    let mut predicate_constraints: IndexMap<_, _> = IndexMap::with_hasher(HashBuilder::default());
+    predicate_constraints.insert(R1CS_PREDICATE_LABEL.to_string(), FIXED_R1CS_CONSTRAINTS);
+    predicate_constraints.insert(DEG5_LABEL.to_string(), FIXED_DEG5_CONSTRAINTS);
 
     let mut prover_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
@@ -410,21 +418,13 @@ fn bench_spartan(
         }
     }
     verifier_time += start.elapsed();
-    // if !verified {
-    //     eprintln!(
-    //         "Verification failed; skipping entry (constraints={}, nonzero_per_matrix={})",
-    //         num_constraints, nonzero_per_matrix
-    //     );
-    //     return None;
-    // }
-
     Some(BenchResult {
         curve: type_name::<EdwardsProjective>().to_string(),
-        num_constraints: num_cons,
-        predicate_constraints: IndexMap::default(),
+        num_constraints: logical_num_constraints,
+        predicate_constraints,
         num_invocations: num_constraints,
         input_size: 0,
-        num_nonzero_entries: num_non_zero_entries,
+        num_nonzero_entries: logical_num_nonzero_entries,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
@@ -442,51 +442,16 @@ fn bench_spartan(
     })
 }
 
-const NONZERO_MULTIPLIERS: [usize; 5] = [2, 4, 8, 16, 32];
+// Number of nonzeros per row (per constraint) to sweep.
+const NONZERO_PER_ROW: [usize; 5] = [2, 4, 8, 16, 32];
 const NUM_KEYGEN_ITERATIONS: u32 = 1;
 const NUM_PROVER_ITERATIONS: u32 = 1;
 const NUM_VERIFIER_ITERATIONS: u32 = 20;
 const ZK: bool = false;
 
-#[cfg(feature = "parallel")]
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<usize> = NONZERO_MULTIPLIERS
-        .iter()
-        .map(|mult| mult * (FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS))
-        .collect();
-    for &num_thread in &[4] {
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build()
-            .expect("Failed to build thread pool");
-        pool.install(|| {
-            for &nonzero_per_matrix in configs.iter() {
-                let filename = format!("random-spartan-ccs-addition{}-{}t.csv", zk_string, num_thread);
-                let Some(result) = bench_spartan(
-                    FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS,
-                    nonzero_per_matrix,
-                    NUM_KEYGEN_ITERATIONS,
-                    NUM_PROVER_ITERATIONS,
-                    NUM_VERIFIER_ITERATIONS,
-                    num_thread,
-                    ZK,
-                ) else {
-                    continue;
-                };
-                let _ = result.save_to_csv(&filename);
-            }
-        });
-    }
-}
-
-#[cfg(not(feature = "parallel"))]
-fn main() {
-    let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<usize> = NONZERO_MULTIPLIERS
-        .iter()
-        .map(|mult| mult * (FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS))
-        .collect();
+    let configs: Vec<usize> = NONZERO_PER_ROW.to_vec();
     for &nonzero_per_matrix in configs.iter() {
         let filename = format!("random-spartan-ccs-addition{}-{}t.csv", zk_string, 1);
         let Some(result) = bench_spartan(

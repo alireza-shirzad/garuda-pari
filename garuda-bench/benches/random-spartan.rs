@@ -64,8 +64,9 @@ impl<F: Field + UniformRand> RandomCircuit<F> {
         let a_counts = distribute_counts(nonzero_per_matrix, num_constraints);
         let b_counts = distribute_counts(nonzero_per_matrix, num_constraints);
         let c_counts = distribute_counts(nonzero_per_matrix, num_constraints);
-        let total_nonzero_entries: usize =
-            a_counts.iter().sum::<usize>() + b_counts.iter().sum::<usize>() + c_counts.iter().sum::<usize>();
+        let total_nonzero_entries: usize = a_counts.iter().sum::<usize>()
+            + b_counts.iter().sum::<usize>()
+            + c_counts.iter().sum::<usize>();
 
         let mut constraints = Vec::with_capacity(num_constraints);
 
@@ -390,40 +391,6 @@ const NUM_PROVER_ITERATIONS: u32 = 1;
 const NUM_VERIFIER_ITERATIONS: u32 = 20;
 const ZK: bool = false;
 
-#[cfg(feature = "parallel")]
-fn main() {
-    let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)
-        .map(|i| {
-            let num_constraints = 1 << i;
-            let nonzero_per_matrix = 1 << i;
-            (num_constraints, nonzero_per_matrix)
-        })
-        .collect();
-    for &num_thread in &[4] {
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build()
-            .expect("Failed to build thread pool");
-        pool.install(|| {
-            for &(num_constraints, nonzero_per_matrix) in configs.iter() {
-                let filename = format!("random-spartan{}-{}t.csv", zk_string, num_thread);
-                let _ = bench::<EdwardsProjective>(
-                    num_constraints,
-                    nonzero_per_matrix,
-                    NUM_KEYGEN_ITERATIONS,
-                    NUM_PROVER_ITERATIONS,
-                    NUM_VERIFIER_ITERATIONS,
-                    num_thread,
-                    ZK,
-                )
-                .save_to_csv(&filename);
-            }
-        });
-    }
-}
-
-#[cfg(not(feature = "parallel"))]
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
     let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)

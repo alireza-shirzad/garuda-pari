@@ -1,8 +1,8 @@
 use ark_curve25519::{EdwardsProjective, Fr as CurveFr};
 use ark_ff::{Field, PrimeField};
 use ark_relations::gr1cs::{
-    predicate::PredicateConstraintSystem, ConstraintSynthesizer, ConstraintSystemRef, SynthesisError,
-    Variable, R1CS_PREDICATE_LABEL,
+    predicate::PredicateConstraintSystem, ConstraintSynthesizer, ConstraintSystemRef,
+    SynthesisError, Variable, R1CS_PREDICATE_LABEL,
 };
 use ark_relations::lc;
 use ark_relations::utils::IndexMap;
@@ -285,14 +285,6 @@ fn bench_spartan(
         }
     }
     verifier_time += start.elapsed();
-    // if !verified {
-    //     eprintln!(
-    //         "Verification failed; skipping entry (constraints={}, nonzero_per_matrix={})",
-    //         num_constraints, nonzero_per_matrix
-    //     );
-    //     return None;
-    // }
-
     Some(BenchResult {
         curve: type_name::<EdwardsProjective>().to_string(),
         num_constraints: num_cons,
@@ -348,7 +340,12 @@ fn circuit_to_spartan_instance<F: PrimeField>(
         };
 
     for constraint in circuit.r1cs_constraints.iter() {
-        add_row(&constraint.a_terms, &constraint.b_terms, &constraint.c_terms, row_idx);
+        add_row(
+            &constraint.a_terms,
+            &constraint.b_terms,
+            &constraint.c_terms,
+            row_idx,
+        );
         row_idx += 1;
     }
 
@@ -442,42 +439,6 @@ const NUM_PROVER_ITERATIONS: u32 = 1;
 const NUM_VERIFIER_ITERATIONS: u32 = 20;
 const ZK: bool = false;
 
-#[cfg(feature = "parallel")]
-fn main() {
-    let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)
-        .map(|i| {
-            let num_constraints = 1 << i;
-            let nonzero_per_matrix = 1 << i;
-            (num_constraints, nonzero_per_matrix)
-        })
-        .collect();
-    for &num_thread in &[4] {
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build()
-            .expect("Failed to build thread pool");
-        pool.install(|| {
-            for &(num_constraints, nonzero_per_matrix) in configs.iter() {
-                let filename = format!("random-spartan-ccs{}-{}t.csv", zk_string, num_thread);
-                let Some(result) = bench_spartan(
-                    num_constraints,
-                    nonzero_per_matrix,
-                    NUM_KEYGEN_ITERATIONS,
-                    NUM_PROVER_ITERATIONS,
-                    NUM_VERIFIER_ITERATIONS,
-                    num_thread,
-                    ZK,
-                ) else {
-                    continue;
-                };
-                let _ = result.save_to_csv(&filename);
-            }
-        });
-    }
-}
-
-#[cfg(not(feature = "parallel"))]
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
     let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)
