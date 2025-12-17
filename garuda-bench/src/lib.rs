@@ -20,7 +20,7 @@ use ark_crypto_primitives::{
 use ark_ec::pairing::Pairing;
 use ark_ff::{BigInteger, PrimeField};
 use ark_r1cs_std::{GR1CSVar, alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
-use ark_relations::gr1cs::{ConstraintSynthesizer, R1CS_PREDICATE_LABEL, SynthesisError};
+use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, R1CS_PREDICATE_LABEL, SynthesisError, SynthesisMode};
 use garuda::ConstraintSystemRef;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Zero};
