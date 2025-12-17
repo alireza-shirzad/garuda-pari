@@ -146,7 +146,7 @@ where
     })
 }
 
-const FIXED_NUM_CONSTRAINTS: usize = 2usize.pow(18);
+const FIXED_NUM_CONSTRAINTS: usize = 2usize.pow(16);
 const FIXED_INPUT_SIZE: usize = 1;
 const NONZERO_MULTIPLIERS: [usize; 5] = [2, 4, 8, 16, 32];
 const NUM_KEYGEN_ITERATIONS: u32 = 1;

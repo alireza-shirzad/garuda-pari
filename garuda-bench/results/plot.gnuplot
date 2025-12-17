@@ -45,12 +45,12 @@ set xrange [2**2:2**12]
 # Note: The 'title' attribute is removed from the plot commands.
 # set size ratio 1
 plot \
-    "rescue-garuda-gr1cs--1t.csv" using 3:($13) with lp ls 1, \
-    "rescue-garuda-r1cs--1t.csv" using 3:($12) with lp ls 2, \
-    "rescue-spartan-ccs-nizk--1t.csv" using 3:($18) with lp ls 3, \
-    "rescue-spartan-nizk-r1cs-1t.csv" using 3:($18) with lp ls 4, \
+    "rescue-garuda-gr1cs--1t.csv" using 3:($20) with lp ls 1, \
+    "rescue-garuda-r1cs--1t.csv" using 3:($18) with lp ls 2, \
+    "rescue-spartan-gr1cs-nizk--1t.csv" using 3:($20) with lp ls 3, \
+    "rescue-spartan-r1cs-nizk--1t.csv" using 3:($18) with lp ls 4, \
     "hyperplonk.csv" using 3:($17) with lp ls 5, \
-    "rescue-groth16-1t.csv" using 3:($12) with lp ls 6
+    "rescue-groth16-1t.csv" using 3:($18) with lp ls 6
 # ======================================================================
 # --- Plot 2 (Top-Middle): Proof Size ---
 # ======================================================================
@@ -62,8 +62,8 @@ set ylabel "Proof size (Bytes)" offset -1,0,0 font ",25"
 plot \
     "rescue-garuda-gr1cs--1t.csv" using 3:($21) with lp ls 1, \
     "rescue-garuda-r1cs--1t.csv" using 3:($19) with lp ls 2, \
-    "rescue-spartan-ccs-nizk--1t.csv" using 3:($21) with lp ls 3, \
-    "rescue-spartan-nizk-r1cs-1t.csv" using 3:($19) with lp ls 4, \
+    "rescue-spartan-gr1cs-nizk--1t.csv" using 3:($21) with lp ls 3, \
+    "rescue-spartan-r1cs-nizk--1t.csv" using 3:($19) with lp ls 4, \
     "hyperplonk.csv" using 3:($18) with lp ls 5,\
     "rescue-groth16-1t.csv" using 3:($19) with lp ls 6
 # ======================================================================
@@ -76,8 +76,8 @@ set ylabel "Verification time (ms)" offset -1,0,0 font ",25"
 
 plot     "rescue-garuda-gr1cs--1t.csv" using 3:($23) with lp ls 1, \
          "rescue-garuda-r1cs--1t.csv" using 3:($21) with lp ls 2, \
-         "rescue-spartan-ccs-nizk--1t.csv" using 3:($23) with lp ls 3, \
-         "rescue-spartan-nizk-r1cs-1t.csv" using 3:($21) with lp ls 4, \
+         "rescue-spartan-gr1cs-nizk--1t.csv" using 3:($23) with lp ls 3, \
+         "rescue-spartan-r1cs-nizk--1t.csv" using 3:($21) with lp ls 4, \
          "hyperplonk.csv" using 3:($20) with lp ls 5,\
      "rescue-groth16-1t.csv" using 3:($21) with lp ls 6
 # ======================================================================
@@ -140,72 +140,72 @@ plot -10 notitle
 # --- End Multiplot ---
 unset multiplot
 
-set terminal pdfcairo enhanced color font "Times New Roman,15" size 9,6 background rgb 'white'
-set output "random_shared_key.pdf"
-set datafile separator ","
+# set terminal pdfcairo enhanced color font "Times New Roman,15" size 9,6 background rgb 'white'
+# set output "random_shared_key.pdf"
+# set datafile separator ","
 
-set grid back lt 1 dt 3 lc rgb 'grey'
-set border 3 back
-set xtics 2 nomirror font ",17"
-set ytics nomirror font ",17"
+# set grid back lt 1 dt 3 lc rgb 'grey'
+# set border 3 back
+# set xtics 2 nomirror font ",17"
+# set ytics nomirror font ",17"
 
-set multiplot layout 2,2 spacing 0.08,0.0
-set key off
+# set multiplot layout 2,2 spacing 0.08,0.0
+# set key off
 
-# Random prover time
-set logscale x 2
-set logscale y 10
-set format x "2^{%L}"
-set format y "10^{%L}"
-set xrange [16:4096]
-set yrange [*:*]
-set xlabel "Number of constraints" offset 0,-1,0 font ",25"
-set ylabel "Prover time (s)" offset -1,0,0 font ",25"
-plot \
-    "random-garuda-1t.csv" using 6:($18) with lp ls 1, \
-    "random-spartan-1t.csv" using 6:($18) with lp ls 4, \
-    "random-garuda-gr1cs-1t.csv" using 6:($20) with lp ls 2, \
-    "random-spartan-ccs-1t.csv" using 6:($20) with lp ls 3, \
-    "random-groth16-1t.csv" using 6:($18) with lp ls 6
+# # Random prover time
+# set logscale x 2
+# set logscale y 10
+# set format x "2^{%L}"
+# set format y "10^{%L}"
+# set xrange [16:4096]
+# set yrange [*:*]
+# set xlabel "Number of constraints" offset 0,-1,0 font ",25"
+# set ylabel "Prover time (s)" offset -1,0,0 font ",25"
+# plot \
+#     "random-garuda-1t.csv" using 6:($18) with lp ls 1, \
+#     "random-spartan-1t.csv" using 6:($18) with lp ls 4, \
+#     "random-garuda-gr1cs-1t.csv" using 6:($20) with lp ls 2, \
+#     "random-spartan-ccs-1t.csv" using 6:($20) with lp ls 3, \
+#     "random-groth16-1t.csv" using 6:($18) with lp ls 6
 
-# Random addition prover corrected time
-set xrange [*:*]
-set yrange [*:*]
-set xlabel "Number of nonzero entries" offset 0,-1,0 font ",25"
-set ylabel "Prover corrected time (s)" offset -1,0,0 font ",25"
-plot \
-    "random-garuda-addition-1t.csv" using 5:($18) with lp ls 1, \
-    "random-garuda-gr1cs-addition-1t.csv" using 5:($20) with lp ls 2, \
-    "random-spartan-addition-1t.csv" using 5:($18) with lp ls 4, \
-    "random-spartan-ccs-addition-1t.csv" using 5:($18) with lp ls 3,\
-    "random-groth16-addition-1t.csv" using 5:($18) with lp ls 6
+# # Random addition prover corrected time
+# set xrange [*:*]
+# set yrange [*:*]
+# set xlabel "Number of nonzero entries" offset 0,-1,0 font ",25"
+# set ylabel "Prover corrected time (s)" offset -1,0,0 font ",25"
+# plot \
+#     "random-garuda-addition-1t.csv" using 5:($18) with lp ls 1, \
+#     "random-garuda-gr1cs-addition-1t.csv" using 5:($20) with lp ls 2, \
+#     # "random-spartan-addition-1t.csv" using 5:($18) with lp ls 4, \
+#     # "random-spartan-ccs-addition-1t.csv" using 5:($18) with lp ls 3,\
+#     "random-groth16-addition-1t.csv" using 5:($18) with lp ls 6
 
-# Empty cell
-unset logscale
-unset format
-set border 0
-unset tics
-unset xlabel
-unset ylabel
-set xrange [0:1]
-set yrange [0:1]
-plot -10 notitle
+# # Empty cell
+# unset logscale
+# unset format
+# set border 0
+# unset tics
+# unset xlabel
+# unset ylabel
+# set xrange [0:1]
+# set yrange [0:1]
+# plot -10 notitle
 
-# Shared key
-set border 0
-unset tics
-unset xlabel
-unset ylabel
-set xrange [0:1]
-set yrange [0:1]
-set key at screen 0.5,0.46 center center horizontal maxrows 1 font ",18" samplen 1.5 spacing 1.0
-plot \
-    1/0 with lp ls 1 title 'Garuda R1CS', \
-    1/0 with lp ls 2 title 'Garuda GR1CS', \
-    1/0 with lp ls 3 title 'Spartan CCS', \
-    1/0 with lp ls 4 title 'Spartan R1CS', \
-    1/0 with lp ls 6 title 'Groth16 R1CS'
+# # Shared key
+# set border 0
+# unset tics
+# unset xlabel
+# unset ylabel
+# set xrange [0:1]
+# set yrange [0:1]
+# set key at screen 0.5,0.46 center center horizontal maxrows 1 font ",18" samplen 1.5 spacing 1.0
+# plot \
+#     1/0 with lp ls 1 title 'Garuda R1CS', \
+#     1/0 with lp ls 2 title 'Garuda GR1CS', \
+#     1/0 with lp ls 3 title 'Spartan CCS', \
+#     1/0 with lp ls 4 title 'Spartan R1CS', \
+#     1/0 with lp ls 6 title 'Groth16 R1CS'
 
-set key default
-unset multiplot
-unset output
+# set key default
+# unset multiplot
+# unset output

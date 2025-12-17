@@ -146,13 +146,6 @@ where
 
 fn main() {
     let num_thread = 1;
-    // /////////// Benchmark Groth16 for different input sizes ///////////
-    // let num_inputs: Vec<usize> = (0..12).map(|i| 2_usize.pow(i)).collect();
-    // for &input_size in &num_inputs {
-    //     let _ = bench::<Bls12_381>(1, input_size, 1, 1, 100, num_thread)
-    //         .save_to_csv(&format!("rescue-groth16-{}t-input.csv", num_thread));
-    // }
-
     /////////// Benchmark Groth16 for different circuit sizes ///////////
     const MAX_LOG2_NUM_INVOCATIONS: usize = 12;
     let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
