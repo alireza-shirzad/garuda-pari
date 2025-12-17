@@ -32,7 +32,7 @@ fn append_csv_row(path: &Path, row: &str) {
     writeln!(file, "{row}").unwrap();
 }
 
-async fn main() {
+fn main() {
     type E = Bn254;
     type Fr = <E as ark_ec::pairing::Pairing>::ScalarField;
     let csv_path = Path::new(env!("CARGO_MANIFEST_DIR"))
