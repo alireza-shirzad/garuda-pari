@@ -1,6 +1,4 @@
 use std::{
-    fs::{create_dir_all, OpenOptions},
-    io::Write,
     path::Path,
     time::Instant,
 };
@@ -11,21 +9,10 @@ use ark_relations::gr1cs::ConstraintSynthesizer;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_std::test_rng;
 use garuda::Garuda;
+use garuda_bench::append_csv_row;
 use rand::{RngCore, SeedableRng};
 
 const CSV_HEADER: &str = "benchmark,phase,duration_ms,proof_size_bytes,verified";
-
-fn append_csv_row(path: &Path, row: &str) {
-    if let Some(parent) = path.parent() {
-        create_dir_all(parent).unwrap();
-    }
-    let file_exists = path.exists();
-    let mut file = OpenOptions::new().create(true).append(true).open(path).unwrap();
-    if !file_exists {
-        writeln!(file, "{CSV_HEADER}").unwrap();
-    }
-    writeln!(file, "{row}").unwrap();
-}
 
 fn main() {
     type E = Bn254;
@@ -49,6 +36,7 @@ fn main() {
     let (pk, vk) = Garuda::<E>::keygen(circom.clone(), true, &mut rng);
     let duration = start.elapsed();
     append_csv_row(
+        CSV_HEADER,
         &csv_path,
         &format!("aptos-garuda,keygen,{:.3},,", duration.as_secs_f64() * 1000.0),
     );
@@ -58,6 +46,7 @@ fn main() {
     let proof = Garuda::prove(&pk, Some(&mut rng), circom).unwrap();
     let duration = start.elapsed();
     append_csv_row(
+        CSV_HEADER,
         &csv_path,
         &format!("aptos-garuda,prover,{:.3},,", duration.as_secs_f64() * 1000.0),
     );
@@ -66,6 +55,7 @@ fn main() {
     assert!(verified);
     let duration = start.elapsed();
     append_csv_row(
+        CSV_HEADER,
         &csv_path,
         &format!(
             "aptos-garuda,verifier,{:.3},,{}",

@@ -10,17 +10,15 @@ use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef};
 use ark_serialize::CanonicalSerialize;
 use ark_std::UniformRand;
 use ark_std::{
-    rand::{Rng, RngCore, SeedableRng},
+    rand::{RngCore, SeedableRng},
     test_rng,
 };
 use garuda_bench::RESCUE_APPLICATION_NAME;
 use garuda_bench::{create_test_rescue_parameter, RescueDemo, WIDTH};
-use libspartan::{InputsAssignment, Instance, NIZKGens, VarsAssignment, NIZK};
+use libspartan::{NIZKGens, NIZK};
 use merlin::Transcript;
-use rand::rngs::StdRng;
 use shared_utils::BenchResult;
 use std::any::type_name;
-use std::cmp::max;
 use std::ops::Neg;
 use std::time::Duration;
 
@@ -40,6 +38,8 @@ where
     G::Affine: Neg<Output = G::Affine>,
     num_bigint::BigUint: From<<G::ScalarField as PrimeField>::BigInt>,
 {
+    use garuda_bench::arkwork_r1cs_adapter;
+
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
     let config = create_test_rescue_parameter(&mut rng);
     let mut input = Vec::new();
@@ -151,89 +151,5 @@ fn main() {
         );
         let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 1, num_thread, ZK, use_gr1cs)
             .save_to_csv(&filename);
-    }
-}
-
-fn arkwork_r1cs_adapter<F: PrimeField>(
-    should_use_custom_predicate: bool,
-    cs: ConstraintSystemRef<F>,
-    mut rng: StdRng,
-) -> (
-    usize,
-    usize,
-    usize,
-    usize,
-    Instance<F>,
-    VarsAssignment<F>,
-    InputsAssignment<F>,
-) {
-    assert!(cs.is_satisfied().unwrap());
-    if should_use_custom_predicate {
-        assert_eq!(cs.num_predicates(), 2);
-    } else {
-        assert_eq!(cs.num_predicates(), 1);
-    }
-    let num_cons = cs.num_constraints();
-    let num_inputs = cs.num_instance_variables() - 1;
-    let num_vars = cs.num_witness_variables();
-
-    let instance_assignment = cs.instance_assignment().unwrap();
-    let witness_assignment = cs.witness_assignment().unwrap();
-    let ark_matrices = cs.to_matrices().unwrap();
-    let mut num_gr1cs_nonzero_entries = 0;
-    for (_, matrices) in ark_matrices.iter() {
-        for matrix in matrices.iter() {
-            for row in matrix.iter() {
-                num_gr1cs_nonzero_entries += row.len();
-            }
-        }
-    }
-    num_gr1cs_nonzero_entries = prev_power_of_two(num_gr1cs_nonzero_entries);
-
-    let num_a_nonzeros = rng.gen_range(0..=num_gr1cs_nonzero_entries);
-    let num_b_nonzeros = rng.gen_range(0..=(num_gr1cs_nonzero_entries - num_a_nonzeros));
-    let num_c_nonzeros = num_gr1cs_nonzero_entries - num_a_nonzeros - num_b_nonzeros;
-
-    let mut a: Vec<(usize, usize, F)> = Vec::with_capacity(num_a_nonzeros);
-    let mut b: Vec<(usize, usize, F)> = Vec::with_capacity(num_b_nonzeros);
-    let mut c: Vec<(usize, usize, F)> = Vec::with_capacity(num_c_nonzeros);
-    for _ in 0..num_a_nonzeros {
-        let row = rng.gen_range(0..num_cons);
-        let col = rng.gen_range(0..num_vars + num_inputs + 1);
-        let value = F::rand(&mut rng);
-        a.push((row, col, value));
-    }
-    for _ in 0..num_b_nonzeros {
-        let row = rng.gen_range(0..num_cons);
-        let col = rng.gen_range(0..num_vars + num_inputs + 1);
-        let value = F::rand(&mut rng);
-        b.push((row, col, value));
-    }
-    for _ in 0..num_c_nonzeros {
-        let row = rng.gen_range(0..num_cons);
-        let col = rng.gen_range(0..num_vars + num_inputs + 1);
-        let value = F::rand(&mut rng);
-        c.push((row, col, value));
-    }
-    let inst = Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap();
-    let assignment_vars = VarsAssignment::new(&witness_assignment).unwrap();
-    let assignment_inputs = InputsAssignment::new(&instance_assignment[1..]).unwrap();
-    let num_non_zero_entries = max(a.len(), max(b.len(), c.len()));
-    (
-        num_cons,
-        num_vars,
-        num_inputs,
-        num_non_zero_entries,
-        inst,
-        assignment_vars,
-        assignment_inputs,
-    )
-}
-
-fn prev_power_of_two(n: usize) -> usize {
-    if n == 0 {
-        0
-    } else {
-        1 << (usize::BITS - n.leading_zeros() - 1)
     }
 }

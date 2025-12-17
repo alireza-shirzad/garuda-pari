@@ -3,6 +3,8 @@ pub const RESCUE_APPLICATION_NAME: &str = "rescue";
 
 pub mod bellpepper_adapter;
 
+use std::{fs::{OpenOptions, create_dir_all}, path::Path, io::Write};
+
 use ark_crypto_primitives::sponge::rescue::constraints::RESCUE_PREDICATE;
 use ark_crypto_primitives::{
     crh::{
@@ -13,11 +15,11 @@ use ark_crypto_primitives::{
 };
 use ark_ff::{BigInteger, PrimeField};
 use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
-use ark_relations::gr1cs::{ConstraintSynthesizer, SynthesisError};
+use ark_relations::gr1cs::{ConstraintSynthesizer, R1CS_PREDICATE_LABEL, SynthesisError};
 use garuda::ConstraintSystemRef;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Zero};
-use rand::Rng;
+use rand::{Rng, rngs::StdRng};
 pub const RESCUE_ROUNDS: usize = 12;
 pub const WIDTH: usize = 9;
 
@@ -130,4 +132,116 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
 
         Ok(())
     }
+}
+
+pub fn arkwork_r1cs_adapter<F: PrimeField>(
+    should_use_custom_predicate: bool,
+    cs: ConstraintSystemRef<F>,
+    mut rng: StdRng,
+) -> (
+    usize,
+    usize,
+    usize,
+    usize,
+    libspartan::Instance<F>,
+    libspartan::VarsAssignment<F>,
+    libspartan::InputsAssignment<F>,
+) {
+    use libspartan::*;
+    assert!(cs.is_satisfied().unwrap());
+    if should_use_custom_predicate {
+        assert_eq!(cs.num_predicates(), 2);
+    } else {
+        assert_eq!(cs.num_predicates(), 1);
+    }
+    let num_cons = cs.num_constraints();
+    let num_inputs = cs.num_instance_variables() - 1;
+    let num_vars = cs.num_witness_variables();
+
+    let instance_assignment = cs.instance_assignment().unwrap();
+    let witness_assignment = cs.witness_assignment().unwrap();
+    let ark_matrices = cs.to_matrices().unwrap();
+
+    let assignment_vars = VarsAssignment::new(&witness_assignment).unwrap();
+    let assignment_inputs = InputsAssignment::new(&instance_assignment[1..]).unwrap();
+
+    let (inst, total_num_non_zero) = if should_use_custom_predicate {
+        let mut non_zero_values = Vec::new();
+        for matrices in ark_matrices.values() {
+            for matrix in matrices {
+                for row in matrix {
+                    non_zero_values.extend(row.iter().map(|(coeff, _)| *coeff));
+                }
+            }
+        }
+        let num_non_zero_a = non_zero_values.len() / 3;
+        let num_non_zero_b = non_zero_values.len() / 3;
+        
+        let a = non_zero_values[..num_non_zero_a].iter().map(|value| {
+            let row = rng.gen_range(0..num_cons);
+            let col = rng.gen_range(0..num_vars + num_inputs + 1);
+            (row, col, *value)
+        }).collect::<Vec<_>>();
+        let b = non_zero_values[num_non_zero_a..][..num_non_zero_b].iter().map(|value| {
+            let row = rng.gen_range(0..num_cons);
+            let col = rng.gen_range(0..num_vars + num_inputs + 1);
+            (row, col, *value)
+        }).collect::<Vec<_>>();
+        let c = non_zero_values[num_non_zero_a + num_non_zero_b..].iter().map(|value| {
+            let row = rng.gen_range(0..num_cons);
+            let col = rng.gen_range(0..num_vars + num_inputs + 1);
+            (row, col, *value)
+        }).collect::<Vec<_>>();
+        (Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(), non_zero_values.len())
+    } else {
+        let ark_a = &ark_matrices[R1CS_PREDICATE_LABEL][0];
+        let ark_b = &ark_matrices[R1CS_PREDICATE_LABEL][1];
+        let ark_c = &ark_matrices[R1CS_PREDICATE_LABEL][2];
+        let mut a = Vec::with_capacity(ark_a.len());
+        let mut b = Vec::with_capacity(ark_b.len());
+        let mut c = Vec::with_capacity(ark_c.len());
+        for (row, constraint) in ark_a.iter().enumerate() {
+            for (coeff, col) in constraint {
+                a.push((row, *col, *coeff));
+            }
+        }
+        
+        for (row, constraint) in ark_b.iter().enumerate() {
+            for (coeff, col) in constraint {
+                b.push((row, *col, *coeff));
+            }
+        }
+
+        for (row, constraint) in ark_c.iter().enumerate() {
+            for (coeff, col) in constraint {
+                c.push((row, *col, *coeff));
+            }
+        }
+        (Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(), a.len() + b.len() + c.len())
+    };
+    
+
+    
+    
+    (
+        num_cons,
+        num_vars,
+        num_inputs,
+        total_num_non_zero,
+        inst,
+        assignment_vars,
+        assignment_inputs,
+    )
+}
+
+pub fn append_csv_row(header: &str, path: &Path, row: &str) {
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent).unwrap();
+    }
+    let file_exists = path.exists();
+    let mut file = OpenOptions::new().create(true).append(true).open(path).unwrap();
+    if !file_exists {
+        writeln!(file, "{header}").unwrap();
+    }
+    writeln!(file, "{row}").unwrap();
 }
