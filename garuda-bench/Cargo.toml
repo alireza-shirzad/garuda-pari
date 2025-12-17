@@ -127,16 +127,6 @@ path = "benches/aptos-spartan.rs"
 harness = false
 
 [[bench]]
-name = "rescue-spartan-r1cs"
-path = "benches/rescue-spartan-r1cs.rs"
-harness = false
-
-[[bench]]
-name = "rescue-spartan-ccs"
-path = "benches/rescue-spartan-ccs.rs"
-harness = false
-
-[[bench]]
 name = "rescue-spartan-nizk-ccs"
 path = "benches/rescue-spartan-nizk-ccs.rs"
 harness = false

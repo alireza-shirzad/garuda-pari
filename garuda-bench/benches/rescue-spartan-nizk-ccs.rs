@@ -22,6 +22,7 @@ use rand::rngs::StdRng;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
+use std::char::MAX;
 use std::cmp::max;
 use std::ops::Neg;
 use std::time::Duration;
@@ -135,9 +136,8 @@ const MAX_LOG2_INPUT_SIZE: usize = 20;
 const ZK: bool = false;
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
-    let num_invocations: Vec<usize> = vec![6, 9, 12]
-        .iter()
-        .map(|i| 2_usize.pow(*i as u32))
+    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
+        .map(|i| 2_usize.pow(i as u32))
         .collect();
     let num_thread = 1;
     for &num_invocation in &num_invocations {
@@ -165,7 +165,7 @@ fn main() {
             "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-nizk-{}-{}t.csv",
             zk_string, num_thread
         );
-        let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
+        let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 1, num_thread, ZK)
             .save_to_csv(&filename);
     }
 }

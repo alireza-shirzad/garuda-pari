@@ -436,7 +436,7 @@ const MIN_LOG2_CONSTRAINTS: usize = 1;
 const MAX_LOG2_CONSTRAINTS: usize = 30;
 const NUM_KEYGEN_ITERATIONS: u32 = 1;
 const NUM_PROVER_ITERATIONS: u32 = 1;
-const NUM_VERIFIER_ITERATIONS: u32 = 20;
+const NUM_VERIFIER_ITERATIONS: u32 = 1;
 const ZK: bool = false;
 
 fn main() {

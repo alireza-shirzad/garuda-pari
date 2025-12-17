@@ -397,7 +397,7 @@ const FIXED_INPUT_SIZE: usize = 0;
 const NONZERO_MULTIPLIERS: [usize; 5] = [2, 4, 8, 16, 32];
 const NUM_KEYGEN_ITERATIONS: u32 = 1;
 const NUM_PROVER_ITERATIONS: u32 = 1;
-const NUM_VERIFIER_ITERATIONS: u32 = 20;
+const NUM_VERIFIER_ITERATIONS: u32 = 1;
 const ZK: bool = false;
 
 fn main() {

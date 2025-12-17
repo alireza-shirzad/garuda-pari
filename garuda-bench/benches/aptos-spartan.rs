@@ -1,4 +1,9 @@
-use std::time::Instant;
+use std::{
+    fs::{create_dir_all, OpenOptions},
+    io::Write,
+    path::Path,
+    time::Instant,
+};
 
 use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
@@ -11,10 +16,27 @@ use libspartan::{InputsAssignment, Instance, SNARKGens, VarsAssignment, SNARK};
 use merlin::Transcript;
 use rand::{rngs::StdRng, Rng, RngCore, SeedableRng};
 
+const CSV_HEADER: &str = "benchmark,phase,duration_ms,proof_size_bytes,verified";
+
+fn append_csv_row(path: &Path, row: &str) {
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent).unwrap();
+    }
+    let file_exists = path.exists();
+    let mut file = OpenOptions::new().create(true).append(true).open(path).unwrap();
+    if !file_exists {
+        writeln!(file, "{CSV_HEADER}").unwrap();
+    }
+    writeln!(file, "{row}").unwrap();
+}
+
 fn main() {
     type E = Bn254;
     type G = <E as Pairing>::G1;
     type Fr = <E as Pairing>::ScalarField;
+    let csv_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("results")
+        .join("aptos-spartan.csv");
 
     // Load the WASM and R1CS for witness and proof generation.
     let cfg = CircomConfig::<Fr>::new("./circuits/aptos/main.wasm", "./circuits/aptos/main.r1cs")
@@ -41,7 +63,13 @@ fn main() {
     let mut gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
     let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
     let keygen_time = start.elapsed();
-    println!("Keygen took: {:?}", keygen_time);
+    append_csv_row(
+        &csv_path,
+        &format!(
+            "aptos-spartan,keygen,{:.3},,",
+            keygen_time.as_secs_f64() * 1000.0
+        ),
+    );
 
     // Proving.
     let start = Instant::now();
@@ -57,7 +85,14 @@ fn main() {
     );
     let proof_size = proof.compressed_size();
     let prover_time = start.elapsed();
-    println!("Prover took: {:?}, proof size: {} bytes", prover_time, proof_size);
+    append_csv_row(
+        &csv_path,
+        &format!(
+            "aptos-spartan,prover,{:.3},{},",
+            prover_time.as_secs_f64() * 1000.0,
+            proof_size
+        ),
+    );
 
     // Verifying.
     let start = Instant::now();
@@ -66,7 +101,14 @@ fn main() {
         .verify(&comm, &inputs, &mut verifier_transcript, &gens)
         .is_ok();
     let verifier_time = start.elapsed();
-    println!("Verifier took: {:?}, verified: {}", verifier_time, ok);
+    append_csv_row(
+        &csv_path,
+        &format!(
+            "aptos-spartan,verifier,{:.3},,{}",
+            verifier_time.as_secs_f64() * 1000.0,
+            ok
+        ),
+    );
 }
 
 fn arkwork_r1cs_adapter<F: PrimeField>(

@@ -144,7 +144,7 @@ fn main() {
             "{RESCUE_APPLICATION_NAME}-spartan-nizk-r1cs{}-{}t.csv",
             zk_string, num_thread
         );
-        let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
+        let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 1, num_thread, ZK)
             .save_to_csv(&filename);
     }
 }

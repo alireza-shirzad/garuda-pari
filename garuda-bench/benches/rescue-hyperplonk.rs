@@ -145,46 +145,12 @@ fn main() {
         .map(|i| 2_usize.pow(i as u32))
         .collect();
 
-    #[cfg(feature = "parallel")]
-    {
-        const num_thread: usize = 4;
-        ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build_global()
-            .unwrap();
-
-        for num_invocation in &num_invocations {
-            use ark_bls12_381::Bls12_381;
-
-            let _ = bench::<Bls12_381>(
-                *num_invocation,
-                20,
-                1,
-                1,
-                100,
-                num_thread,
-                &jf_gate,
-                &pcs_srs,
-            )
-            .save_to_csv("hyperplonk.csv");
-        }
-    }
-
-    #[cfg(not(feature = "parallel"))]
     {
         const num_thread: usize = 1;
         for num_invocation in &num_invocations {
-            let _ = bench::<Bls12_381>(
-                *num_invocation,
-                20,
-                1,
-                1,
-                100,
-                num_thread,
-                &jf_gate,
-                &pcs_srs,
-            )
-            .save_to_csv("hyperplonk.csv");
+            let _ =
+                bench::<Bls12_381>(*num_invocation, 20, 1, 1, 1, num_thread, &jf_gate, &pcs_srs)
+                    .save_to_csv("hyperplonk.csv");
         }
     }
 }
