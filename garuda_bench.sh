@@ -25,12 +25,14 @@ commands=(
 
 
   # "RAYON_NUM_THREADS=1 cargo bench --bench random-garuda --features \"r1cs\""
-  "RAYON_NUM_THREADS=1 cargo bench --bench random-garuda-gr1cs --features \"gr1cs\""
-  "RAYON_NUM_THREADS=1 cargo bench --bench random-garuda-addition --features \"r1cs\""
-  "RAYON_NUM_THREADS=1 cargo bench --bench random-garuda-gr1cs-addition --features \"gr1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-garuda-gr1cs --features \"gr1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-garuda-addition --features \"r1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-garuda-gr1cs-addition --features \"gr1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-groth16-addition --features \"r1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-groth16 --features \"r1cs\""
 
-  "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan --features \"r1cs\""
-  "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-ccs --features \"gr1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan --features \"r1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-ccs --features \"gr1cs\""
   "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-ccs-addition --features \"gr1cs\""
   "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-addition --features \"r1cs\""
 

@@ -76,8 +76,18 @@ path = "benches/random_garuda.rs"
 harness = false
 
 [[bench]]
+name = "random-groth16"
+path = "benches/random_groth16.rs"
+harness = false
+
+[[bench]]
 name = "random-garuda-addition"
 path = "benches/random_garuda_addition.rs"
+harness = false
+
+[[bench]]
+name = "random-groth16-addition"
+path = "benches/random_groth16_addition.rs"
 harness = false
 
 [[bench]]
