@@ -134,7 +134,6 @@ const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
 const ZK: bool = false;
 
 fn main() {
-
     let args: Vec<String> = std::env::args().collect();
     let use_gr1cs = args.iter().any(|arg| arg == "--gr1cs");
     let zk_string = if ZK { "-zk" } else { "" };

@@ -9,12 +9,12 @@ use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
 use ark_ec::pairing::Pairing;
 use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystem};
+use ark_serialize::CanonicalSerialize;
 use ark_std::test_rng;
 use garuda_bench::arkwork_r1cs_adapter;
 use libspartan::{SNARKGens, SNARK};
 use merlin::Transcript;
 use rand::{RngCore, SeedableRng};
-use ark_serialize::CanonicalSerialize;
 
 const CSV_HEADER: &str = "benchmark,phase,duration_ms,proof_size_bytes,verified";
 
@@ -23,7 +23,11 @@ fn append_csv_row(path: &Path, row: &str) {
         create_dir_all(parent).unwrap();
     }
     let file_exists = path.exists();
-    let mut file = OpenOptions::new().create(true).append(true).open(path).unwrap();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap();
     if !file_exists {
         writeln!(file, "{CSV_HEADER}").unwrap();
     }
@@ -63,8 +67,8 @@ fn main() {
 
     // Key generation (encode the instance).
     let start = Instant::now();
-    let  gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
-    let ( comm, decomm) = SNARK::encode(&inst, &gens);
+    let gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+    let (comm, decomm) = SNARK::encode(&inst, &gens);
     let keygen_time = start.elapsed();
     append_csv_row(
         &csv_path,

@@ -21,7 +21,6 @@ use hp_subroutines::PolynomialCommitmentScheme;
 
 use shared_utils::BenchResult;
 
-
 fn bench<E: Pairing>(
     num_invocations: usize,
     input_size: usize,

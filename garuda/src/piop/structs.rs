@@ -42,7 +42,6 @@ pub struct IOPProverStateInner<F: PrimeField> {
     pub(crate) extrapolation_aux: Vec<(Vec<F>, Vec<F>)>,
 }
 
-
 #[derive(Clone, Debug, Default, PartialEq, Eq, CanonicalSerialize)]
 pub struct MaskProverState<F: PrimeField> {
     /// Masking polynomials from Libra (2019-317)
@@ -75,4 +74,3 @@ pub struct IOPVerifierState<F: PrimeField> {
     /// a list storing the randomness sampled by the verifier at each round
     pub(crate) challenges: Vec<F>,
 }
-

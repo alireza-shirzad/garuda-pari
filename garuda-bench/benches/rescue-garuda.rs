@@ -167,7 +167,7 @@ fn main() {
             "{RESCUE_APPLICATION_NAME}-garuda-{variant}-{}-{}t.csv",
             zk_string, num_thread
         );
-        let _ = bench::<Bls12_381>(num, 20, 1, 1, 20, num_thread, ZK, use_gr1cs)
-            .save_to_csv(&filename);
+        let _ =
+            bench::<Bls12_381>(num, 20, 1, 1, 20, num_thread, ZK, use_gr1cs).save_to_csv(&filename);
     }
 }

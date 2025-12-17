@@ -1,7 +1,4 @@
-use std::{
-    path::Path,
-    time::Instant,
-};
+use std::{path::Path, time::Instant};
 
 use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
@@ -41,7 +38,10 @@ fn main() {
     append_csv_row(
         CSV_HEADER,
         &csv_path,
-        &format!("aadhaar-garuda,keygen,{:.3},,", duration.as_secs_f64() * 1000.0),
+        &format!(
+            "aadhaar-garuda,keygen,{:.3},,",
+            duration.as_secs_f64() * 1000.0
+        ),
     );
     let circom = circom.clone();
     let instance = circom.get_public_inputs().unwrap();
@@ -62,7 +62,10 @@ fn main() {
     append_csv_row(
         CSV_HEADER,
         &csv_path,
-        &format!("aadhaar-garuda,prover,{:.3},,", duration.as_secs_f64() * 1000.0),
+        &format!(
+            "aadhaar-garuda,prover,{:.3},,",
+            duration.as_secs_f64() * 1000.0
+        ),
     );
     let prover_corrected = duration
         .checked_sub(prover_prep_duration)

@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::BufReader,
-    path::Path,
-    time::Instant,
-};
+use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Instant};
 
 use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
@@ -45,7 +39,10 @@ fn main() {
     append_csv_row(
         CSV_HEADER,
         &csv_path,
-        &format!("aptos-groth16,keygen,{:.3},,", duration.as_secs_f64() * 1000.0),
+        &format!(
+            "aptos-groth16,keygen,{:.3},,",
+            duration.as_secs_f64() * 1000.0
+        ),
     );
 
     ////////////////// Prove ////////////////
@@ -70,7 +67,10 @@ fn main() {
     append_csv_row(
         CSV_HEADER,
         &csv_path,
-        &format!("aptos-groth16,prover,{:.3},,", duration.as_secs_f64() * 1000.0),
+        &format!(
+            "aptos-groth16,prover,{:.3},,",
+            duration.as_secs_f64() * 1000.0
+        ),
     );
     let prover_corrected = duration
         .checked_sub(prover_prep_duration)

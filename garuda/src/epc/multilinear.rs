@@ -35,7 +35,7 @@ use shared_utils::msm_bigint_wnaf;
 #[cfg(not(feature = "parallel"))]
 use std::iter::once;
 
-use std::{ops::Mul};
+use std::ops::Mul;
 pub struct MultilinearEPC<E: Pairing> {
     _p1: PhantomData<E>,
 }
@@ -64,9 +64,8 @@ impl<E: Pairing> EPC<E::ScalarField> for MultilinearEPC<E> {
         equifficient_constraints: &Self::EquifficientConstraint,
     ) -> (Self::CommitmentKey, Self::VerifyingKey, Self::Trapdoor) {
         // beta_i's, the random evaluation points
-        let beta: Vec<E::ScalarField> = (0..pp.num_var)
-            .map(|_| E::ScalarField::rand(rng))
-            .collect();
+        let beta: Vec<E::ScalarField> =
+            (0..pp.num_var).map(|_| E::ScalarField::rand(rng)).collect();
         // alpha_i's, the random consistency challenges
         let consistency_challanges: Vec<E::ScalarField> = (0..pp.num_constraints)
             .map(|_| E::ScalarField::rand(rng))

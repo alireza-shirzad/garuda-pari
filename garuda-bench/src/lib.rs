@@ -19,24 +19,12 @@ use ark_crypto_primitives::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{BigInteger, PrimeField};
-<<<<<<< HEAD
 use ark_r1cs_std::{GR1CSVar, alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
 use ark_relations::gr1cs::{ConstraintSynthesizer, R1CS_PREDICATE_LABEL, SynthesisError};
 use garuda::ConstraintSystemRef;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Zero};
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
-=======
-use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
-use ark_relations::gr1cs::{
-    ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError, SynthesisMode,
-    R1CS_PREDICATE_LABEL,
-};
-use garuda::ConstraintSystemRef;
-use num_bigint::{BigInt, BigUint};
-use num_traits::{One, Zero};
-use rand::{rngs::StdRng, Rng};
->>>>>>> a612e6a8a82a955beef08ced23a77721959cc171
 pub const RESCUE_ROUNDS: usize = 12;
 pub const WIDTH: usize = 9;
 
@@ -344,14 +332,7 @@ pub fn arkwork_r1cs_adapter<F: PrimeField>(
             a.len() + b.len() + c.len(),
         )
     };
-<<<<<<< HEAD
-    
-    
-    
-    
-=======
 
->>>>>>> a612e6a8a82a955beef08ced23a77721959cc171
     (
         num_cons,
         num_vars,

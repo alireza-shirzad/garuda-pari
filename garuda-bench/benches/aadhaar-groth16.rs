@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::BufReader,
-    path::Path,
-    time::Instant,
-};
+use std::{collections::HashMap, fs::File, io::BufReader, path::Path, time::Instant};
 
 use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
@@ -48,7 +42,10 @@ fn main() {
     append_csv_row(
         CSV_HEADER,
         &csv_path,
-        &format!("aadhaar-groth16,keygen,{:.3},,", duration.as_secs_f64() * 1000.0),
+        &format!(
+            "aadhaar-groth16,keygen,{:.3},,",
+            duration.as_secs_f64() * 1000.0
+        ),
     );
 
     ////////////////// Prove ////////////////

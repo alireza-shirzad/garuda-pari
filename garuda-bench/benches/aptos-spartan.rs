@@ -1,7 +1,4 @@
-use std::{
-    path::Path,
-    time::Instant,
-};
+use std::{path::Path, time::Instant};
 
 use ark_bn254::Bn254;
 use ark_circom::{CircomBuilder, CircomConfig};
