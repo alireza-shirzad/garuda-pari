@@ -1,7 +1,9 @@
 use ark_curve25519::EdwardsProjective;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef};
+use ark_relations::gr1cs::{
+    ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, R1CS_PREDICATE_LABEL,
+};
 use ark_serialize::CanonicalSerialize;
 use ark_std::UniformRand;
 use ark_std::{
@@ -47,14 +49,20 @@ where
     let cs: ConstraintSystemRef<G::ScalarField> = ConstraintSystem::new_ref();
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
-    let (num_cons, num_vars, num_inputs, num_non_zero_entries, inst, vars, inputs) =
+    let (num_cons, num_vars, num_inputs, _total_non_zero_entries, inst, vars, inputs) =
         arkwork_r1cs_adapter(false, cs.clone(), rng);
 
-    let mut gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, num_non_zero_entries.next_power_of_two());
+    let ark_matrices = cs.to_matrices().unwrap();
+    let max_non_zero_entries = ark_matrices[R1CS_PREDICATE_LABEL]
+        .iter()
+        .map(|matrix| matrix.iter().map(|row| row.len()).sum::<usize>())
+        .fold(0, max);
+
+    let mut gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, max_non_zero_entries);
     let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
     for _ in 0..num_keygen_iterations {
         let start = ark_std::time::Instant::now();
-        gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
+        gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, max_non_zero_entries);
         (comm, decomm) = SNARK::encode(&inst, &gens);
         keygen_time += start.elapsed();
     }
@@ -101,7 +109,7 @@ where
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_invocations: num_constraints,
         input_size: cs.num_instance_variables(),
-        num_nonzero_entries: nonzero_per_constraint,
+        num_nonzero_entries: max_non_zero_entries,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
