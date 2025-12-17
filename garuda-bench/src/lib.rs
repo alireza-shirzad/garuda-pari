@@ -14,12 +14,12 @@ use ark_crypto_primitives::{
     sponge::rescue::RescueConfig,
 };
 use ark_ff::{BigInteger, PrimeField};
-use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
+use ark_r1cs_std::{GR1CSVar, alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
 use ark_relations::gr1cs::{ConstraintSynthesizer, R1CS_PREDICATE_LABEL, SynthesisError};
 use garuda::ConstraintSystemRef;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Zero};
-use rand::{Rng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
 pub const RESCUE_ROUNDS: usize = 12;
 pub const WIDTH: usize = 9;
 
@@ -134,6 +134,101 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     }
 }
 
+/// This is our demo circuit for proving knowledge of the
+/// preimage of a Rescue hash invocation.
+#[derive(Clone)]
+pub struct RandomCircuit<F: PrimeField> {
+    pub num_constraints: usize,
+    pub num_non_zero_per_constraint: usize,
+    pub should_use_custom_predicate: bool,
+    pub a: F,
+    pub b: F,
+    pub rng_seed: [u8; 32],
+}
+
+impl<F: PrimeField> RandomCircuit<F> {
+    pub fn new(
+        num_constraints: usize,
+        num_non_zero_per_constraint: usize,
+        should_use_custom_predicate: bool,
+    ) -> Self {
+        let mut rng = rand::thread_rng();
+        let rng_seed: [u8; 32] = rng.gen();
+        Self {
+            num_constraints,
+            num_non_zero_per_constraint,
+            should_use_custom_predicate,
+            a: F::rand(&mut rng),
+            b: F::rand(&mut rng),
+            rng_seed,
+        }
+    }
+}
+
+
+impl<F: PrimeField> ConstraintSynthesizer<F> for RandomCircuit<F> {
+    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
+        let rng = &mut StdRng::from_seed(self.rng_seed);
+        if self.should_use_custom_predicate {
+            use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
+            let pow_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
+                2,
+                vec![(F::from(1i8), vec![(0, 5)]), (F::from(-1i8), vec![(1, 1)])],
+            );
+            cs.register_predicate(RESCUE_PREDICATE, pow_pred).unwrap();
+        }
+        let a = FpVar::new_witness(cs.clone(), || Ok(self.a)).unwrap();
+        let b = FpVar::new_witness(cs.clone(), || Ok(self.b)).unwrap();
+        let mut vars = vec![a.clone(), b.clone()];
+        
+        let num_r1cs_constraints = if self.should_use_custom_predicate {
+            self.num_constraints / 2
+        } else {
+            self.num_constraints
+        };
+        let num_custom_pred_constraints = self.num_constraints - num_r1cs_constraints;
+
+        for _ in 0..num_r1cs_constraints {
+            let l = (0..self.num_non_zero_per_constraint / 2)
+                .map(|_| {
+                    let var = vars.choose(rng).unwrap();
+                    let coeff = FpVar::Constant(F::rand(rng));
+                    var * coeff
+                })
+                .sum::<FpVar<F>>();
+            let r = (0..self.num_non_zero_per_constraint / 2)
+                .map(|_| {
+                    let var = vars.choose(rng).unwrap();
+                    let coeff = FpVar::Constant(F::rand(rng));
+                    var * coeff
+                })
+                .sum::<FpVar<F>>();
+            let c = l * r;
+            vars.push(c);
+        }
+        for _ in 0..num_custom_pred_constraints {
+            let lhs = (0..self.num_non_zero_per_constraint)
+                .map(|_| {
+                    let var = vars.choose(rng).unwrap();
+                    let coeff = FpVar::Constant(F::rand(rng));
+                    var * coeff
+                })
+                .sum::<FpVar<F>>();
+
+            let rhs = FpVar::new_witness(cs.clone(), || lhs.value().map(|v| v.pow(&[5]))).unwrap();
+            let FpVar::Var(l) = lhs else {
+                return Err(SynthesisError::Unsatisfiable);
+            };
+            let FpVar::Var(r) = rhs else {
+                return Err(SynthesisError::Unsatisfiable);
+            };
+            cs.enforce_constraint_arity_2(RESCUE_PREDICATE, || ark_relations::lc![l.variable], || ark_relations::lc![r.variable])?;
+        }
+
+        Ok(())
+    }
+}
+
 pub fn arkwork_r1cs_adapter<F: PrimeField>(
     should_use_custom_predicate: bool,
     cs: ConstraintSystemRef<F>,
@@ -220,7 +315,7 @@ pub fn arkwork_r1cs_adapter<F: PrimeField>(
         (Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(), a.len() + b.len() + c.len())
     };
     
-
+    
     
     
     (
