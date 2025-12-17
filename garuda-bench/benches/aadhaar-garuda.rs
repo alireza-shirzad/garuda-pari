@@ -46,12 +46,34 @@ fn main() {
     let circom = circom.clone();
     let instance = circom.get_public_inputs().unwrap();
     let start = Instant::now();
+    let _ = Garuda::<E>::circuit_to_prover_cs(circom.clone(), true).unwrap();
+    let prover_prep_duration = start.elapsed();
+    append_csv_row(
+        CSV_HEADER,
+        &csv_path,
+        &format!(
+            "aadhaar-garuda,prover_prep,{:.3},,",
+            prover_prep_duration.as_secs_f64() * 1000.0
+        ),
+    );
+    let start = Instant::now();
     let proof = Garuda::prove(&pk, Some(&mut rng), circom).unwrap();
     let duration = start.elapsed();
     append_csv_row(
         CSV_HEADER,
         &csv_path,
         &format!("aadhaar-garuda,prover,{:.3},,", duration.as_secs_f64() * 1000.0),
+    );
+    let prover_corrected = duration
+        .checked_sub(prover_prep_duration)
+        .unwrap_or_default();
+    append_csv_row(
+        CSV_HEADER,
+        &csv_path,
+        &format!(
+            "aadhaar-garuda,prover_corrected,{:.3},,",
+            prover_corrected.as_secs_f64() * 1000.0
+        ),
     );
     let start = Instant::now();
     let verified = Garuda::verify(&proof, &vk, &instance);

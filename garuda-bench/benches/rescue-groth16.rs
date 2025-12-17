@@ -11,16 +11,22 @@ use ark_relations::gr1cs;
 use ark_relations::gr1cs::instance_outliner::outline_r1cs;
 use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
 use ark_relations::gr1cs::ConstraintSynthesizer;
+use ark_relations::gr1cs::ConstraintSystem;
+use ark_relations::gr1cs::OptimizationGoal;
+use ark_relations::gr1cs::SynthesisMode;
 use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
 use ark_serialize::CanonicalSerialize;
 use ark_std::{
-    rc::Rc, UniformRand,
+    any::type_name,
     rand::{RngCore, SeedableRng},
+    rc::Rc,
     test_rng,
-any::type_name,
-time::Duration};
+    time::Duration,
+    UniformRand,
+};
 
 use garuda_bench::create_test_rescue_parameter;
+use garuda_bench::prover_prep;
 use garuda_bench::RescueDemo;
 use shared_utils::BenchResult;
 
@@ -52,7 +58,7 @@ where
     }
 
     let mut prover_time = Duration::new(0, 0);
-    let prover_prep_time = Duration::new(0, 0);
+    let mut prover_prep_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
     let keygen_prep_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
@@ -82,6 +88,9 @@ where
     let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
 
     let mut proof = None;
+    let start = ark_std::time::Instant::now();
+    prover_prep::<E, RescueDemo<E::ScalarField>>(circuit.clone());
+    prover_prep_time += start.elapsed();
 
     for _ in 0..num_prover_iterations {
         let prover_circuit = circuit.clone();

@@ -3,7 +3,11 @@ pub const RESCUE_APPLICATION_NAME: &str = "rescue";
 
 pub mod bellpepper_adapter;
 
-use std::{fs::{OpenOptions, create_dir_all}, path::Path, io::Write};
+use std::{
+    fs::{create_dir_all, OpenOptions},
+    io::Write,
+    path::Path,
+};
 
 use ark_crypto_primitives::sponge::rescue::constraints::RESCUE_PREDICATE;
 use ark_crypto_primitives::{
@@ -13,13 +17,26 @@ use ark_crypto_primitives::{
     },
     sponge::rescue::RescueConfig,
 };
+use ark_ec::pairing::Pairing;
 use ark_ff::{BigInteger, PrimeField};
+<<<<<<< HEAD
 use ark_r1cs_std::{GR1CSVar, alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
 use ark_relations::gr1cs::{ConstraintSynthesizer, R1CS_PREDICATE_LABEL, SynthesisError};
 use garuda::ConstraintSystemRef;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Zero};
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+=======
+use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
+use ark_relations::gr1cs::{
+    ConstraintSynthesizer, ConstraintSystem, OptimizationGoal, SynthesisError, SynthesisMode,
+    R1CS_PREDICATE_LABEL,
+};
+use garuda::ConstraintSystemRef;
+use num_bigint::{BigInt, BigUint};
+use num_traits::{One, Zero};
+use rand::{rngs::StdRng, Rng};
+>>>>>>> a612e6a8a82a955beef08ced23a77721959cc171
 pub const RESCUE_ROUNDS: usize = 12;
 pub const WIDTH: usize = 9;
 
@@ -59,8 +76,7 @@ pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
 /// Compute the modular inverse of `alpha` modulo `p - 1`, where `p` is the field modulus.
 fn compute_alpha_inv<F: PrimeField>(alpha: u64) -> BigUint {
     // modulus minus one for the field as a BigUint
-    let modulus_minus_one =
-        BigUint::from_bytes_le(&F::MODULUS.to_bytes_le()) - BigUint::from(1u32);
+    let modulus_minus_one = BigUint::from_bytes_le(&F::MODULUS.to_bytes_le()) - BigUint::from(1u32);
     let alpha = BigUint::from(alpha);
 
     // Extended Euclidean algorithm to find the inverse of `alpha` mod (p - 1)
@@ -89,8 +105,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     ConstraintSynthesizer<F> for RescueDemo<F>
 {
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        if self.should_use_custom_predicate
-        {
+        if self.should_use_custom_predicate {
             use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
             let pow_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
                 2,
@@ -271,23 +286,35 @@ pub fn arkwork_r1cs_adapter<F: PrimeField>(
         }
         let num_non_zero_a = non_zero_values.len() / 3;
         let num_non_zero_b = non_zero_values.len() / 3;
-        
-        let a = non_zero_values[..num_non_zero_a].iter().map(|value| {
-            let row = rng.gen_range(0..num_cons);
-            let col = rng.gen_range(0..num_vars + num_inputs + 1);
-            (row, col, *value)
-        }).collect::<Vec<_>>();
-        let b = non_zero_values[num_non_zero_a..][..num_non_zero_b].iter().map(|value| {
-            let row = rng.gen_range(0..num_cons);
-            let col = rng.gen_range(0..num_vars + num_inputs + 1);
-            (row, col, *value)
-        }).collect::<Vec<_>>();
-        let c = non_zero_values[num_non_zero_a + num_non_zero_b..].iter().map(|value| {
-            let row = rng.gen_range(0..num_cons);
-            let col = rng.gen_range(0..num_vars + num_inputs + 1);
-            (row, col, *value)
-        }).collect::<Vec<_>>();
-        (Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(), non_zero_values.len())
+
+        let a = non_zero_values[..num_non_zero_a]
+            .iter()
+            .map(|value| {
+                let row = rng.gen_range(0..num_cons);
+                let col = rng.gen_range(0..num_vars + num_inputs + 1);
+                (row, col, *value)
+            })
+            .collect::<Vec<_>>();
+        let b = non_zero_values[num_non_zero_a..][..num_non_zero_b]
+            .iter()
+            .map(|value| {
+                let row = rng.gen_range(0..num_cons);
+                let col = rng.gen_range(0..num_vars + num_inputs + 1);
+                (row, col, *value)
+            })
+            .collect::<Vec<_>>();
+        let c = non_zero_values[num_non_zero_a + num_non_zero_b..]
+            .iter()
+            .map(|value| {
+                let row = rng.gen_range(0..num_cons);
+                let col = rng.gen_range(0..num_vars + num_inputs + 1);
+                (row, col, *value)
+            })
+            .collect::<Vec<_>>();
+        (
+            Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(),
+            non_zero_values.len(),
+        )
     } else {
         let ark_a = &ark_matrices[R1CS_PREDICATE_LABEL][0];
         let ark_b = &ark_matrices[R1CS_PREDICATE_LABEL][1];
@@ -300,7 +327,7 @@ pub fn arkwork_r1cs_adapter<F: PrimeField>(
                 a.push((row, *col, *coeff));
             }
         }
-        
+
         for (row, constraint) in ark_b.iter().enumerate() {
             for (coeff, col) in constraint {
                 b.push((row, *col, *coeff));
@@ -312,12 +339,19 @@ pub fn arkwork_r1cs_adapter<F: PrimeField>(
                 c.push((row, *col, *coeff));
             }
         }
-        (Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(), a.len() + b.len() + c.len())
+        (
+            Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(),
+            a.len() + b.len() + c.len(),
+        )
     };
+<<<<<<< HEAD
     
     
     
     
+=======
+
+>>>>>>> a612e6a8a82a955beef08ced23a77721959cc171
     (
         num_cons,
         num_vars,
@@ -334,9 +368,29 @@ pub fn append_csv_row(header: &str, path: &Path, row: &str) {
         create_dir_all(parent).unwrap();
     }
     let file_exists = path.exists();
-    let mut file = OpenOptions::new().create(true).append(true).open(path).unwrap();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap();
     if !file_exists {
         writeln!(file, "{header}").unwrap();
     }
     writeln!(file, "{row}").unwrap();
+}
+
+pub fn prover_prep<E: Pairing, C: ConstraintSynthesizer<E::ScalarField>>(circuit: C) {
+    let cs = ConstraintSystem::new_ref();
+
+    // Set the optimization goal
+    cs.set_optimization_goal(OptimizationGoal::Constraints);
+    cs.set_mode(SynthesisMode::Prove {
+        construct_matrices: true,
+        generate_lc_assignments: false,
+    });
+
+    // Synthesize the circuit.
+    circuit.generate_constraints(cs.clone()).unwrap();
+
+    cs.finalize();
 }
