@@ -2,7 +2,7 @@ use ark_crypto_primitives::crh::rescue::CRH;
 use ark_crypto_primitives::crh::CRHScheme;
 use ark_crypto_primitives::sponge::Absorb;
 use ark_curve25519::EdwardsProjective;
-use ark_ec::{AffineRepr, CurveGroup};
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_relations::gr1cs::OptimizationGoal;
@@ -18,11 +18,8 @@ use garuda_bench::{create_test_rescue_parameter, RescueDemo, WIDTH};
 use libspartan::{InputsAssignment, Instance, NIZKGens, VarsAssignment, NIZK};
 use merlin::Transcript;
 use rand::rngs::StdRng;
-#[cfg(feature = "parallel")]
-use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
-use std::char::MAX;
 use std::cmp::max;
 use std::ops::Neg;
 use std::time::Duration;
@@ -36,6 +33,7 @@ fn bench<G: CurveGroup>(
     num_verifier_iterations: u32,
     num_thread: usize,
     _zk: bool,
+    should_use_custom_predicate: bool,
 ) -> BenchResult
 where
     G::ScalarField: PrimeField + Absorb,
@@ -66,14 +64,15 @@ where
         image: Some(expected_image),
         config: config.clone(),
         num_invocations,
+        should_use_custom_predicate,
     };
     let circuit = circuit.clone();
     let cs: ConstraintSystemRef<G::ScalarField> = ConstraintSystem::new_ref();
     cs.set_optimization_goal(OptimizationGoal::Constraints);
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
-    let (num_cons, num_vars, num_inputs, num_non_zero_entries, inst, vars, inputs) =
-        arkwork_r1cs_adapter(cs, rng);
+    let (num_cons, num_vars, num_inputs, num_nonzero_entries, inst, vars, inputs) =
+        arkwork_r1cs_adapter(should_use_custom_predicate, cs, rng);
 
     let mut gens = NIZKGens::<G>::new(num_cons, num_vars, num_inputs);
     for _ in 0..num_keygen_iterations {
@@ -113,7 +112,7 @@ where
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_invocations,
         input_size,
-        num_nonzero_entries: 0,
+        num_nonzero_entries,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
@@ -132,45 +131,31 @@ where
 }
 
 const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
-const MAX_LOG2_INPUT_SIZE: usize = 20;
 const ZK: bool = false;
+
 fn main() {
+
+    let args: Vec<String> = std::env::args().collect();
+    let use_gr1cs = args.iter().any(|arg| arg == "--gr1cs");
     let zk_string = if ZK { "-zk" } else { "" };
+
     let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
     let num_thread = 1;
     for &num_invocation in &num_invocations {
-        const GARUDA_VARIANT: &str = {
-            #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
-            {
-                "spartan-ccs"
-            }
-
-            #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
-            {
-                "spartan-r1cs"
-            }
-
-            #[cfg(not(any(
-                all(feature = "gr1cs", not(feature = "r1cs")),
-                all(feature = "r1cs", not(feature = "gr1cs"))
-            )))]
-            {
-                compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
-            }
-        };
-
+        let variant = if use_gr1cs { "gr1cs" } else { "r1cs" };
         let filename = format!(
-            "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-nizk-{}-{}t.csv",
+            "{RESCUE_APPLICATION_NAME}-spartan-{variant}-nizk-{}-{}t.csv",
             zk_string, num_thread
         );
-        let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 1, num_thread, ZK)
+        let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 1, num_thread, ZK, use_gr1cs)
             .save_to_csv(&filename);
     }
 }
 
 fn arkwork_r1cs_adapter<F: PrimeField>(
+    should_use_custom_predicate: bool,
     cs: ConstraintSystemRef<F>,
     mut rng: StdRng,
 ) -> (
@@ -183,7 +168,11 @@ fn arkwork_r1cs_adapter<F: PrimeField>(
     InputsAssignment<F>,
 ) {
     assert!(cs.is_satisfied().unwrap());
-    assert_eq!(cs.num_predicates(), 2);
+    if should_use_custom_predicate {
+        assert_eq!(cs.num_predicates(), 2);
+    } else {
+        assert_eq!(cs.num_predicates(), 1);
+    }
     let num_cons = cs.num_constraints();
     let num_inputs = cs.num_instance_variables() - 1;
     let num_vars = cs.num_witness_variables();

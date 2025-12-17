@@ -20,8 +20,6 @@ use ark_std::{
 use garuda::Garuda;
 use garuda_bench::RESCUE_APPLICATION_NAME;
 use garuda_bench::{create_test_rescue_parameter, RescueDemo};
-#[cfg(feature = "parallel")]
-use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::ops::Neg;
@@ -35,6 +33,7 @@ fn bench<E: Pairing>(
     num_verifier_iterations: u32,
     num_thread: usize,
     zk: bool,
+    should_use_custom_predicate: bool,
 ) -> BenchResult
 where
     E::ScalarField: PrimeField + Absorb,
@@ -65,6 +64,7 @@ where
         config: config.clone(),
         num_invocations,
         num_instances: input_size,
+        should_use_custom_predicate,
     };
     let (mut pk, mut vk) = (None, None);
     for _ in 0..num_keygen_iterations {
@@ -145,44 +145,14 @@ where
 }
 
 const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
-const MAX_LOG2_INPUT_SIZE: usize = 20;
 const ZK: bool = false;
 
 fn main() {
+    // Check if --gr1cs flag is set from command line arguments
+    let args: Vec<String> = std::env::args().collect();
+    let use_gr1cs = args.iter().any(|arg| arg == "--gr1cs");
     //////////// Benchmark the Verifier ////////////////
     let zk_string = if ZK { "-zk" } else { "" };
-    use garuda_bench::INPUT_BENCHMARK;
-    let input_sizes: Vec<usize> = (1..MAX_LOG2_INPUT_SIZE)
-        .map(|i| 2_usize.pow(i as u32))
-        .collect();
-
-    // for &input_size in &input_sizes {
-    //     const GARUDA_VARIANT: &str = {
-    //         #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
-    //         {
-    //             "garuda-gr1cs"
-    //         }
-
-    //         #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
-    //         {
-    //             "garuda-r1cs"
-    //         }
-
-    //         #[cfg(not(any(
-    //             all(feature = "gr1cs", not(feature = "r1cs")),
-    //             all(feature = "r1cs", not(feature = "gr1cs"))
-    //         )))]
-    //         {
-    //             compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
-    //         }
-    //     };
-
-    //     let filename = format!(
-    //         "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}{}-{}t-{INPUT_BENCHMARK}.csv",
-    //         zk_string, 1
-    //     );
-    //     let _ = bench::<Bls12_381>(2, input_size, 1, 1, 100, 1, ZK).save_to_csv(&filename);
-    // }
 
     //////////// Benchmark the Prover ////////////////
 
@@ -190,32 +160,14 @@ fn main() {
         .map(|i| 2_usize.pow(i as u32))
         .collect();
     let num_thread = 1;
-    for &num_invocation in &num_invocations {
-        const GARUDA_VARIANT: &str = {
-            #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
-            {
-                "garuda-gr1cs"
-            }
-
-            #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
-            {
-                "garuda-r1cs"
-            }
-
-            #[cfg(not(any(
-                all(feature = "gr1cs", not(feature = "r1cs")),
-                all(feature = "r1cs", not(feature = "gr1cs"))
-            )))]
-            {
-                compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
-            }
-        };
+    for &num in &num_invocations {
+        let variant = if use_gr1cs { "gr1cs" } else { "r1cs" };
 
         let filename = format!(
-            "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}-{}t.csv",
+            "{RESCUE_APPLICATION_NAME}-garuda-{variant}-{}-{}t.csv",
             zk_string, num_thread
         );
-        let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 1, num_thread, ZK)
+        let _ = bench::<Bls12_381>(num, 20, 1, 1, 20, num_thread, ZK, use_gr1cs)
             .save_to_csv(&filename);
     }
 }

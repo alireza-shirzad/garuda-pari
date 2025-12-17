@@ -30,6 +30,7 @@ pub struct RescueDemo<F: PrimeField> {
     pub num_instances: usize,
     pub config: RescueConfig<F>,
     pub num_invocations: usize,
+    pub should_use_custom_predicate: bool,
 }
 
 pub fn create_test_rescue_parameter<F: PrimeField + ark_ff::PrimeField>(
@@ -86,7 +87,7 @@ impl<F: PrimeField + ark_ff::PrimeField + ark_crypto_primitives::sponge::Absorb>
     ConstraintSynthesizer<F> for RescueDemo<F>
 {
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        #[cfg(feature = "gr1cs")]
+        if self.should_use_custom_predicate
         {
             use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
             let pow_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(

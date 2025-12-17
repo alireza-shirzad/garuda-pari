@@ -2,7 +2,6 @@ use ark_bls12_381::Bls12_381;
 use ark_crypto_primitives::crh::CRHScheme;
 use ark_crypto_primitives::snark::CircuitSpecificSetupSNARK;
 use ark_crypto_primitives::snark::SNARK;
-use ark_crypto_primitives::sponge::rescue::RescueConfig;
 use ark_crypto_primitives::{crh::rescue::CRH, sponge::Absorb};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
@@ -14,19 +13,17 @@ use ark_relations::gr1cs::instance_outliner::InstanceOutliner;
 use ark_relations::gr1cs::ConstraintSynthesizer;
 use ark_relations::gr1cs::R1CS_PREDICATE_LABEL;
 use ark_serialize::CanonicalSerialize;
-use ark_std::rc::Rc;
-use ark_std::UniformRand;
 use ark_std::{
+    rc::Rc, UniformRand,
     rand::{RngCore, SeedableRng},
     test_rng,
-};
+any::type_name,
+time::Duration};
 
 use garuda_bench::create_test_rescue_parameter;
 use garuda_bench::RescueDemo;
 use shared_utils::BenchResult;
-use std::any::type_name;
-use std::env;
-use std::time::Duration;
+
 fn bench<E: Pairing>(
     num_invocations: usize,
     input_size: usize,
@@ -55,17 +52,20 @@ where
     }
 
     let mut prover_time = Duration::new(0, 0);
-    let mut prover_prep_time = Duration::new(0, 0);
+    let prover_prep_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
-    let mut keygen_prep_time = Duration::new(0, 0);
+    let keygen_prep_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
+
     let circuit = RescueDemo {
         input: Some(rescue_input.clone()),
         num_instances: input_size,
         image: Some(expected_image),
         config: config.clone(),
         num_invocations,
+        should_use_custom_predicate: false,
     };
+
     let setup_circuit = circuit.clone();
     let (mut pk, mut vk) = Groth16::<E>::setup(setup_circuit, &mut rng).unwrap();
 
@@ -75,24 +75,23 @@ where
         (pk, vk) = Groth16::<E>::setup(setup_circuit, &mut rng).unwrap();
         keygen_time += start.elapsed();
     }
+
     let pvk = prepare_verifying_key::<E>(&vk);
 
     let pk_size = pk.serialized_size(ark_serialize::Compress::Yes);
     let vk_size = vk.serialized_size(ark_serialize::Compress::Yes);
 
-    let prover_circuit = circuit.clone();
-
-    // let mut proof = Groth16::<E>::prove(&pk, prover_circuit, &mut rng).unwrap();
-    let mut proof = Groth16::<E>::create_proof_with_reduction_no_zk(prover_circuit, &pk).unwrap();
+    let mut proof = None;
 
     for _ in 0..num_prover_iterations {
         let prover_circuit = circuit.clone();
         let start = ark_std::time::Instant::now();
         // proof = Groth16::<E>::prove(&pk, prover_circuit, &mut rng).unwrap();
-        proof = Groth16::<E>::create_proof_with_reduction_no_zk(prover_circuit, &pk).unwrap();
+        proof = Some(Groth16::<E>::create_proof_with_reduction_no_zk(prover_circuit, &pk).unwrap());
         prover_time += start.elapsed();
     }
 
+    let proof = proof.unwrap();
     let proof_size = proof.serialized_size(ark_serialize::Compress::Yes);
     let start = ark_std::time::Instant::now();
     for _ in 0..num_verifier_iterations {

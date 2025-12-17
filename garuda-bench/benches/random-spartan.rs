@@ -1,5 +1,5 @@
 use ark_curve25519::EdwardsProjective;
-use ark_ec::{AffineRepr, CurveGroup};
+use ark_ec::CurveGroup;
 use ark_ff::{Field, PrimeField};
 use ark_relations::gr1cs::{
     ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, SynthesisError, Variable,
@@ -16,7 +16,6 @@ use libspartan::{InputsAssignment, Instance, SNARKGens, VarsAssignment, SNARK};
 use merlin::Transcript;
 use num_bigint::BigUint;
 #[cfg(feature = "parallel")]
-use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::cmp::max;

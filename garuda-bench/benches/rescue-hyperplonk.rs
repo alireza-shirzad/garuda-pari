@@ -21,8 +21,6 @@ use hp_subroutines::PolynomialCommitmentScheme;
 
 use shared_utils::BenchResult;
 
-#[cfg(feature = "parallel")]
-use rayon::ThreadPoolBuilder;
 
 fn bench<E: Pairing>(
     num_invocations: usize,
@@ -146,7 +144,7 @@ fn main() {
         .collect();
 
     {
-        const num_thread: usize = 1;
+        let num_thread: usize = 1;
         for num_invocation in &num_invocations {
             let _ =
                 bench::<Bls12_381>(*num_invocation, 20, 1, 1, 1, num_thread, &jf_gate, &pcs_srs)
