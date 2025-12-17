@@ -14,6 +14,7 @@ use ark_relations::gr1cs::ConstraintSynthesizer;
 use ark_relations::gr1cs::ConstraintSystem;
 use ark_std::test_rng;
 use garuda_bench::append_csv_row;
+use garuda_bench::prover_prep;
 use num_bigint::BigInt;
 use rand::{RngCore, SeedableRng};
 
@@ -55,6 +56,17 @@ fn main() {
     let circom = circom.clone();
     let instance = circom.get_public_inputs().unwrap();
     let start = Instant::now();
+    prover_prep::<E, _>(circom.clone());
+    let prover_prep_duration = start.elapsed();
+    append_csv_row(
+        CSV_HEADER,
+        &csv_path,
+        &format!(
+            "aadhaar-groth16,prover_prep,{:.3},,",
+            prover_prep_duration.as_secs_f64() * 1000.0
+        ),
+    );
+    let start = Instant::now();
     // let proof = Groth16::<E>::create_proof_with_reduction_no_zk(circom, &pk).unwrap();
     let proof = Groth16::<E>::prove(&pk, circom, &mut rng).unwrap();
     let duration = start.elapsed();
@@ -64,6 +76,17 @@ fn main() {
         &format!(
             "aadhaar-groth16,prover,{:.3},,",
             duration.as_secs_f64() * 1000.0
+        ),
+    );
+    let prover_corrected = duration
+        .checked_sub(prover_prep_duration)
+        .unwrap_or_default();
+    append_csv_row(
+        CSV_HEADER,
+        &csv_path,
+        &format!(
+            "aadhaar-groth16,prover_corrected,{:.3},,",
+            prover_corrected.as_secs_f64() * 1000.0
         ),
     );
 
