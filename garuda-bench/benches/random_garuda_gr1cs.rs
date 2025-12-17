@@ -15,6 +15,7 @@ use ark_std::{
     test_rng,
 };
 use garuda::Garuda;
+use garuda_bench::RandomCircuit;
 #[cfg(feature = "parallel")]
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
@@ -24,193 +25,6 @@ use std::panic::{self, AssertUnwindSafe};
 use std::time::Duration;
 
 const DEG5_LABEL: &str = "deg5-mul";
-
-#[derive(Clone)]
-enum Target {
-    Var(usize),
-    One,
-}
-
-#[derive(Clone)]
-struct ConstraintSpec<F: Field> {
-    a_terms: Vec<(F, Target)>,
-    b_terms: Vec<(F, Target)>,
-    c_terms: Vec<(F, Target)>,
-}
-
-#[derive(Clone)]
-struct Deg5Constraint<F: Field> {
-    x_terms: Vec<(F, Target)>,
-    y_terms: Vec<(F, Target)>, // y = x^5
-}
-
-#[derive(Clone)]
-struct RandomCircuit<F: Field> {
-    public_inputs: Vec<F>,
-    witness_values: Vec<F>,
-    r1cs_constraints: Vec<ConstraintSpec<F>>,
-    deg5_constraints: Vec<Deg5Constraint<F>>,
-    total_nonzero_entries: usize,
-}
-
-impl<F: Field + UniformRand> RandomCircuit<F> {
-    fn new(num_constraints: usize, nonzero_per_matrix: usize, rng: &mut impl Rng) -> Self {
-        let mut witness_values = Vec::with_capacity(1 + num_constraints * 6);
-        witness_values.push(F::zero()); // idx 0 => zero witness
-
-        let mut r1cs_constraints = Vec::with_capacity(num_constraints);
-        let mut deg5_constraints = Vec::with_capacity(num_constraints);
-        let mut total_nonzero_entries = 0usize;
-
-        for _ in 0..num_constraints {
-            // R1CS predicate: a * b = c
-            let a = rand_nonzero(rng);
-            let b = rand_nonzero(rng);
-            let c = a * b;
-
-            let a_idx = witness_values.len();
-            witness_values.push(a);
-            let b_idx = witness_values.len();
-            witness_values.push(b);
-            let c_idx = witness_values.len();
-            witness_values.push(c);
-
-            let mut a_terms = Vec::with_capacity(nonzero_per_matrix);
-            let mut b_terms = Vec::with_capacity(nonzero_per_matrix);
-            let mut c_terms = Vec::with_capacity(nonzero_per_matrix);
-
-            a_terms.push((F::one(), Target::Var(a_idx)));
-            b_terms.push((F::one(), Target::Var(b_idx)));
-            c_terms.push((F::one(), Target::Var(c_idx)));
-            for _ in 1..nonzero_per_matrix {
-                a_terms.push((rand_nonzero(rng), Target::Var(0)));
-                b_terms.push((rand_nonzero(rng), Target::Var(0)));
-                c_terms.push((rand_nonzero(rng), Target::Var(0)));
-            }
-
-            r1cs_constraints.push(ConstraintSpec {
-                a_terms,
-                b_terms,
-                c_terms,
-            });
-            total_nonzero_entries += 3 * nonzero_per_matrix;
-
-            // Deg5 predicate: y = x^5
-            let x = rand_nonzero(rng);
-            let y = x * x * x * x * x;
-            let x_idx = witness_values.len();
-            witness_values.push(x);
-            let y_idx = witness_values.len();
-            witness_values.push(y);
-
-            let mut x_terms = Vec::with_capacity(nonzero_per_matrix);
-            let mut y_terms = Vec::with_capacity(nonzero_per_matrix);
-            x_terms.push((F::one(), Target::Var(x_idx)));
-            y_terms.push((F::one(), Target::Var(y_idx)));
-            for _ in 1..nonzero_per_matrix {
-                x_terms.push((rand_nonzero(rng), Target::Var(0)));
-                y_terms.push((rand_nonzero(rng), Target::Var(0)));
-            }
-
-            deg5_constraints.push(Deg5Constraint { x_terms, y_terms });
-            total_nonzero_entries += 2 * nonzero_per_matrix;
-        }
-
-        RandomCircuit {
-            public_inputs: Vec::new(),
-            witness_values,
-            r1cs_constraints,
-            deg5_constraints,
-            total_nonzero_entries,
-        }
-    }
-}
-
-fn rand_nonzero<F: Field + UniformRand>(rng: &mut impl Rng) -> F {
-    loop {
-        let v = F::rand(rng);
-        if !v.is_zero() {
-            return v;
-        }
-    }
-}
-
-impl Target {
-    fn to_variable(&self, witnesses: &[Variable]) -> Variable {
-        match self {
-            Target::Var(idx) => witnesses[*idx],
-            Target::One => Variable::One,
-        }
-    }
-}
-
-impl<F: PrimeField> ConstraintSynthesizer<F> for RandomCircuit<F> {
-    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        use ark_relations::gr1cs::predicate::PredicateConstraintSystem;
-
-        // Register predicates: standard R1CS and degree-5 multiplication.
-        let r1cs_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
-            3,
-            vec![(F::one(), vec![(0, 1), (1, 1)]), (-F::one(), vec![(2, 1)])],
-        );
-        cs.register_predicate(R1CS_PREDICATE_LABEL, r1cs_pred)?;
-
-        let deg5_pred = PredicateConstraintSystem::new_polynomial_predicate_cs(
-            2,
-            vec![(F::one(), vec![(0, 5)]), (-F::one(), vec![(1, 1)])],
-        );
-        cs.register_predicate(DEG5_LABEL, deg5_pred)?;
-
-        for value in self.public_inputs.iter() {
-            let _ = cs.new_input_variable(|| Ok(*value))?;
-        }
-
-        let mut witness_vars = Vec::with_capacity(self.witness_values.len());
-        for value in self.witness_values.iter() {
-            let var = cs.new_witness_variable(|| Ok(*value))?;
-            witness_vars.push(var);
-        }
-
-        for constraint in self.r1cs_constraints.iter() {
-            cs.enforce_constraint_arity_3(
-                R1CS_PREDICATE_LABEL,
-                || {
-                    constraint.a_terms.iter().fold(lc!(), |acc, (coeff, t)| {
-                        acc + (*coeff, t.to_variable(&witness_vars))
-                    })
-                },
-                || {
-                    constraint.b_terms.iter().fold(lc!(), |acc, (coeff, t)| {
-                        acc + (*coeff, t.to_variable(&witness_vars))
-                    })
-                },
-                || {
-                    constraint.c_terms.iter().fold(lc!(), |acc, (coeff, t)| {
-                        acc + (*coeff, t.to_variable(&witness_vars))
-                    })
-                },
-            )?;
-        }
-
-        for constraint in self.deg5_constraints.iter() {
-            cs.enforce_constraint_arity_2(
-                DEG5_LABEL,
-                || {
-                    constraint.x_terms.iter().fold(lc!(), |acc, (coeff, t)| {
-                        acc + (*coeff, t.to_variable(&witness_vars))
-                    })
-                },
-                || {
-                    constraint.y_terms.iter().fold(lc!(), |acc, (coeff, t)| {
-                        acc + (*coeff, t.to_variable(&witness_vars))
-                    })
-                },
-            )?;
-        }
-
-        Ok(())
-    }
-}
 
 fn bench<E: Pairing>(
     num_constraints: usize,
@@ -227,8 +41,7 @@ where
     <E::G1Affine as AffineRepr>::BaseField: PrimeField,
 {
     let mut rng = StdRng::seed_from_u64(test_rng().next_u64());
-    let circuit =
-        RandomCircuit::<E::ScalarField>::new(num_constraints, nonzero_per_matrix, &mut rng);
+    let circuit = RandomCircuit::<E::ScalarField>::new(num_constraints, nonzero_per_matrix, true);
     let cs: ConstraintSystemRef<E::ScalarField> = ConstraintSystem::new_ref();
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
@@ -269,7 +82,7 @@ where
         let prover_circuit = circuit.clone();
 
         let start = ark_std::time::Instant::now();
-        let _cs = Garuda::<E>::circuit_to_prover_cs(prover_circuit.clone(), zk).unwrap();
+        let cs = Garuda::<E>::circuit_to_prover_cs(prover_circuit.clone(), zk).unwrap();
         prover_prep_time += start.elapsed();
         let start = ark_std::time::Instant::now();
         proof = pk
@@ -315,8 +128,8 @@ where
     BenchResult {
         curve: type_name::<E>().to_string(),
         num_invocations: num_constraints,
-        input_size: 0,
-        num_nonzero_entries: circuit.total_nonzero_entries,
+        input_size: cs.num_instance_variables(),
+        num_nonzero_entries: nonzero_per_matrix,
         num_constraints: cs.num_constraints(),
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_thread,
@@ -337,8 +150,8 @@ where
     .into()
 }
 
-const MIN_LOG2_CONSTRAINTS: usize = 1;
-const MAX_LOG2_CONSTRAINTS: usize = 30;
+const MIN_LOG2_CONSTRAINTS: usize = 10;
+const MAX_LOG2_CONSTRAINTS: usize = 20;
 const NUM_KEYGEN_ITERATIONS: u32 = 1;
 const NUM_PROVER_ITERATIONS: u32 = 1;
 const NUM_VERIFIER_ITERATIONS: u32 = 1;
@@ -346,18 +159,14 @@ const ZK: bool = false;
 
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)
-        .map(|i| {
-            let num_constraints = 1 << i;
-            let nonzero_per_matrix = 1 << i;
-            (num_constraints, nonzero_per_matrix)
-        })
-        .collect();
-    for &(num_constraints, nonzero_per_matrix) in configs.iter() {
+    let bench_num_constraints = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)
+        .map(|i| 1 << i)
+        .collect::<Vec<usize>>();
+    for num_constraints in bench_num_constraints {
         let filename = format!("random-garuda-gr1cs{}-{}t.csv", zk_string, 1);
         let Some(result) = bench::<Bls12_381>(
             num_constraints,
-            nonzero_per_matrix,
+            3,
             NUM_KEYGEN_ITERATIONS,
             NUM_PROVER_ITERATIONS,
             NUM_VERIFIER_ITERATIONS,
