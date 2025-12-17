@@ -22,7 +22,6 @@ use std::any::type_name;
 use std::ops::Neg;
 use std::time::Duration;
 
-#[cfg(feature = "gr1cs")]
 fn bench<G: CurveGroup>(
     num_invocations: usize,
     input_size: usize,
