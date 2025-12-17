@@ -19,7 +19,6 @@ use libspartan::{InputsAssignment, Instance, SNARKGens, VarsAssignment, SNARK};
 use merlin::Transcript;
 use shared_utils::BenchResult;
 use std::any::type_name;
-use std::cmp::max;
 use std::time::Duration;
 
 const DEG5_LABEL: &str = "deg5-mul";
@@ -41,7 +40,7 @@ fn bench_spartan(
     cs.set_optimization_goal(OptimizationGoal::Constraints);
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
-    let (num_cons, num_vars, num_inputs, num_nonzero_entries, inst, vars, inputs) =
+    let (num_cons, num_vars, num_inputs, max_non_zero_entries, inst, vars, inputs) =
         arkwork_r1cs_adapter(true, cs, rng);
 
     let mut prover_time = Duration::new(0, 0);
@@ -50,12 +49,8 @@ fn bench_spartan(
     let pk_size: usize = 0;
     let vk_size: usize = 0;
 
-    let mut gens = SNARKGens::<EdwardsProjective>::new(
-        num_cons,
-        num_vars,
-        num_inputs,
-        num_nonzero_entries.next_power_of_two().max(1),
-    );
+    let mut gens =
+        SNARKGens::<EdwardsProjective>::new(num_cons, num_vars, num_inputs, max_non_zero_entries);
     let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
     for _ in 0..num_keygen_iterations {
         let start = ark_std::time::Instant::now();
@@ -63,7 +58,7 @@ fn bench_spartan(
             num_cons,
             num_vars,
             num_inputs,
-            num_nonzero_entries.next_power_of_two().max(1),
+            max_non_zero_entries,
         );
         (comm, decomm) = SNARK::encode(&inst, &gens);
         keygen_time += start.elapsed();
@@ -115,7 +110,7 @@ fn bench_spartan(
         predicate_constraints: IndexMap::default(),
         num_invocations: num_constraints,
         input_size: num_inputs,
-        num_nonzero_entries: nonzero_per_constraint,
+        num_nonzero_entries: max_non_zero_entries,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
@@ -133,7 +128,7 @@ fn bench_spartan(
     })
 }
 
-const MIN_LOG2_CONSTRAINTS: usize = 1;
+const MIN_LOG2_CONSTRAINTS: usize = 20;
 const MAX_LOG2_CONSTRAINTS: usize = 30;
 const NUM_KEYGEN_ITERATIONS: u32 = 1;
 const NUM_PROVER_ITERATIONS: u32 = 1;
@@ -142,18 +137,12 @@ const ZK: bool = false;
 
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<(usize, usize)> = (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS)
-        .map(|i| {
-            let num_constraints = 1 << i;
-            let nonzero_per_matrix = 1 << i;
-            (num_constraints, nonzero_per_matrix)
-        })
-        .collect();
-    for &(num_constraints, nonzero_per_matrix) in configs.iter() {
+
+    for log_num_constraints in MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS {
         let filename = format!("random-spartan-ccs{}-{}t.csv", zk_string, 1);
         let Some(result) = bench_spartan(
-            num_constraints,
-            nonzero_per_matrix,
+            2usize.pow(log_num_constraints as u32),
+            3,
             NUM_KEYGEN_ITERATIONS,
             NUM_PROVER_ITERATIONS,
             NUM_VERIFIER_ITERATIONS,

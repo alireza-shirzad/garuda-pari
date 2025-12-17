@@ -21,7 +21,6 @@ use merlin::Transcript;
 use rayon::ThreadPoolBuilder;
 use shared_utils::BenchResult;
 use std::any::type_name;
-use std::cmp::max;
 use std::time::Duration;
 
 const DEG5_LABEL: &str = "deg5-mul";
@@ -49,7 +48,7 @@ fn bench_spartan(
     cs.set_optimization_goal(OptimizationGoal::Constraints);
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
-    let (num_cons, num_vars, num_inputs, num_non_zero_entries, inst, vars, inputs) =
+    let (num_cons, num_vars, num_inputs, max_non_zero_entries, inst, vars, inputs) =
         arkwork_r1cs_adapter(false, cs.clone(), rng);
     // Report logical GR1CS counts (pre-expansion) to match garuda-gr1cs-addition configs.
     let logical_num_constraints = FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS;
@@ -69,7 +68,7 @@ fn bench_spartan(
         num_cons,
         num_vars,
         num_inputs,
-        num_non_zero_entries.next_power_of_two().max(1),
+        max_non_zero_entries,
     );
     let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
     for _ in 0..num_keygen_iterations {
@@ -78,7 +77,7 @@ fn bench_spartan(
             num_cons,
             num_vars,
             num_inputs,
-            num_non_zero_entries.next_power_of_two().max(1),
+            max_non_zero_entries,
         );
         (comm, decomm) = SNARK::encode(&inst, &gens);
         keygen_time += start.elapsed();
@@ -130,7 +129,7 @@ fn bench_spartan(
         predicate_constraints,
         num_invocations: num_constraints,
         input_size: 0,
-        num_nonzero_entries: nonzero_per_constraint,
+        num_nonzero_entries: max_non_zero_entries,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,

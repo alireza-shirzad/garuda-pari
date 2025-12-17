@@ -299,9 +299,10 @@ pub fn arkwork_r1cs_adapter<F: PrimeField>(
                 (row, col, *value)
             })
             .collect::<Vec<_>>();
+        let max_non_zero_entries = std::cmp::max(a.len(), std::cmp::max(b.len(), c.len()));
         (
             Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(),
-            non_zero_values.len(),
+            max_non_zero_entries,
         )
     } else {
         let ark_a = &ark_matrices[R1CS_PREDICATE_LABEL][0];
@@ -327,9 +328,10 @@ pub fn arkwork_r1cs_adapter<F: PrimeField>(
                 c.push((row, *col, *coeff));
             }
         }
+        let max_non_zero_entries = std::cmp::max(a.len(), std::cmp::max(b.len(), c.len()));
         (
             Instance::new(num_cons, num_vars, num_inputs, &a, &b, &c).unwrap(),
-            a.len() + b.len() + c.len(),
+            max_non_zero_entries,
         )
     };
 

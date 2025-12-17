@@ -137,10 +137,10 @@ const ZK: bool = false;
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
 
-    for num_constraints in (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS) {
+    for log_num_constraints in (MIN_LOG2_CONSTRAINTS..=MAX_LOG2_CONSTRAINTS) {
         let filename = format!("random-spartan{}-{}t.csv", zk_string, 1);
         let _ = bench::<EdwardsProjective>(
-            num_constraints,
+            2usize.pow(log_num_constraints as u32),
             3,
             NUM_KEYGEN_ITERATIONS,
             NUM_PROVER_ITERATIONS,

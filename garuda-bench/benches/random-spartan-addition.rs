@@ -18,12 +18,11 @@ use merlin::Transcript;
 use num_bigint::BigUint;
 use shared_utils::BenchResult;
 use std::any::type_name;
-use std::cmp::max;
 use std::ops::Neg;
 use std::time::Duration;
 fn bench<G: CurveGroup>(
     num_constraints: usize,
-    nonzero_per_matrix: usize,
+    nonzero_per_constraint: usize,
     num_keygen_iterations: u32,
     num_prover_iterations: u32,
     num_verifier_iterations: u32,
@@ -36,7 +35,7 @@ where
     BigUint: From<<G::ScalarField as PrimeField>::BigInt>,
 {
     let mut rng = StdRng::seed_from_u64(test_rng().next_u64());
-    let circuit = RandomCircuit::<G::ScalarField>::new(num_constraints, nonzero_per_matrix, false);
+    let circuit = RandomCircuit::<G::ScalarField>::new(num_constraints, nonzero_per_constraint, false);
 
     let mut prover_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
@@ -48,14 +47,14 @@ where
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
     assert!(cs.is_satisfied().unwrap(), "R1CS not satisfied");
-    let (num_cons, num_vars, num_inputs, num_nonzero_entries, inst, vars, inputs) =
+    let (num_cons, num_vars, num_inputs, max_non_zero_entries, inst, vars, inputs) =
         arkwork_r1cs_adapter(false, cs.clone(), rng);
 
     let mut gens = SNARKGens::<G>::new(
         num_cons,
         num_vars,
         num_inputs,
-        num_nonzero_entries.next_power_of_two().max(1),
+        max_non_zero_entries,
     );
     let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
     for _ in 0..num_keygen_iterations {
@@ -64,7 +63,7 @@ where
             num_cons,
             num_vars,
             num_inputs,
-            num_nonzero_entries.next_power_of_two().max(1),
+            max_non_zero_entries,
         );
         (comm, decomm) = SNARK::encode(&inst, &gens);
         keygen_time += start.elapsed();
@@ -116,7 +115,7 @@ where
         predicate_constraints: cs.get_all_predicates_num_constraints(),
         num_invocations: num_constraints,
         input_size: FIXED_INPUT_SIZE,
-        num_nonzero_entries: nonzero_per_matrix,
+        num_nonzero_entries: nonzero_per_constraint,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,
