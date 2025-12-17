@@ -155,7 +155,7 @@ fn main() {
     let use_gr1cs = args.iter().any(|arg| arg == "--gr1cs");
     let zk_string = if ZK { "-zk" } else { "" };
 
-    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
+    let num_invocations: Vec<usize> = (11..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();
     let num_thread = 1;

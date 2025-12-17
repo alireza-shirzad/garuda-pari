@@ -129,7 +129,7 @@ fn bench_spartan(
         predicate_constraints,
         num_invocations: num_constraints,
         input_size: 0,
-        num_nonzero_entries: max_non_zero_entries,
+        num_nonzero_entries: nonzero_per_constraint,
         num_thread,
         num_keygen_iterations: num_keygen_iterations as usize,
         num_prover_iterations: num_prover_iterations as usize,

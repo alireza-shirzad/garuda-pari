@@ -35,7 +35,8 @@ where
     BigUint: From<<G::ScalarField as PrimeField>::BigInt>,
 {
     let mut rng = StdRng::seed_from_u64(test_rng().next_u64());
-    let circuit = RandomCircuit::<G::ScalarField>::new(num_constraints, nonzero_per_constraint, false);
+    let circuit =
+        RandomCircuit::<G::ScalarField>::new(num_constraints, nonzero_per_constraint, false);
 
     let mut prover_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
@@ -50,21 +51,11 @@ where
     let (num_cons, num_vars, num_inputs, max_non_zero_entries, inst, vars, inputs) =
         arkwork_r1cs_adapter(false, cs.clone(), rng);
 
-    let mut gens = SNARKGens::<G>::new(
-        num_cons,
-        num_vars,
-        num_inputs,
-        max_non_zero_entries,
-    );
+    let mut gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, max_non_zero_entries);
     let (mut comm, mut decomm) = SNARK::encode(&inst, &gens);
     for _ in 0..num_keygen_iterations {
         let start = ark_std::time::Instant::now();
-        gens = SNARKGens::<G>::new(
-            num_cons,
-            num_vars,
-            num_inputs,
-            max_non_zero_entries,
-        );
+        gens = SNARKGens::<G>::new(num_cons, num_vars, num_inputs, max_non_zero_entries);
         (comm, decomm) = SNARK::encode(&inst, &gens);
         keygen_time += start.elapsed();
     }
@@ -143,11 +134,7 @@ const ZK: bool = false;
 
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
-    let configs: Vec<usize> = NONZERO_MULTIPLIERS
-        .iter()
-        .map(|mult| mult * FIXED_NUM_CONSTRAINTS)
-        .collect();
-    for &nonzero_per_matrix in configs.iter() {
+    for &nonzero_per_matrix in NONZERO_MULTIPLIERS.iter() {
         let filename = format!("random-spartan-addition{}-{}t.csv", zk_string, 1);
         let Some(result) = bench::<EdwardsProjective>(
             FIXED_NUM_CONSTRAINTS,
