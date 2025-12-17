@@ -154,7 +154,7 @@ fn main() {
     // }
 
     /////////// Benchmark Groth16 for different circuit sizes ///////////
-    const MAX_LOG2_NUM_INVOCATIONS: usize = 20;
+    const MAX_LOG2_NUM_INVOCATIONS: usize = 12;
     let num_invocations: Vec<usize> = (0..MAX_LOG2_NUM_INVOCATIONS)
         .map(|i| 2_usize.pow(i as u32))
         .collect();

@@ -25,8 +25,8 @@ use std::time::Duration;
 
 const DEG5_LABEL: &str = "deg5-mul";
 // Split evenly so total constraints stay at 2^18 across predicates.
-const FIXED_R1CS_CONSTRAINTS: usize = 2usize.pow(17);
-const FIXED_DEG5_CONSTRAINTS: usize = 2usize.pow(17);
+const FIXED_R1CS_CONSTRAINTS: usize = 2usize.pow(18);
+const FIXED_DEG5_CONSTRAINTS: usize = 2usize.pow(18);
 
 fn bench<E: Pairing>(
     nonzero_per_constraint: usize,

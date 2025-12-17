@@ -129,7 +129,7 @@ where
     }
 }
 
-const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
+const MAX_LOG2_NUM_INVOCATIONS: usize = 12;
 const ZK: bool = false;
 
 fn main() {
