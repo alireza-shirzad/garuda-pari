@@ -15,15 +15,13 @@ ark-crypto-primitives = { git = "https://github.com/arkworks-rs/crypto-primitive
     "crh",
 ] }
 ark-poly = { version = "^0.5.0", default-features = false }
-ark-poly-commit = { version = "0.5.0"}
-ark-r1cs-std = {  git = "https://github.com/arkworks-rs/r1cs-std.git" , default-features = true, features = ["std"]}
-ark-relations = {  git = "https://github.com/arkworks-rs/snark.git", default-features = true }
-ark-groth16 = { git = "https://github.com/arkworks-rs/groth16.git", default-features = false, features = [
-    "parallel",
-] }
+ark-poly-commit = { version = "0.5.0", default-features = false }
+ark-r1cs-std = {  git = "https://github.com/arkworks-rs/r1cs-std.git" , default-features = false, features = ["std"]}
+ark-relations = {  git = "https://github.com/arkworks-rs/snark.git", default-features = false }
+ark-groth16 = { git = "https://github.com/arkworks-rs/groth16.git", default-features = false}
 ark-spartan = { git = "https://github.com/alireza-shirzad/spartan.git", default-features = false }
 hp-hyperplonk = { package = "hyperplonk", git = "https://github.com/alireza-shirzad/hyperplonk" }
-hp-subroutines = { package = "subroutines", git = "https://github.com/alireza-shirzad/hyperplonk" }
+hp-subroutines = { package = "subroutines", git = "https://github.com/alireza-shirzad/hyperplonk"  }
 merlin = { version = "3.0.0", default-features = false }
 displaydoc = { version = "0.2.3", default-features = false }
 tracing = { version = "0.1", default-features = false, features = [ "attributes" ] }
@@ -44,13 +42,13 @@ ark-bn254 = { git = "https://github.com/arkworks-rs/algebra", default-features =
 ark-pallas = { git = "https://github.com/arkworks-rs/algebra", default-features = false, features = [
     "curve",
 ] }
-ark-curve25519 = "0.5.0"
+ark-curve25519 = { version = "0.5.0", default-features = false }
 bellpepper-core = { version = "0.2.1", default-features = false }
 bellpepper = { version = "0.4.0", default-features = false }
-ff = { version = "0.13.0", features = ["derive"] }
-bls12_381 = { version = "0.8.0" }
+ff = { version = "0.13.0", default-features = false, features = ["derive"] }
+bls12_381 = { version = "0.8.0" , default-features = false }
 
-ark-circom = { git = "https://github.com/arkworks-rs/circom-compat.git" }
+ark-circom = { git = "https://github.com/arkworks-rs/circom-compat.git", default-features = false  }
 
 
 
@@ -88,6 +86,7 @@ ark-relations = { git = "https://github.com/arkworks-rs/snark.git" }
 ark-crypto-primitives = { git = "https://github.com/arkworks-rs/crypto-primitives.git"}
 ark-bls12-381 = { git = "https://github.com/arkworks-rs/algebra"}
 ark-bn254 = { git = "https://github.com/arkworks-rs/algebra"}
+ark-r1cs-std = { git = "https://github.com/arkworks-rs/r1cs-std.git" }
 # [patch."https://github.com/arkworks-rs/snark"]
 # ark-relations = { path = "../arkworks/snark/relations" }
 

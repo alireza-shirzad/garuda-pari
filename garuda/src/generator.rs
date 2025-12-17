@@ -175,7 +175,6 @@ impl<E: Pairing> Garuda<E> {
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
         end_timer!(timer_inlining);
-
         end_timer!(timer_cs_startup);
         Ok(Index::new(&cs.into_inner().unwrap()))
     }

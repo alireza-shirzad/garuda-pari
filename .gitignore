@@ -1,5 +1,4 @@
 /target
-*.csv
 *.bin
 Cargo.lock
 garuda-bench/circuits/aptos/

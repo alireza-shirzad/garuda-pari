@@ -15,7 +15,7 @@ use ark_std::{
 };
 use garuda_bench::RESCUE_APPLICATION_NAME;
 use garuda_bench::{create_test_rescue_parameter, RescueDemo, WIDTH};
-use libspartan::{InputsAssignment, Instance, NIZK, NIZKGens, VarsAssignment};
+use libspartan::{InputsAssignment, Instance, NIZKGens, VarsAssignment, NIZK};
 use merlin::Transcript;
 use rand::rngs::StdRng;
 #[cfg(feature = "parallel")]
@@ -93,7 +93,7 @@ where
     }
 
     let start = ark_std::time::Instant::now();
-    for _ in 0..num_verifier_iterations {
+    for _ in 0..1 {
         let mut verifier_transcript = Transcript::new(b"benchmark");
         let _ = proof
             .verify(&inst, &inputs, &mut verifier_transcript, &gens)
@@ -133,37 +133,11 @@ where
 const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
 const MAX_LOG2_INPUT_SIZE: usize = 20;
 const ZK: bool = false;
-
-#[cfg(feature = "parallel")]
 fn main() {
     let zk_string = if ZK { "-zk" } else { "" };
-    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
-        .map(|i| 2_usize.pow(i as u32))
-        .collect();
-
-    for &num_thread in &[4] {
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build()
-            .expect("Failed to build thread pool");
-        pool.install(|| {
-            for &num_invocation in &num_invocations {
-                let filename = format!(
-                    "{RESCUE_APPLICATION_NAME}-spartan-nizk-ccs{}-{}t.csv",
-                    zk_string, num_thread
-                );
-                let _ = bench::<EdwardsProjective>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
-                    .save_to_csv(&filename);
-            }
-        });
-    }
-}
-
-#[cfg(not(feature = "parallel"))]
-fn main() {
-    let zk_string = if ZK { "-zk" } else { "" };
-    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
-        .map(|i| 2_usize.pow(i as u32))
+    let num_invocations: Vec<usize> = vec![6, 9, 12]
+        .iter()
+        .map(|i| 2_usize.pow(*i as u32))
         .collect();
     let num_thread = 1;
     for &num_invocation in &num_invocations {

@@ -148,56 +148,6 @@ const MAX_LOG2_NUM_INVOCATIONS: usize = 15;
 const MAX_LOG2_INPUT_SIZE: usize = 20;
 const ZK: bool = false;
 
-#[cfg(feature = "parallel")]
-fn main() {
-    //////////// Benchamrk the Verifier ////////////////
-    let zk_string = if ZK { "-zk" } else { "" };
-    //////////// Benchamrk the prover ////////////////
-
-    let num_invocations: Vec<usize> = (1..MAX_LOG2_NUM_INVOCATIONS)
-        .map(|i| 2_usize.pow(i as u32))
-        .collect();
-
-    for &num_thread in &[4] {
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(num_thread)
-            .build()
-            .expect("Failed to build thread pool");
-        pool.install(|| {
-            for &num_invocation in &num_invocations {
-                const GARUDA_VARIANT: &str = {
-                    #[cfg(all(feature = "gr1cs", not(feature = "r1cs")))]
-                    {
-                        "garuda-gr1cs"
-                    }
-
-                    #[cfg(all(feature = "r1cs", not(feature = "gr1cs")))]
-                    {
-                        "garuda-r1cs"
-                    }
-
-                    // Fire a helpful error if the build is mis‑configured.
-                    #[cfg(not(any(
-                        all(feature = "gr1cs", not(feature = "r1cs")),
-                        all(feature = "r1cs", not(feature = "gr1cs"))
-                    )))]
-                    {
-                        compile_error!("Enable exactly one of the features \"gr1cs\" or \"r1cs\".")
-                    }
-                };
-
-                let filename = format!(
-                    "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}{}-{}t.csv",
-                    zk_string, num_thread
-                );
-                let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
-                    .save_to_csv(&filename);
-            }
-        });
-    }
-}
-
-#[cfg(not(feature = "parallel"))]
 fn main() {
     //////////// Benchmark the Verifier ////////////////
     let zk_string = if ZK { "-zk" } else { "" };
@@ -265,7 +215,7 @@ fn main() {
             "{RESCUE_APPLICATION_NAME}-{GARUDA_VARIANT}-{}-{}t.csv",
             zk_string, num_thread
         );
-        let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 100, num_thread, ZK)
+        let _ = bench::<Bls12_381>(num_invocation, 20, 1, 1, 1, num_thread, ZK)
             .save_to_csv(&filename);
     }
 }
