@@ -15,6 +15,7 @@ use ark_std::{
     rand::{rngs::StdRng, Rng, SeedableRng},
     test_rng,
 };
+use garuda_bench::prover_prep;
 use shared_utils::BenchResult;
 use std::any::type_name;
 use std::panic::{self, AssertUnwindSafe};
@@ -248,6 +249,7 @@ where
     cs_check.finalize();
     assert!(cs_check.is_satisfied().unwrap(), "circuit not satisfied");
     let mut prover_time = Duration::new(0, 0);
+    let mut prover_prep_time = Duration::new(0, 0);
     let mut keygen_time = Duration::new(0, 0);
     let mut verifier_time = Duration::new(0, 0);
     let (mut pk, mut vk) = (None, None);
@@ -274,13 +276,18 @@ where
     let pvk = prepare_verifying_key(vk.as_ref().unwrap());
 
     let mut proof = None;
+
+    let start = ark_std::time::Instant::now();
+    prover_prep::<E, RandomCircuit<E::ScalarField>>(circuit.clone());
+    prover_prep_time += start.elapsed();
+
     for _ in 0..num_prover_iterations {
         let prover_circuit = circuit.clone();
 
         let start = ark_std::time::Instant::now();
-        proof = pk.as_ref().map(|pk| {
-            Groth16::<E>::create_proof_with_reduction_no_zk(prover_circuit, pk).unwrap()
-        });
+        proof = pk
+            .as_ref()
+            .map(|pk| Groth16::<E>::create_proof_with_reduction_no_zk(prover_circuit, pk).unwrap());
         prover_time += start.elapsed();
     }
 
@@ -328,8 +335,8 @@ where
         vk_size,
         proof_size,
         prover_time: (prover_time / num_prover_iterations),
-        prover_prep_time: Duration::new(0, 0),
-        prover_corrected_time: (prover_time / num_prover_iterations),
+        prover_prep_time,
+        prover_corrected_time: (prover_time - prover_prep_time) / num_prover_iterations,
         verifier_time: (verifier_time / num_verifier_iterations),
         keygen_time: (keygen_time / num_keygen_iterations),
         keygen_prep_time: Duration::new(0, 0),
