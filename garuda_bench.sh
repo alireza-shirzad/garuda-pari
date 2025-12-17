@@ -32,7 +32,7 @@ commands=(
   # "RAYON_NUM_THREADS=1 cargo bench --bench rescue-spartan-nizk -- --r1cs --features \"r1cs\""
   # "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan --features \"r1cs\""
   # "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-ccs --features \"gr1cs\""
-  "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-ccs-addition --features \"gr1cs\""
+  # "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-ccs-addition --features \"gr1cs\""
   "RAYON_NUM_THREADS=1 cargo bench --bench random-spartan-addition --features \"r1cs\""
 
 

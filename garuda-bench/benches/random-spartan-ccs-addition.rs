@@ -49,7 +49,7 @@ fn bench_spartan(
     circuit.clone().generate_constraints(cs.clone()).unwrap();
     cs.finalize();
     let (num_cons, num_vars, num_inputs, max_non_zero_entries, inst, vars, inputs) =
-        arkwork_r1cs_adapter(false, cs.clone(), rng);
+        arkwork_r1cs_adapter(true, cs.clone(), rng);
     // Report logical GR1CS counts (pre-expansion) to match garuda-gr1cs-addition configs.
     let logical_num_constraints = FIXED_R1CS_CONSTRAINTS + FIXED_DEG5_CONSTRAINTS;
     let logical_num_nonzero_entries = (3 * nonzero_per_constraint * FIXED_R1CS_CONSTRAINTS)

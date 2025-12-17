@@ -142,6 +142,11 @@ path = "benches/rescue-spartan-nizk.rs"
 harness = false
 
 [[bench]]
+name = "rescue-spartan-snark"
+path = "benches/rescue-spartan-snark.rs"
+harness = false
+
+[[bench]]
 name = "rescue-groth16"
 path = "benches/rescue-groth16.rs"
 harness = false
