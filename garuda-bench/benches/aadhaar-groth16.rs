@@ -12,7 +12,6 @@ use rand::{RngCore, SeedableRng};
 
 use serde::Deserialize;
 
-#[tokio::main]
 async fn main() {
     type E = Bn254;
     type Fr = <E as ark_ec::pairing::Pairing>::ScalarField;

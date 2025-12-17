@@ -23,7 +23,6 @@ fn main() {
     let circom = builder.build().unwrap();
     let cs = ConstraintSystem::<Fr>::new_ref();
     circom.clone().generate_constraints(cs.clone()).unwrap();
-    dbg!(cs.num_constraints());
     let start = Instant::now();
     let (pk, vk) = Garuda::<E>::keygen(circom.clone(), true, &mut rng);
     let duration = start.elapsed();

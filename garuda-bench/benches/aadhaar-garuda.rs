@@ -9,8 +9,7 @@ use garuda::Garuda;
 use rand::{RngCore, SeedableRng};
 
 
-#[tokio::main]
-async fn main() {
+fn main() {
     type E = Bn254;
     type Fr = <E as ark_ec::pairing::Pairing>::ScalarField;
 

@@ -90,7 +90,6 @@ impl<E: Pairing> Garuda<E> {
         // Line 5 of figure 7 of https://eprint.iacr.org/2024/1245.pdf
         let timer_buid_grand_poly = start_timer!(|| "Build Grand Polynomial");
         let grand_poly = Self::build_grand_poly(mz_polys, &pk.sel_polys, &index);
-        dbg!(&grand_poly.evaluations());
         end_timer!(timer_buid_grand_poly);
 
         // grand_poly.print_evals();
@@ -214,9 +213,6 @@ impl<E: Pairing> Garuda<E> {
         }
         let timer_inlining = start_timer!(|| "Inlining constraints");
         cs.finalize();
-        assert!(cs.is_satisfied().unwrap());
-        dbg!(cs.get_all_predicate_arities());
-        dbg!(cs.get_all_predicates_num_constraints());
         end_timer!(timer_inlining);
         end_timer!(timer_cs_startup);
         let cs = cs.into_inner().unwrap();
