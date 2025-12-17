@@ -4,7 +4,7 @@ use crate::{
     data_structures::{Index, Proof, ProvingKey},
     epc::{data_structures::MLBatchedCommitment, multilinear::MultilinearEPC, EPC},
     piop::{prelude::ZeroCheck, PolyIOP},
-    utils::{evaluate_batch, stack_matrices},
+    utils::{evaluate_batch, predicate_labels_in_stack_order, stack_matrices},
     Garuda,
 };
 use ark_ec::pairing::Pairing;
@@ -274,7 +274,12 @@ impl<E: Pairing> Garuda<E> {
             .map(|item| Arc::new(item.clone()))
             .collect::<Vec<_>>();
 
-        for (c, (_, predicate_type)) in index.predicate_types.iter().enumerate() {
+        let predicate_labels = predicate_labels_in_stack_order(&index.predicate_types);
+        for (c, label) in predicate_labels.iter().enumerate() {
+            let predicate_type = index
+                .predicate_types
+                .get(label)
+                .expect("missing predicate type");
             let predicate_poly = match predicate_type {
                 Predicate::Polynomial(p) => p.polynomial.clone(),
                 _ => unimplemented!("Only polynomial predicates are supported"),

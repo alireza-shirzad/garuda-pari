@@ -13,7 +13,7 @@ use crate::{
         multilinear::MultilinearEPC,
         EPC,
     },
-    utils::stack_matrices,
+    utils::{predicate_labels_in_stack_order, stack_matrices},
     Garuda,
 };
 use ark_relations::{
@@ -182,17 +182,21 @@ impl<E: Pairing> Garuda<E> {
     fn create_sel_polynomials(
         num_vars: usize,
         predicate_num_constraints: &IndexMap<Label, usize>,
+        predicate_labels: &[Label],
     ) -> Vec<DenseMLE<E::ScalarField>>
     where
         E: Pairing,
         E::ScalarField: Field,
     {
         let domain_size = 1 << num_vars; // 2^num_vars
-        let mut offsets_and_counts = Vec::with_capacity(predicate_num_constraints.len());
+        let mut offsets_and_counts = Vec::with_capacity(predicate_labels.len());
 
         // First, calculate (offset, count) pairs sequentially
         let mut m_count = 0;
-        for &count in predicate_num_constraints.values() {
+        for label in predicate_labels {
+            let count = *predicate_num_constraints
+                .get(label)
+                .expect("missing predicate constraint count");
             offsets_and_counts.push((m_count, count));
             m_count += count;
         }
@@ -257,6 +261,7 @@ impl<E: Pairing> Garuda<E> {
                 let sel_polys = Self::create_sel_polynomials(
                     index.log_num_constraints,
                     &index.predicate_num_constraints,
+                    &predicate_labels_in_stack_order(&index.predicate_types),
                 );
                 let sel_comms = MultilinearEPC::batch_commit(
                     epc_ck,

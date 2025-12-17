@@ -3,6 +3,7 @@ use crate::{
     arithmetic::VPAuxInfo,
     data_structures::{Proof, VerifyingKey},
     epc::{data_structures::MLBatchedCommitment, multilinear::MultilinearEPC, EPC},
+    utils::predicate_labels_in_stack_order,
     Garuda,
 };
 use ark_ec::pairing::Pairing;
@@ -135,12 +136,12 @@ impl<E: Pairing> Garuda<E> {
         let mut z_poly_evals = proof.w_poly_evals.clone();
         z_poly_evals[2] += px.evaluate(&random_eval_point.to_vec());
         // By construction on the prover side, we know that the first stacked predicate is the R1CS predicate
-        let predicate_polys: Vec<&PolynomialPredicate<E::ScalarField>> = vk
-            .succinct_index
-            .predicate_types
-            .values()
-            .map(|pred| match pred {
-                Predicate::Polynomial(poly_predicate) => poly_predicate,
+        let predicate_labels =
+            predicate_labels_in_stack_order(&vk.succinct_index.predicate_types);
+        let predicate_polys: Vec<&PolynomialPredicate<E::ScalarField>> = predicate_labels
+            .iter()
+            .map(|label| match vk.succinct_index.predicate_types.get(label) {
+                Some(Predicate::Polynomial(poly_predicate)) => poly_predicate,
                 _ => panic!("Invalid predicate type"),
             })
             .collect();

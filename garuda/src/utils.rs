@@ -1,8 +1,8 @@
 use crate::data_structures::Index;
 use ark_ff::Field;
 use ark_poly::DenseMultilinearExtension;
-use ark_relations::gr1cs::{Matrix, R1CS_PREDICATE_LABEL};
-use ark_std::{cfg_iter, cfg_iter_mut, end_timer, start_timer};
+use ark_relations::gr1cs::{Label, Matrix, R1CS_PREDICATE_LABEL};
+use ark_std::{cfg_iter, cfg_iter_mut, collections::BTreeMap, end_timer, start_timer};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -50,6 +50,21 @@ pub(crate) fn stack_matrices<F: Field>(index: &mut Index<F>) -> Vec<Matrix<F>> {
     // Pad out each matrix to next power of 2
     end_timer!(stacking_time);
     stacked_matrices
+}
+
+pub(crate) fn predicate_labels_in_stack_order<T>(
+    predicate_types: &BTreeMap<Label, T>,
+) -> Vec<Label> {
+    let mut labels = Vec::with_capacity(predicate_types.len());
+    if predicate_types.contains_key(R1CS_PREDICATE_LABEL) {
+        labels.push(R1CS_PREDICATE_LABEL.to_string());
+    }
+    for label in predicate_types.keys() {
+        if label != R1CS_PREDICATE_LABEL {
+            labels.push(label.clone());
+        }
+    }
+    labels
 }
 
 pub fn append_matrices<F: Field>(
